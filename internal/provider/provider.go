@@ -53,7 +53,9 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 }
 
 func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewExampleResource,
+	}
 }
 
 func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datasource.DataSource {

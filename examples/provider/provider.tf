@@ -1,3 +1,7 @@
-provider "terraformcloud" {
-  # example configuration here
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "hashicorp/temporalcloud"
+    }
+  }
 }
