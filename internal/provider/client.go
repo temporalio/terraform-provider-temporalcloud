@@ -23,44 +23,34 @@
 package provider
 
 import (
-	"fmt"
-	"testing"
+	"crypto/tls"
 
-	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/temporalio/tcld/app/credentials/apikey"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
-func TestAccExampleResource(t *testing.T) {
-	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			// Create and Read testing
-			{
-				Config: testAccExampleResourceConfig(42),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_example.test", "integer", "42"),
-				),
-			},
-			// Update and Read testing
-			{
-				Config: testAccExampleResourceConfig(99),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_example.test", "integer", "99"),
-				),
-			},
-			// Delete testing automatically occurs in TestCase
-		},
-	})
+// Client is a client for the Temporal Cloud API.
+type Client struct {
+	conn *grpc.ClientConn
 }
 
-func testAccExampleResourceConfig(integerValue int) string {
-	return fmt.Sprintf(`
-provider "temporalcloud" {
+// NewClient creates a new client for the Temporal Cloud API using the given API key.
+func NewClient(apiKey string) (*Client, error) {
+	apiKeyCreds, err := apikey.NewCredential(apiKey)
+	if err != nil {
+		return nil, err
+	}
 
-}
+	conn, err := grpc.Dial("saas-api.tmprl.cloud:443",
+		grpc.WithPerRPCCredentials(apiKeyCreds),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: "saas-api.tmprl.cloud",
+		})))
+	if err != nil {
+		return nil, err
+	}
 
-resource "temporalcloud_example" "test" {
-  integer = %[1]d
-}
-`, integerValue)
+	return &Client{conn: conn}, nil
 }
