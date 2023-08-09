@@ -1,6 +1,3 @@
-provider "terraformcloud" "provider" {
-}
-
-resource "terraformcloud_example" "test" {
-  integer = 42
+resource "temporalcloud_example" "test" {
+  integer = 99
 }

@@ -26,7 +26,7 @@ type TerraformCloudProviderModel struct {
 }
 
 func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "terraformcloud"
+	resp.TypeName = "temporalcloud"
 	resp.Version = p.version
 }
 
