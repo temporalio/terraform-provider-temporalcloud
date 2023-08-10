@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	defaultCreateTimeout time.Duration = 1 * time.Minute
-	defaultDeleteTimeout time.Duration = 1 * time.Minute
+	defaultCreateTimeout time.Duration = 5 * time.Minute
+	defaultDeleteTimeout time.Duration = 5 * time.Minute
 )
 
 type (
@@ -98,7 +98,8 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required: true,
 			},
 			"accepted_client_ca": schema.StringAttribute{
-				Required: true,
+				Required:  true,
+				Sensitive: true,
 			},
 			"retention_days": schema.Int64Attribute{
 				Required: true,
