@@ -25,8 +25,7 @@ type TerraformCloudProvider struct {
 
 // TerraformCloudProvider describes the provider data model.
 type TerraformCloudProviderModel struct {
-	APIKey    types.String `tfsdk:"api_key"`
-	AccountID types.String `tfsdk:"account_id"`
+	APIKey types.String `tfsdk:"api_key"`
 }
 
 func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -38,10 +37,6 @@ func (p *TerraformCloudProvider) Schema(ctx context.Context, req provider.Schema
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"api_key": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
-			},
-			"account_id": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
 			},
@@ -65,30 +60,12 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 		return
 	}
 
-	if data.AccountID.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("account_id"),
-			"Unknown Terraform Cloud Account ID",
-			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for the Temporal Cloud Account ID."+
-				" Either apply the source of the value first, or statically set the Account ID via environment variable or in configuration.")
-		return
-	}
-
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
-	accountID := os.Getenv("TEMPORAL_CLOUD_ACCOUNT_ID")
 	if !data.APIKey.IsNull() {
 		apiKey = data.APIKey.ValueString()
 	}
-	if !data.AccountID.IsNull() {
-		accountID = data.AccountID.ValueString()
-	}
 
-	if accountID == "" {
-		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", "An Account ID is required")
-		return
-	}
-
-	client, err := NewClient(apiKey, accountID)
+	client, err := NewClient(apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", err.Error())
 		return
