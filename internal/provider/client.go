@@ -23,9 +23,17 @@
 package provider
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
+	"fmt"
+	"time"
 
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/tcld/app/credentials/apikey"
+	"github.com/temporalio/tcld/protogen/api/namespaceservice/v1"
+	"github.com/temporalio/tcld/protogen/api/request/v1"
+	"github.com/temporalio/tcld/protogen/api/requestservice/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -53,4 +61,54 @@ func NewClient(apiKey string) (*Client, error) {
 	}
 
 	return &Client{conn: conn}, nil
+}
+
+func (c *Client) NamespaceService() namespaceservice.NamespaceServiceClient {
+	return namespaceservice.NewNamespaceServiceClient(c.conn)
+}
+
+func (c *Client) RequestService() requestservice.RequestServiceClient {
+	return requestservice.NewRequestServiceClient(c.conn)
+}
+
+func (c *Client) AwaitResponse(ctx context.Context, requestID string) error {
+	ctx = tflog.SetField(ctx, "request_id", requestID)
+	tflog.Debug(ctx, "awaiting response")
+	svc := c.RequestService()
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			status, err := svc.GetRequestStatus(ctx, &requestservice.GetRequestStatusRequest{
+				RequestId: requestID,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to query request status: %w", err)
+			}
+
+			switch status.RequestStatus.State {
+			case request.STATE_PENDING:
+			case request.STATE_IN_PROGRESS:
+			case request.STATE_UNSPECIFIED:
+				tflog.Debug(ctx, "retrying in 1 minute", map[string]any{
+					"state": status.RequestStatus.State.String(),
+				})
+				continue
+			case request.STATE_FAILED:
+				tflog.Debug(ctx, "request failed")
+				return errors.New(status.RequestStatus.FailureReason)
+			case request.STATE_CANCELLED:
+				tflog.Debug(ctx, "request cancelled")
+				return errors.New("request cancelled")
+			case request.STATE_FULFILLED:
+				tflog.Debug(ctx, "request fulfilled, terminating loop")
+				return nil
+			}
+			// check response
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
