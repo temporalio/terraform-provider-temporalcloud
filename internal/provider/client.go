@@ -41,15 +41,14 @@ import (
 
 // Client is a client for the Temporal Cloud API.
 type Client struct {
-	conn      *grpc.ClientConn
-	accountID string
+	conn *grpc.ClientConn
 }
 
 // NewClient creates a new client for the Temporal Cloud API using the given API key.
 //
 // The account ID parameter should be temporary until there is a way for this provider to discover the Account ID
 // via API.
-func NewClient(apiKey string, accountID string) (*Client, error) {
+func NewClient(apiKey string) (*Client, error) {
 	apiKeyCreds, err := apikey.NewCredential(apiKey)
 	if err != nil {
 		return nil, err
@@ -65,11 +64,7 @@ func NewClient(apiKey string, accountID string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{conn: conn, accountID: accountID}, nil
-}
-
-func (c *Client) GetAccountID() string {
-	return c.accountID
+	return &Client{conn: conn}, nil
 }
 
 func (c *Client) NamespaceService() namespaceservice.NamespaceServiceClient {
