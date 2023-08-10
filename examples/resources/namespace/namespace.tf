@@ -3,8 +3,8 @@ provider "temporalcloud" {
 }
 
 resource "temporalcloud_namespace" "swgillespie-dev" {
-  name               = "swgillespie.a2dd6"
+  name               = "swgillespie"
   region             = "us-west-2"
-  accepted_client_ca = base64encode("not a real cert")
+  accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
   retention_days     = 30
 }

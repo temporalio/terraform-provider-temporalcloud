@@ -98,7 +98,8 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required: true,
 			},
 			"accepted_client_ca": schema.StringAttribute{
-				Required: true,
+				Required:  true,
+				Sensitive: true,
 			},
 			"retention_days": schema.Int64Attribute{
 				Required: true,
