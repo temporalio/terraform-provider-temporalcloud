@@ -162,9 +162,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	// This is a kludge, but there doesn't appear to be a way to link the requested namespace name with the one that
-	// is actually provided without manually appending the account ID to the namespace name.
-	nsName := fmt.Sprintf("%s.%s", plan.Name.ValueString(), r.client.GetAccountID())
+	nsName := svcResp.RequestStatus.ResourceId
 	tflog.Debug(ctx, "querying namespace for existence", map[string]any{
 		"name": nsName,
 	})
