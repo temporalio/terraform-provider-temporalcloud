@@ -30,7 +30,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/tcld/protogen/api/namespace/v1"
 	"github.com/temporalio/tcld/protogen/api/namespaceservice/v1"
 )
@@ -47,6 +50,7 @@ type (
 
 	namespaceResourceModel struct {
 		Name             types.String   `tfsdk:"name"`
+		Namespace        types.String   `tfsdk:"namespace"`
 		Region           types.String   `tfsdk:"region"`
 		AcceptedClientCA types.String   `tfsdk:"accepted_client_ca"`
 		RetentionDays    types.Int64    `tfsdk:"retention_days"`
@@ -93,6 +97,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
+			},
+			"namespace": schema.StringAttribute{
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"region": schema.StringAttribute{
 				Required: true,
@@ -152,15 +162,21 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// This is a kludge, but there doesn't appear to be a way to link the requested namespace name with the one that
+	// is actually provided without manually appending the account ID to the namespace name.
+	nsName := fmt.Sprintf("%s.%s", plan.Name.ValueString(), r.client.GetAccountID())
+	tflog.Debug(ctx, "querying namespace for existence", map[string]any{
+		"name": nsName,
+	})
 	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: plan.Name.ValueString(),
+		Namespace: nsName,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace after creation", err.Error())
 		return
 	}
 
-	plan.Name = types.StringValue(ns.Namespace.Namespace)
+	plan.Namespace = types.StringValue(ns.Namespace.Namespace)
 	plan.Region = types.StringValue(ns.Namespace.Spec.Region)
 	plan.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
 	plan.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
@@ -178,14 +194,17 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 	svc := r.client.NamespaceService()
 	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: state.Name.ValueString(),
+		Namespace: state.Namespace.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
 		return
 	}
 
-	state.Name = types.StringValue(ns.Namespace.Namespace)
+	tflog.Debug(ctx, "namespace resource version", map[string]any{
+		"version": ns.Namespace.ResourceVersion,
+	})
+	state.Namespace = types.StringValue(ns.Namespace.Namespace)
 	state.Region = types.StringValue(ns.Namespace.Spec.Region)
 	state.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
 	state.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
@@ -203,7 +222,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 
 	svc := r.client.NamespaceService()
 	svcResp, err := svc.UpdateNamespace(ctx, &namespaceservice.UpdateNamespaceRequest{
-		Namespace:       plan.Name.ValueString(),
+		Namespace:       plan.Namespace.ValueString(),
 		ResourceVersion: plan.ResourceVersion.ValueString(),
 		Spec: &namespace.NamespaceSpec{
 			Region:           plan.Region.ValueString(),
@@ -222,14 +241,14 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: plan.Name.ValueString(),
+		Namespace: plan.Namespace.ValueString(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
 		return
 	}
 
-	plan.Name = types.StringValue(ns.Namespace.Namespace)
+	plan.Namespace = types.StringValue(ns.Namespace.Namespace)
 	plan.Region = types.StringValue(ns.Namespace.Spec.Region)
 	plan.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
 	plan.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
@@ -255,7 +274,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	defer cancel()
 	svc := r.client.NamespaceService()
 	svcResp, err := svc.DeleteNamespace(ctx, &namespaceservice.DeleteNamespaceRequest{
-		Namespace:       state.Name.ValueString(),
+		Namespace:       state.Namespace.ValueString(),
 		ResourceVersion: state.ResourceVersion.ValueString(),
 	})
 	if err != nil {
