@@ -62,3 +62,37 @@ In order to run the full suite of Acceptance tests, run `make testacc`.
 ```shell
 make testacc
 ```
+
+## Testing with Terraform
+
+In order to test your code you need an api key for temporal cloud. Docs on how to generate this is here:
+https://github.com/temporalio/tcld/tree/release/apikeys#api-key-management-preview
+
+Then you need to make the provider binary available to `terraform` itself.
+
+```
+go build -o terraform-provider-temporalcloud
+mkdir -p ~/.terraform.d/plugins/temporal.io/provider-temporalcloud/temporalcloud/1.0.0/darwin_arm64/
+mv terraform-provider-temporalcloud ~/.terraform.d/plugins/temporal.io/provider-temporalcloud/temporalcloud/1.0.0/darwin_arm64
+```
+
+Finally, your terraform configuration files need to know about this provider.
+
+```
+provider "temporalcloud" {
+  api_key = "<API_KEY>"
+
+}
+
+terraform {
+  required_providers {
+    temporalcloud = {
+      version = "~> 1.0.0"
+      source  = "temporal.io/provider-temporalcloud/temporalcloud"
+    }
+  }
+}
+```
+
+Now you can start testing your provider with `terraform`!
+
