@@ -169,8 +169,8 @@ github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.2/go.mod h1:R6va5+xMeoiuVRoj+gSkQ7d3FALtqAAGI1FQKckRals=
 github.com/stretchr/testify v1.8.2 h1:+h33VjcLVPDHtOdpUCuF+7gSuG3yGIftsP1YvFihtJ8=
-github.com/temporalio/tcld v0.7.0-apikeys h1:2fEB537l/LR+du400EOgAz88hSF7KZNQ1HqHFIEcdJw=
-github.com/temporalio/tcld v0.7.0-apikeys/go.mod h1:P6imlxs3h+4hOqRO3WGLsBck0DzQbdrNfqjMfzpCLbs=
+github.com/temporalio/tcld v0.13.1-embed-version-test h1:1PHjucE6wlAd4999akM/MF7XLpfUm2UgudT7dWhLM/k=
+github.com/temporalio/tcld v0.13.1-embed-version-test/go.mod h1:vYnuxZKWKO0b6H8NUy5LqIwqonBhVvStxinAbErp7co=
 github.com/vmihailenco/msgpack v3.3.3+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
 github.com/vmihailenco/msgpack v4.0.4+incompatible h1:dSLoQfGFAo3F6OoNhwUmLwVgaUXK79GlxNBwueZn0xI=
 github.com/vmihailenco/msgpack v4.0.4+incompatible/go.mod h1:fy3FlTQTDXWkZ7Bh6AcGMlsjHatGryHQYUTf1ShIgkk=
