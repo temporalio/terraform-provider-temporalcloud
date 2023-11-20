@@ -28,14 +28,15 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/temporalio/tcld/protogen/api/namespace/v1"
-	"github.com/temporalio/tcld/protogen/api/namespaceservice/v1"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
+	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
 )
 
 const (
@@ -45,13 +46,13 @@ const (
 
 type (
 	namespaceResource struct {
-		client *Client
+		client cloudservicev1.CloudServiceClient
 	}
 
 	namespaceResourceModel struct {
+		ID               types.String   `tfsdk:"id"`
 		Name             types.String   `tfsdk:"name"`
-		Namespace        types.String   `tfsdk:"namespace"`
-		Region           types.String   `tfsdk:"region"`
+		Regions          types.List     `tfsdk:"regions"`
 		AcceptedClientCA types.String   `tfsdk:"accepted_client_ca"`
 		RetentionDays    types.Int64    `tfsdk:"retention_days"`
 		ResourceVersion  types.String   `tfsdk:"resource_version"`
@@ -73,11 +74,11 @@ func (r *namespaceResource) Configure(_ context.Context, req resource.ConfigureR
 		return
 	}
 
-	client, ok := req.ProviderData.(*Client)
+	client, ok := req.ProviderData.(cloudservicev1.CloudServiceClient)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -98,18 +99,18 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Required: true,
 			},
-			"namespace": schema.StringAttribute{
+			"id": schema.StringAttribute{
 				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"region": schema.StringAttribute{
-				Required: true,
+			"regions": schema.ListAttribute{
+				ElementType: types.StringType,
+				Required:    true,
 			},
 			"accepted_client_ca": schema.StringAttribute{
-				Required:  true,
-				Sensitive: true,
+				Required: true,
 			},
 			"retention_days": schema.Int64Attribute{
 				Required: true,
@@ -143,13 +144,19 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
-	svc := r.client.NamespaceService()
-	svcResp, err := svc.CreateNamespace(ctx, &namespaceservice.CreateNamespaceRequest{
-		Namespace: plan.Name.ValueString(),
-		Spec: &namespace.NamespaceSpec{
-			Region:           plan.Region.ValueString(),
-			AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
-			RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
+
+	regions := getRegionsFromModel(ctx, resp.Diagnostics, &plan)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	svcResp, err := r.client.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
+		Spec: &namespacev1.NamespaceSpec{
+			Name:          plan.Name.ValueString(),
+			Regions:       regions,
+			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
+			MtlsAuth: &namespacev1.MtlsAuthSpec{
+				AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
+			},
 		},
 	})
 	if err != nil {
@@ -157,26 +164,27 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	if err = r.client.AwaitResponse(ctx, svcResp.RequestStatus.RequestId); err != nil {
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to create namespace", err.Error())
 		return
 	}
 
-	nsName := svcResp.RequestStatus.ResourceId
-	tflog.Debug(ctx, "querying namespace for existence", map[string]any{
-		"name": nsName,
-	})
-	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: nsName,
+	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: svcResp.Namespace,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace after creation", err.Error())
 		return
 	}
 
-	plan.Namespace = types.StringValue(ns.Namespace.Namespace)
-	plan.Region = types.StringValue(ns.Namespace.Spec.Region)
-	plan.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
+	planRegions, diags := types.ListValueFrom(ctx, types.StringType, ns.Namespace.Spec.Regions)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	plan.ID = types.StringValue(ns.Namespace.Namespace)
+	plan.Regions = planRegions
 	plan.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
 	plan.ResourceVersion = types.StringValue(ns.Namespace.ResourceVersion)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -189,25 +197,6 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	svc := r.client.NamespaceService()
-	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: state.Namespace.ValueString(),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
-		return
-	}
-
-	tflog.Debug(ctx, "namespace resource version", map[string]any{
-		"version": ns.Namespace.ResourceVersion,
-	})
-	state.Namespace = types.StringValue(ns.Namespace.Namespace)
-	state.Region = types.StringValue(ns.Namespace.Spec.Region)
-	state.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
-	state.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
-	state.ResourceVersion = types.StringValue(ns.Namespace.ResourceVersion)
-	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -217,41 +206,6 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-
-	svc := r.client.NamespaceService()
-	svcResp, err := svc.UpdateNamespace(ctx, &namespaceservice.UpdateNamespaceRequest{
-		Namespace:       plan.Namespace.ValueString(),
-		ResourceVersion: plan.ResourceVersion.ValueString(),
-		Spec: &namespace.NamespaceSpec{
-			Region:           plan.Region.ValueString(),
-			AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
-			RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
-		},
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
-	}
-
-	if err = r.client.AwaitResponse(ctx, svcResp.RequestStatus.RequestId); err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
-	}
-
-	ns, err := svc.GetNamespace(ctx, &namespaceservice.GetNamespaceRequest{
-		Namespace: plan.Namespace.ValueString(),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
-		return
-	}
-
-	plan.Namespace = types.StringValue(ns.Namespace.Namespace)
-	plan.Region = types.StringValue(ns.Namespace.Spec.Region)
-	plan.AcceptedClientCA = types.StringValue(ns.Namespace.Spec.AcceptedClientCa)
-	plan.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
-	plan.ResourceVersion = types.StringValue(ns.Namespace.ResourceVersion)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -270,9 +224,8 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
-	svc := r.client.NamespaceService()
-	svcResp, err := svc.DeleteNamespace(ctx, &namespaceservice.DeleteNamespaceRequest{
-		Namespace:       state.Namespace.ValueString(),
+	svcResp, err := r.client.DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
+		Namespace:       state.ID.ValueString(),
 		ResourceVersion: state.ResourceVersion.ValueString(),
 	})
 	if err != nil {
@@ -280,7 +233,22 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	if err = r.client.AwaitResponse(ctx, svcResp.RequestStatus.RequestId); err != nil {
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to delete namespace", err.Error())
 	}
+}
+
+func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *namespaceResourceModel) []string {
+	regions := make([]types.String, 0, len(plan.Regions.Elements()))
+	diags.Append(plan.Regions.ElementsAs(ctx, &regions, false)...)
+	if diags.HasError() {
+		return nil
+	}
+
+	requestRegions := make([]string, len(regions))
+	for i, region := range regions {
+		requestRegions[i] = region.ValueString()
+	}
+
+	return requestRegions
 }

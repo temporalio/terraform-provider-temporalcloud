@@ -19,7 +19,7 @@ description: |-
 
 - `accepted_client_ca` (String)
 - `name` (String)
-- `region` (String)
+- `regions` (List of String)
 - `retention_days` (Number)
 
 ### Optional
@@ -28,6 +28,7 @@ description: |-
 
 ### Read-Only
 
+- `namespace` (String)
 - `resource_version` (String)
 
 <a id="nestedblock--timeouts"></a>
