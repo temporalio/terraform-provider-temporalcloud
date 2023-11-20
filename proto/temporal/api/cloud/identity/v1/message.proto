@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package temporal.api.cloud.identity.v1;
+
+option go_package = "go.temporal.io/api/cloud/identity/v1;identity";
+
+import "google/protobuf/timestamp.proto";
+
+message AccountAccess {
+    // The role on the account, should be one of [admin, developer, read]
+    // admin - gives full access the account, including users and namespaces
+    // developer - gives access to create namespaces on the account
+    // read - gives read only access to the account
+    string role = 1;
+}
+
+message NamespaceAccess {
+    // The permission to the namespace, should be one of [admin, write, read]
+    // admin - gives full access to the namespace, including assigning namespace access to other users
+    // write - gives write access to the namespace configuration and workflows within the namespace
+    // read - gives read only access to the namespace configuration and workflows within the namespace
+    string permission = 1;
+}
+
+message Access {
+    // The account access
+    AccountAccess account_access = 1;
+    // The map of namespace accesses
+    // The key is the namespace name and the value is the access to the namespace
+    map<string, NamespaceAccess> namespace_accesses = 2;
+}
+
+message UserSpec {
+    // The email address associated to the user
+    string email = 1;
+    // The access to assigned to the user
+    Access access = 2;
+}
+
+message Invitation {
+    // The date and time when the user was created
+    google.protobuf.Timestamp created_time = 1;
+    // The date and time when the invitation expires or has expired
+    google.protobuf.Timestamp expired_time = 2;
+}
+
+message User {
+    // The id of the user
+    string id = 1;
+    // The current version of the user specification
+    // The next update operation will have to include this version
+    string resource_version = 2;
+    // The user specification
+    UserSpec spec = 3;
+    // The current state of the user
+    string state = 4;
+    // The id of the async operation that is creating/updating/deleting the user, if any
+    string async_operation_id = 5;
+    // The details of the open invitation sent to the user, if any
+    Invitation invitation = 6;
+    // The date and time when the user was created
+    google.protobuf.Timestamp created_time = 7;
+    // The date and time when the user was last modified
+    // Will not be set if the user has never been modified.
+    google.protobuf.Timestamp last_modified_time = 8;
+}
+
+

@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
 
 // Ensure TerraformCloudProvider satisfies various provider interfaces.
@@ -25,7 +26,9 @@ type TerraformCloudProvider struct {
 
 // TerraformCloudProvider describes the provider data model.
 type TerraformCloudProviderModel struct {
-	APIKey types.String `tfsdk:"api_key"`
+	APIKey        types.String `tfsdk:"api_key"`
+	Endpoint      types.String `tfsdk:"endpoint"`
+	AllowInsecure types.Bool   `tfsdk:"allow_insecure"`
 }
 
 func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -39,6 +42,12 @@ func (p *TerraformCloudProvider) Schema(ctx context.Context, req provider.Schema
 			"api_key": schema.StringAttribute{
 				Optional:  true,
 				Sensitive: true,
+			},
+			"endpoint": schema.StringAttribute{
+				Optional: true,
+			},
+			"allow_insecure": schema.BoolAttribute{
+				Optional: true,
 			},
 		},
 	}
@@ -60,12 +69,41 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 		return
 	}
 
+	if data.Endpoint.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("endpoint"),
+			"Unknown Terraform Cloud Endpoint",
+			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for the Temporal Cloud API Endpoint."+
+				" Either apply the source of the value first, or statically set the API Key via environment variable or in configuration.")
+	}
+
+	if data.AllowInsecure.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allow_insecure"),
+			"Unknown Terraform Cloud Endpoint",
+			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for `allow_insecure`."+
+				" Either apply the source of the value first, or statically set the API Key via environment variable or in configuration.")
+	}
+
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	if !data.APIKey.IsNull() {
 		apiKey = data.APIKey.ValueString()
 	}
 
-	client, err := NewClient(apiKey)
+	endpoint := "saas-api.tmprl.cloud:443"
+	if os.Getenv("TEMPORAL_CLOUD_ENDPOINT") != "" {
+		endpoint = os.Getenv("TEMPORAL_CLOUD_ENDPOINT")
+	}
+	if !data.Endpoint.IsNull() {
+		endpoint = data.Endpoint.ValueString()
+	}
+
+	allowInsecure := os.Getenv("TEMPORAL_CLOUD_ALLOW_INSECURE") == "true"
+	if !data.AllowInsecure.IsNull() {
+		allowInsecure = data.AllowInsecure.ValueBool()
+	}
+
+	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", err.Error())
 		return
@@ -77,7 +115,6 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 
 func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewExampleResource,
 		NewNamespaceResource,
 	}
 }

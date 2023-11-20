@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package temporal.api.cloud.region.v1;
+
+option go_package = "go.temporal.io/api/cloud/region/v1;region";
+
+message Region {
+    // The id of the temporal cloud region.
+    string id = 1;
+    // The name of the cloud provider that's hosting the region.
+    // Currently only "aws" is supported.
+    string cloud_provider = 2;
+    // The region identifier as defined by the cloud provider.
+    string cloud_provider_region = 3;
+    // The human readable location of the region.
+    string location = 4;
+}
+

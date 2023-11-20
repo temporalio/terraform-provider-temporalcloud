@@ -27,4 +27,6 @@ terraform {
 
 ### Optional
 
+- `allow_insecure` (Boolean)
 - `api_key` (String, Sensitive)
+- `endpoint` (String)
