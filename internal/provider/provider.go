@@ -120,7 +120,9 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 }
 
 func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		NewRegionsDataSource,
+	}
 }
 
 func New(version string) func() provider.Provider {

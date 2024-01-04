@@ -28,7 +28,7 @@ description: |-
 
 ### Read-Only
 
-- `namespace` (String)
+- `id` (String) The ID of this resource.
 - `resource_version` (String)
 
 <a id="nestedblock--timeouts"></a>
