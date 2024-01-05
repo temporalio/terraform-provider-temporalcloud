@@ -17,6 +17,7 @@ description: |-
 
 ### Read-Only
 
+- `id` (String) The ID of this resource.
 - `regions` (Attributes List) (see [below for nested schema](#nestedatt--regions))
 
 <a id="nestedatt--regions"></a>

@@ -66,11 +66,7 @@ func newConnection(addrStr string, allowInsecure bool, opts ...grpc.DialOption) 
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse server address: %s", err)
 	}
-	defaultOpts, err := defaultDialOptions(addr, allowInsecure)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate default dial options: %s", err)
-	}
-
+	defaultOpts := defaultDialOptions(addr, allowInsecure)
 	conn, err := grpc.Dial(
 		addr.String(),
 		append(defaultOpts, opts...)...,
@@ -134,7 +130,7 @@ func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudService
 	}
 }
 
-func defaultDialOptions(addr *url.URL, allowInsecure bool) ([]grpc.DialOption, error) {
+func defaultDialOptions(addr *url.URL, allowInsecure bool) []grpc.DialOption {
 	var opts []grpc.DialOption
 
 	transport := credentials.NewTLS(&tls.Config{
@@ -147,7 +143,7 @@ func defaultDialOptions(addr *url.URL, allowInsecure bool) ([]grpc.DialOption, e
 
 	opts = append(opts, grpc.WithTransportCredentials(transport))
 	opts = append(opts, grpc.WithUnaryInterceptor(setAPIVersionInterceptor))
-	return opts, nil
+	return opts
 }
 
 func setAPIVersionInterceptor(
