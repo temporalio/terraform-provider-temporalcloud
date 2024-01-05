@@ -34,6 +34,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
@@ -177,16 +178,10 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	planRegions, diags := types.ListValueFrom(ctx, types.StringType, ns.Namespace.Spec.Regions)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	plan.ID = types.StringValue(ns.Namespace.Namespace)
-	plan.Regions = planRegions
-	plan.RetentionDays = types.Int64Value(int64(ns.Namespace.Spec.RetentionDays))
-	plan.ResourceVersion = types.StringValue(ns.Namespace.ResourceVersion)
+	tflog.Debug(ctx, "responded with namespace model", map[string]any{
+		"resource_version": ns.GetNamespace().GetResourceVersion(),
+	})
+	updateModelFromSpec(ctx, resp.Diagnostics, &plan, ns.Namespace)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -197,6 +192,17 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	model, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: state.ID.ValueString(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
+		return
+	}
+
+	updateModelFromSpec(ctx, resp.Diagnostics, &state, model.Namespace)
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -206,6 +212,43 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	regions := getRegionsFromModel(ctx, resp.Diagnostics, &plan)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+		Namespace: plan.ID.ValueString(),
+		Spec: &namespacev1.NamespaceSpec{
+			Name:          plan.Name.ValueString(),
+			Regions:       regions,
+			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
+			MtlsAuth: &namespacev1.MtlsAuthSpec{
+				AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
+			},
+		},
+		ResourceVersion: plan.ResourceVersion.ValueString(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+		return
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+		return
+	}
+
+	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: plan.ID.ValueString(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get namespace after update", err.Error())
+		return
+	}
+
+	updateModelFromSpec(ctx, resp.Diagnostics, &plan, ns.Namespace)
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -251,4 +294,18 @@ func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *name
 	}
 
 	return requestRegions
+}
+
+func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *namespaceResourceModel, ns *namespacev1.Namespace) {
+	state.ID = types.StringValue(ns.GetNamespace())
+	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
+	diags.Append(listDiags...)
+	if diags.HasError() {
+		return
+	}
+
+	state.Regions = planRegions
+	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
+	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
+	state.ResourceVersion = types.StringValue(ns.GetResourceVersion())
 }
