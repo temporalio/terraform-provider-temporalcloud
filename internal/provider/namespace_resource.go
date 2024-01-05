@@ -28,12 +28,14 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
@@ -51,19 +53,35 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID               types.String   `tfsdk:"id"`
-		Name             types.String   `tfsdk:"name"`
-		Regions          types.List     `tfsdk:"regions"`
-		AcceptedClientCA types.String   `tfsdk:"accepted_client_ca"`
-		RetentionDays    types.Int64    `tfsdk:"retention_days"`
-		ResourceVersion  types.String   `tfsdk:"resource_version"`
-		Timeouts         timeouts.Value `tfsdk:"timeouts"`
+		ID                 types.String `tfsdk:"id"`
+		Name               types.String `tfsdk:"name"`
+		Regions            types.List   `tfsdk:"regions"`
+		AcceptedClientCA   types.String `tfsdk:"accepted_client_ca"`
+		RetentionDays      types.Int64  `tfsdk:"retention_days"`
+		ResourceVersion    types.String `tfsdk:"resource_version"`
+		CertificateFilters types.List   `tfsdk:"certificate_filters"`
+
+		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	namespaceCertificateFilterModel struct {
+		CommonName             types.String `tfsdk:"common_name"`
+		Organization           types.String `tfsdk:"organization"`
+		OrganizationalUnit     types.String `tfsdk:"organizational_unit"`
+		SubjectAlternativeName types.String `tfsdk:"subject_alternative_name"`
 	}
 )
 
 var (
 	_ resource.Resource              = (*namespaceResource)(nil)
 	_ resource.ResourceWithConfigure = (*namespaceResource)(nil)
+
+	namespaceCertificateFilterAttrs = map[string]attr.Type{
+		"common_name":              types.StringType,
+		"organization":             types.StringType,
+		"organizational_unit":      types.StringType,
+		"subject_alternative_name": types.StringType,
+	}
 )
 
 func NewNamespaceResource() resource.Resource {
@@ -119,6 +137,25 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"resource_version": schema.StringAttribute{
 				Computed: true,
 			},
+			"certificate_filters": schema.ListNestedAttribute{
+				Optional: true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"common_name": schema.StringAttribute{
+							Optional: true,
+						},
+						"organization": schema.StringAttribute{
+							Optional: true,
+						},
+						"organizational_unit": schema.StringAttribute{
+							Optional: true,
+						},
+						"subject_alternative_name": schema.StringAttribute{
+							Optional: true,
+						},
+					},
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -150,13 +187,18 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	certFilters := getCertFiltersFromModel(ctx, resp.Diagnostics, &plan)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	svcResp, err := r.client.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
 			Regions:       regions,
 			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
 			MtlsAuth: &namespacev1.MtlsAuthSpec{
-				AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
+				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
+				CertificateFilters: certFilters,
 			},
 		},
 	})
@@ -217,6 +259,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	certFilters := getCertFiltersFromModel(ctx, resp.Diagnostics, &plan)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
@@ -224,7 +270,8 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 			Regions:       regions,
 			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
 			MtlsAuth: &namespacev1.MtlsAuthSpec{
-				AcceptedClientCa: plan.AcceptedClientCA.ValueString(),
+				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
+				CertificateFilters: certFilters,
 			},
 		},
 		ResourceVersion: plan.ResourceVersion.ValueString(),
@@ -304,8 +351,63 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		return
 	}
 
+	certificateFilterObjects := make([]types.Object, len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()))
+	for i, certFilter := range ns.GetSpec().GetMtlsAuth().GetCertificateFilters() {
+		model := namespaceCertificateFilterModel{
+			CommonName:             stringOrNull(certFilter.GetCommonName()),
+			Organization:           stringOrNull(certFilter.GetOrganization()),
+			OrganizationalUnit:     stringOrNull(certFilter.GetOrganizationalUnit()),
+			SubjectAlternativeName: stringOrNull(certFilter.GetSubjectAlternativeName()),
+		}
+		obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
+		diags.Append(diag...)
+		if diags.HasError() {
+			return
+		}
+		certificateFilterObjects[i] = obj
+	}
+
+	certificateFilter, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
+	diags.Append(diag...)
+	if diags.HasError() {
+		return
+	}
 	state.Regions = planRegions
+	state.CertificateFilters = certificateFilter
 	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
 	state.ResourceVersion = types.StringValue(ns.GetResourceVersion())
+}
+
+func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) []*namespacev1.CertificateFilterSpec {
+	elements := make([]types.Object, 0, len(model.CertificateFilters.Elements()))
+	diags.Append(model.CertificateFilters.ElementsAs(ctx, &elements, false)...)
+	if diags.HasError() {
+		return nil
+	}
+
+	certificateFilters := make([]*namespacev1.CertificateFilterSpec, len(elements))
+	for i, filter := range elements {
+		var model namespaceCertificateFilterModel
+		diags.Append(filter.As(ctx, &model, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil
+		}
+
+		certificateFilters[i] = &namespacev1.CertificateFilterSpec{
+			CommonName:             model.CommonName.ValueString(),
+			Organization:           model.Organization.ValueString(),
+			OrganizationalUnit:     model.OrganizationalUnit.ValueString(),
+			SubjectAlternativeName: model.SubjectAlternativeName.ValueString(),
+		}
+	}
+
+	return certificateFilters
+}
+
+func stringOrNull(s string) types.String {
+	if s == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(s)
 }
