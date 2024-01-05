@@ -51,6 +51,12 @@ cmFsLlB1VHMwCgYIKoZIzj0EAwMDZwAwZAIwRLfm9S7rKGd30KdQvUMcOcDJlmDw
 -----END CERTIFICATE-----
 PEM
 )
+
+  certificate_filters = [
+	{
+	  subject_alternative_name = "example.com"
+	}
+  ]
   retention_days     = %d
 
 }

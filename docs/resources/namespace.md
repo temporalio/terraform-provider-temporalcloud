@@ -24,12 +24,24 @@ description: |-
 
 ### Optional
 
+- `certificate_filters` (Attributes List) (see [below for nested schema](#nestedatt--certificate_filters))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
 - `id` (String) The ID of this resource.
 - `resource_version` (String)
+
+<a id="nestedatt--certificate_filters"></a>
+### Nested Schema for `certificate_filters`
+
+Optional:
+
+- `common_name` (String)
+- `organization` (String)
+- `organizational_unit` (String)
+- `subject_alternative_name` (String)
+
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`
