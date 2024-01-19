@@ -136,6 +136,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"resource_version": schema.StringAttribute{
 				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"certificate_filters": schema.ListNestedAttribute{
 				Optional: true,
@@ -263,6 +266,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	tflog.Debug(ctx, "running update with resource version", map[string]any{
+		"resource_version": plan.ResourceVersion.ValueString(),
+	})
 	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{

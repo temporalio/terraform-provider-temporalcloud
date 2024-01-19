@@ -45,12 +45,10 @@ PEM
 				// New namespace with retention of 7
 				Config: config("tf-basic-namespace", 7),
 			},
-			/* Does not work yet: CLD-1971
 			{
 				// Update retention to 14
-				Config: testAccBasicNamespaceConfig("terraform-test", 14),
+				Config: config("terraform-test", 14),
 			},
-			*/
 			// Delete testing automatically occurs in TestCase
 		},
 	})
