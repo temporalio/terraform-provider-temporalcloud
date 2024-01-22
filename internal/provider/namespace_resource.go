@@ -351,27 +351,33 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		return
 	}
 
-	certificateFilterObjects := make([]types.Object, len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()))
-	for i, certFilter := range ns.GetSpec().GetMtlsAuth().GetCertificateFilters() {
-		model := namespaceCertificateFilterModel{
-			CommonName:             stringOrNull(certFilter.GetCommonName()),
-			Organization:           stringOrNull(certFilter.GetOrganization()),
-			OrganizationalUnit:     stringOrNull(certFilter.GetOrganizationalUnit()),
-			SubjectAlternativeName: stringOrNull(certFilter.GetSubjectAlternativeName()),
+	certificateFilter := types.ListNull(types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs})
+	if len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()) > 0 {
+		certificateFilterObjects := make([]types.Object, len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()))
+		for i, certFilter := range ns.GetSpec().GetMtlsAuth().GetCertificateFilters() {
+			model := namespaceCertificateFilterModel{
+				CommonName:             stringOrNull(certFilter.GetCommonName()),
+				Organization:           stringOrNull(certFilter.GetOrganization()),
+				OrganizationalUnit:     stringOrNull(certFilter.GetOrganizationalUnit()),
+				SubjectAlternativeName: stringOrNull(certFilter.GetSubjectAlternativeName()),
+			}
+			obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
+			diags.Append(diag...)
+			if diags.HasError() {
+				return
+			}
+			certificateFilterObjects[i] = obj
 		}
-		obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
+
+		filters, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
 		diags.Append(diag...)
 		if diags.HasError() {
 			return
 		}
-		certificateFilterObjects[i] = obj
+
+		certificateFilter = filters
 	}
 
-	certificateFilter, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
-	diags.Append(diag...)
-	if diags.HasError() {
-		return
-	}
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
 	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
@@ -383,6 +389,10 @@ func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model 
 	elements := make([]types.Object, 0, len(model.CertificateFilters.Elements()))
 	diags.Append(model.CertificateFilters.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
+		return nil
+	}
+
+	if len(elements) == 0 {
 		return nil
 	}
 
