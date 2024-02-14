@@ -2,12 +2,15 @@ package provider
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestAccBasicNamespace(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -43,14 +46,11 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with retention of 7
-				Config: config("tf-basic-namespace", 7),
+				Config: config(name, 7),
 			},
-			/* Does not work yet: CLD-1971
 			{
-				// Update retention to 14
-				Config: testAccBasicNamespaceConfig("terraform-test", 14),
+				Config: config(name, 14),
 			},
-			*/
 			// Delete testing automatically occurs in TestCase
 		},
 	})
@@ -58,6 +58,7 @@ PEM
 }
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString(10))
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -101,15 +102,22 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with retention of 7
-				Config: config("terraform-test", 7),
+				Config: config(name, 7),
 			},
-			/* Does not work yet: CLD-1971
 			{
-				// Update retention to 14
-				Config: testAccBasicNamespaceConfig("terraform-test", 14),
+				Config: config(name, 14),
 			},
-			*/
 			// Delete testing automatically occurs in TestCase
 		},
 	})
+}
+
+func randomString(length int) string {
+	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
+	const charset = "abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[r.Intn(len(charset))]
+	}
+	return string(b)
 }

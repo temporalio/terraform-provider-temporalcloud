@@ -36,7 +36,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
@@ -58,7 +57,6 @@ type (
 		Regions            types.List   `tfsdk:"regions"`
 		AcceptedClientCA   types.String `tfsdk:"accepted_client_ca"`
 		RetentionDays      types.Int64  `tfsdk:"retention_days"`
-		ResourceVersion    types.String `tfsdk:"resource_version"`
 		CertificateFilters types.List   `tfsdk:"certificate_filters"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
@@ -133,9 +131,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"retention_days": schema.Int64Attribute{
 				Required: true,
-			},
-			"resource_version": schema.StringAttribute{
-				Computed: true,
 			},
 			"certificate_filters": schema.ListNestedAttribute{
 				Optional: true,
@@ -220,9 +215,6 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	tflog.Debug(ctx, "responded with namespace model", map[string]any{
-		"resource_version": ns.GetNamespace().GetResourceVersion(),
-	})
 	updateModelFromSpec(ctx, resp.Diagnostics, &plan, ns.Namespace)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
@@ -263,6 +255,11 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	resourceVersion, err := getCurrentResourceVersion(ctx, r.client, &plan)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get current resource version", err.Error())
+		return
+	}
 	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
@@ -274,7 +271,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 				CertificateFilters: certFilters,
 			},
 		},
-		ResourceVersion: plan.ResourceVersion.ValueString(),
+		ResourceVersion: resourceVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
@@ -312,11 +309,16 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
+	resouceVersion, err := getCurrentResourceVersion(ctx, r.client, &state)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get current resource version", err.Error())
+		return
+	}
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 	svcResp, err := r.client.DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
 		Namespace:       state.ID.ValueString(),
-		ResourceVersion: state.ResourceVersion.ValueString(),
+		ResourceVersion: resouceVersion,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete namespace", err.Error())
@@ -382,7 +384,6 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	state.CertificateFilters = certificateFilter
 	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
-	state.ResourceVersion = types.StringValue(ns.GetResourceVersion())
 }
 
 func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) []*namespacev1.CertificateFilterSpec {
@@ -413,6 +414,17 @@ func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model 
 	}
 
 	return certificateFilters
+}
+
+func getCurrentResourceVersion(ctx context.Context, client cloudservicev1.CloudServiceClient, model *namespaceResourceModel) (string, error) {
+	ns, err := client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: model.ID.ValueString(),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return ns.GetNamespace().GetResourceVersion(), nil
 }
 
 func stringOrNull(s string) types.String {
