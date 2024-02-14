@@ -30,7 +30,6 @@ description: |-
 ### Read-Only
 
 - `id` (String) The ID of this resource.
-- `resource_version` (String)
 
 <a id="nestedatt--certificate_filters"></a>
 ### Nested Schema for `certificate_filters`
