@@ -10,6 +10,7 @@ import (
 )
 
 func TestAccBasicNamespace(t *testing.T) {
+	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
@@ -58,6 +59,7 @@ PEM
 }
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
+	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString(10))
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
