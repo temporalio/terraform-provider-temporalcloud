@@ -25,6 +25,7 @@ description: |-
 ### Optional
 
 - `certificate_filters` (Attributes List) (see [below for nested schema](#nestedatt--certificate_filters))
+- `codec_server` (Attributes) (see [below for nested schema](#nestedatt--codec_server))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -40,6 +41,19 @@ Optional:
 - `organization` (String)
 - `organizational_unit` (String)
 - `subject_alternative_name` (String)
+
+
+<a id="nestedatt--codec_server"></a>
+### Nested Schema for `codec_server`
+
+Required:
+
+- `endpoint` (String)
+
+Optional:
+
+- `include_cross_origin_credentials` (Boolean)
+- `pass_access_token` (Boolean)
 
 
 <a id="nestedblock--timeouts"></a>
