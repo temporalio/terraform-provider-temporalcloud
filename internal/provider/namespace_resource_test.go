@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -112,10 +113,11 @@ PEM
 }
 
 func randomString(length int) string {
+	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	const charset = "abcdefghijklmnopqrstuvwxyz"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		b[i] = charset[r.Intn(len(charset))]
 	}
 	return string(b)
 }
