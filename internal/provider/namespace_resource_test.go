@@ -21,7 +21,7 @@ import (
 
 func TestAccBasicNamespace(t *testing.T) {
 	t.Parallel()
-	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
+	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -70,7 +70,7 @@ PEM
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
 	t.Parallel()
-	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString(10))
+	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString())
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -140,7 +140,7 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 	)
 
 	t.Parallel()
-	name := fmt.Sprintf("%s-%s", "tf-codec-server", randomString(10))
+	name := fmt.Sprintf("%s-%s", "tf-codec-server", randomString())
 	tmpl := template.Must(template.New("config").Parse(`
 provider "temporalcloud" {
 
@@ -260,8 +260,8 @@ PEM
 
 func TestAccNamespaceRenameForcesReplacement(t *testing.T) {
 	t.Parallel()
-	oldName := fmt.Sprintf("%s-%s", "tf-rename-replace", randomString(10))
-	newName := fmt.Sprintf("%s-%s", "tf-rename-replace-new", randomString(10))
+	oldName := fmt.Sprintf("%s-%s", "tf-rename-replace", randomString())
+	newName := fmt.Sprintf("%s-%s", "tf-rename-replace-new", randomString())
 	config := func(name string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -319,10 +319,10 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 	return client
 }
 
-func randomString(length int) string {
+func randomString() string {
 	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	const charset = "abcdefghijklmnopqrstuvwxyz"
-	b := make([]byte, length)
+	b := make([]byte, 10)
 	for i := range b {
 		b[i] = charset[r.Intn(len(charset))]
 	}
