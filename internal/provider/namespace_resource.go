@@ -32,6 +32,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -58,6 +60,7 @@ type (
 		AcceptedClientCA   types.String `tfsdk:"accepted_client_ca"`
 		RetentionDays      types.Int64  `tfsdk:"retention_days"`
 		CertificateFilters types.List   `tfsdk:"certificate_filters"`
+		CodecServer        types.Object `tfsdk:"codec_server"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -67,6 +70,12 @@ type (
 		Organization           types.String `tfsdk:"organization"`
 		OrganizationalUnit     types.String `tfsdk:"organizational_unit"`
 		SubjectAlternativeName types.String `tfsdk:"subject_alternative_name"`
+	}
+
+	codecServerModel struct {
+		Endpoint                      types.String `tfsdk:"endpoint"`
+		PassAccessToken               types.Bool   `tfsdk:"pass_access_token"`
+		IncludeCrossOriginCredentials types.Bool   `tfsdk:"include_cross_origin_credentials"`
 	}
 )
 
@@ -79,6 +88,12 @@ var (
 		"organization":             types.StringType,
 		"organizational_unit":      types.StringType,
 		"subject_alternative_name": types.StringType,
+	}
+
+	codecServerAttrs = map[string]attr.Type{
+		"endpoint":                         types.StringType,
+		"pass_access_token":                types.BoolType,
+		"include_cross_origin_credentials": types.BoolType,
 	}
 )
 
@@ -115,6 +130,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Required: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
 			},
 			"id": schema.StringAttribute{
 				Computed: true,
@@ -125,6 +143,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"regions": schema.ListAttribute{
 				ElementType: types.StringType,
 				Required:    true,
+				PlanModifiers: []planmodifier.List{
+					listplanmodifier.RequiresReplace(),
+				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
 				Required: true,
@@ -150,6 +171,24 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						},
 					},
 				},
+			},
+			"codec_server": schema.SingleNestedAttribute{
+				Attributes: map[string]schema.Attribute{
+					"endpoint": schema.StringAttribute{
+						Required: true,
+					},
+					"pass_access_token": schema.BoolAttribute{
+						Computed: true,
+						Default:  booldefault.StaticBool(false),
+						Optional: true,
+					},
+					"include_cross_origin_credentials": schema.BoolAttribute{
+						Computed: true,
+						Default:  booldefault.StaticBool(false),
+						Optional: true,
+					},
+				},
+				Optional: true,
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -186,6 +225,13 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	var codecServer *namespacev1.CodecServerSpec
+	if !plan.CodecServer.IsNull() {
+		codecServer = getCodecServerFromModel(ctx, resp.Diagnostics, &plan)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
 	svcResp, err := r.client.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
@@ -195,6 +241,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
 				CertificateFilters: certFilters,
 			},
+			CodecServer: codecServer,
 		},
 	})
 	if err != nil {
@@ -260,6 +307,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Failed to get current resource version", err.Error())
 		return
 	}
+	codecServer := getCodecServerFromModel(ctx, resp.Diagnostics, &plan)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
@@ -270,6 +321,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
 				CertificateFilters: certFilters,
 			},
+			CodecServer: codecServer,
 		},
 		ResourceVersion: resourceVersion,
 	})
@@ -380,6 +432,25 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		certificateFilter = filters
 	}
 
+	var codecServerState basetypes.ObjectValue
+	// The API always returns a non-empty CodecServerSpec, even if it wasn't specified on object creation. We explicitly
+	// map an endpoint whose value is the empty string to `null`, since an empty endpoint implies that the codec server
+	// was not set via config.
+	if ns.GetSpec().GetCodecServer().GetEndpoint() != "" {
+		codecServer := &codecServerModel{
+			Endpoint:                      stringOrNull(ns.GetSpec().GetCodecServer().GetEndpoint()),
+			PassAccessToken:               types.BoolValue(ns.GetSpec().GetCodecServer().GetPassAccessToken()),
+			IncludeCrossOriginCredentials: types.BoolValue(ns.GetSpec().GetCodecServer().GetIncludeCrossOriginCredentials()),
+		}
+
+		state, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, codecServer)
+		diags.Append(objectDiags...)
+		codecServerState = state
+	} else {
+		codecServerState = types.ObjectNull(codecServerAttrs)
+	}
+
+	state.CodecServer = codecServerState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
 	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
@@ -425,6 +496,19 @@ func getCurrentResourceVersion(ctx context.Context, client cloudservicev1.CloudS
 	}
 
 	return ns.GetNamespace().GetResourceVersion(), nil
+}
+
+func getCodecServerFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) *namespacev1.CodecServerSpec {
+	var codecServer codecServerModel
+	diags.Append(model.CodecServer.As(ctx, &codecServer, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil
+	}
+	return &namespacev1.CodecServerSpec{
+		Endpoint:                      codecServer.Endpoint.ValueString(),
+		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
+		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
+	}
 }
 
 func stringOrNull(s string) types.String {
