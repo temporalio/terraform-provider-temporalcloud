@@ -10,7 +10,7 @@ import (
 func TestAccNamespaceWithSearchAttributes(t *testing.T) {
 	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString())
-	config := func(name string) string {
+	config := func(name string, saName string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -39,7 +39,7 @@ PEM
 
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
   namespace_id = temporalcloud_namespace.terraform.id
-  name         = "CustomSearchAttribute"
+  name         = "%s"
   type         = "Text"
 }
 
@@ -53,7 +53,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute3"
   type         = "Text"
-}`, name)
+}`, name, saName)
 	}
 
 	resource.Test(t, resource.TestCase{
@@ -61,7 +61,10 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name),
+				Config: config(name, "CustomSearchAttribute"),
+			},
+			{
+				Config: config(name, "CustomSearchAttribute9"),
 			},
 		},
 	})
