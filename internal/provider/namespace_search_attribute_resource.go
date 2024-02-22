@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-uuid"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -14,6 +15,7 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
+	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
 )
 
 type (
@@ -155,24 +157,37 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	newCSA := updatedNs.GetNamespace().GetSpec().GetCustomSearchAttributes()
-	newSearchAttrType, ok := newCSA[plan.Name.ValueString()]
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Failed to find newly-created search attribute",
-			fmt.Sprintf("Failed to find search attribute `%s` after update (this is a bug, please report this on GitHub!)", plan.Name.ValueString()),
-		)
-		return
-	}
 	plan.ID = types.StringValue(id)
 	plan.NamespaceID = types.StringValue(updatedNs.GetNamespace().GetNamespace())
-	// plan.Name is already set
-	plan.Type = types.StringValue(newSearchAttrType)
+	resp.Diagnostics.Append(plan.updateFromSpec(updatedNs.GetNamespace().GetSpec())...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *namespaceSearchAttributeResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// TODO: NYI
+	var state namespaceSearchAttributeModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	model, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: state.NamespaceID.ValueString(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get namespace", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(state.updateFromSpec(model.GetNamespace().GetSpec())...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -240,19 +255,13 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 			return
 		}
 
-		newCSA := updatedNs.GetNamespace().GetSpec().GetCustomSearchAttributes()
-		newSearchAttrType, ok := newCSA[plan.Name.ValueString()]
-		if !ok {
-			resp.Diagnostics.AddError(
-				"Failed to find newly-created search attribute",
-				fmt.Sprintf("Failed to find search attribute `%s` after update (this is a bug, please report this on GitHub!)", plan.Name.ValueString()),
-			)
+		resp.Diagnostics.Append(plan.updateFromSpec(updatedNs.GetNamespace().GetSpec())...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
 		// plan.ID does not change
-		plan.NamespaceID = types.StringValue(updatedNs.GetNamespace().GetNamespace())
+		// plan.NamespaceID does not change
 		// plan.Name is already set
-		plan.Type = types.StringValue(newSearchAttrType)
 		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 	})
 }
@@ -262,6 +271,25 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 		"Delete Ignored",
 		"The Temporal Cloud API does not support deleting a search attribute. Terraform will silently drop this resource but will not delete it from the Temporal Cloud namespace.",
 	)
+}
+
+func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.NamespaceSpec) diag.Diagnostics {
+	var diags diag.Diagnostics
+	newCSA := spec.GetCustomSearchAttributes()
+	searchAttrType, ok := newCSA[m.Name.ValueString()]
+	if !ok {
+		diags.AddError(
+			"Failed to find search attribute",
+			fmt.Sprintf("Failed to find search attribute `%s` after update (this is a bug, please report this on GitHub!)", m.Name.ValueString()),
+		)
+		return diags
+	}
+
+	// plan.ID is already set
+	// plan.NamespaceID is already set
+	// plan.Name is already set
+	m.Type = types.StringValue(searchAttrType)
+	return diags
 }
 
 // withNamespaceLock locks the given namespace and runs the given function, releasing the lock once the function returns.
