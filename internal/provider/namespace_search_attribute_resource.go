@@ -176,7 +176,85 @@ func (r *namespaceSearchAttributeResource) Read(ctx context.Context, req resourc
 }
 
 func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// TODO: NYI
+	var plan, state namespaceSearchAttributeModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	withNamespaceLock(plan.NamespaceID.ValueString(), func() {
+		ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: plan.NamespaceID.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get namespace after update", err.Error())
+			return
+		}
+
+		if !plan.Name.Equal(state.Name) {
+			svcResp, err := r.client.RenameCustomSearchAttribute(ctx, &cloudservicev1.RenameCustomSearchAttributeRequest{
+				Namespace:                         plan.NamespaceID.ValueString(),
+				ExistingCustomSearchAttributeName: state.Name.ValueString(),
+				NewCustomSearchAttributeName:      plan.Name.ValueString(),
+				ResourceVersion:                   ns.GetNamespace().GetResourceVersion(),
+			})
+			if err != nil {
+				resp.Diagnostics.AddError("Failed to rename search attribute", err.Error())
+				return
+			}
+
+			if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+				resp.Diagnostics.AddError("Failed to rename search attribute", err.Error())
+				return
+			}
+		}
+
+		spec := ns.GetNamespace().GetSpec()
+		// Assumption: a search attribute named plan.Name already exists
+		spec.GetCustomSearchAttributes()[plan.Name.ValueString()] = plan.Type.ValueString()
+		svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+			Namespace:       plan.NamespaceID.ValueString(),
+			Spec:            spec,
+			ResourceVersion: ns.GetNamespace().GetResourceVersion(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
+
+		updatedNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: plan.NamespaceID.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get namespace after update", err.Error())
+			return
+		}
+
+		newCSA := updatedNs.GetNamespace().GetSpec().GetCustomSearchAttributes()
+		newSearchAttrType, ok := newCSA[plan.Name.ValueString()]
+		if !ok {
+			resp.Diagnostics.AddError(
+				"Failed to find newly-created search attribute",
+				fmt.Sprintf("Failed to find search attribute `%s` after update (this is a bug, please report this on GitHub!)", plan.Name.ValueString()),
+			)
+			return
+		}
+		// plan.ID does not change
+		plan.NamespaceID = types.StringValue(updatedNs.GetNamespace().GetNamespace())
+		// plan.Name is already set
+		plan.Type = types.StringValue(newSearchAttrType)
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	})
 }
 
 func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
