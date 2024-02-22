@@ -186,6 +186,8 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 // withNamespaceLock locks the given namespace and runs the given function, releasing the lock once the function returns.
 func withNamespaceLock(ns string, f func()) {
 	namespaceLocks.Lock(ns)
-	defer namespaceLocks.Unlock(ns)
+	defer func() {
+		_ = namespaceLocks.Unlock(ns)
+	}()
 	f()
 }
