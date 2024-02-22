@@ -116,6 +116,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		NewNamespaceResource,
+		NewNamespaceSearchAttributeResource,
 	}
 }
 
