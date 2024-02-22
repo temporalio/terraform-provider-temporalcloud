@@ -258,7 +258,10 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 }
 
 func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	// TODO: NYI
+	resp.Diagnostics.AddWarning(
+		"Delete Ignored",
+		"The Temporal Cloud API does not support deleting a search attribute. Terraform will silently drop this resource but will not delete it from the Temporal Cloud namespace.",
+	)
 }
 
 // withNamespaceLock locks the given namespace and runs the given function, releasing the lock once the function returns.
