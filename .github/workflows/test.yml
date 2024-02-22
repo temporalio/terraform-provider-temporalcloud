@@ -32,6 +32,7 @@ jobs:
           cache: true
       - run: go mod download
       - run: go build -v .
+      - run: go test -cover ./...
       - name: Run linters
         uses: golangci/golangci-lint-action@639cd343e1d3b897ff35927a75193d57cfcba299 # v3.6.0
         with:
