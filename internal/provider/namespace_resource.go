@@ -25,7 +25,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -406,18 +405,7 @@ func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *name
 
 func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *namespaceResourceModel, ns *namespacev1.Namespace) {
 	state.ID = types.StringValue(ns.GetNamespace())
-
-	// state.Name is the config-provided name of the namespace; this doesn't have a namespace suffix on it.
-	//
-	// During normal operation, this field is provided via config; however, this config might not be populated in the
-	// case of resource import, in which case we need to derive it from the namespace ID by stripping off the account
-	// suffix.
-	namespaceParts := strings.Split(ns.GetNamespace(), ".")
-	if len(namespaceParts) != 2 {
-		diags.AddError("Failed to parse namespace ID", "Expected namespace ID to be in the format `namespace.account`, got: "+ns.GetNamespace()+". This is a bug, please report this on GitHub!")
-		return
-	}
-	state.Name = types.StringValue(namespaceParts[0])
+	state.Name = types.StringValue(ns.GetSpec().GetName())
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
