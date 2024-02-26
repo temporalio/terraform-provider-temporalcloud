@@ -20,7 +20,6 @@ import (
 )
 
 func TestAccBasicNamespace(t *testing.T) {
-	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
@@ -51,7 +50,7 @@ PEM
 }`, name, retention)
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -69,7 +68,6 @@ PEM
 }
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
-	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString())
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
@@ -108,7 +106,7 @@ PEM
 
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -139,7 +137,6 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 		}
 	)
 
-	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-codec-server", randomString())
 	tmpl := template.Must(template.New("config").Parse(`
 provider "temporalcloud" {
@@ -188,7 +185,7 @@ PEM
 		return buf.String()
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -259,7 +256,6 @@ PEM
 }
 
 func TestAccNamespaceRenameForcesReplacement(t *testing.T) {
-	t.Parallel()
 	oldName := fmt.Sprintf("%s-%s", "tf-rename-replace", randomString())
 	newName := fmt.Sprintf("%s-%s", "tf-rename-replace-new", randomString())
 	config := func(name string) string {
@@ -289,7 +285,7 @@ PEM
 `, name)
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -304,7 +300,6 @@ PEM
 }
 
 func TestAccNamespaceImport(t *testing.T) {
-	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-rename-replace", randomString())
 	config := func(name string) string {
 		return fmt.Sprintf(`
@@ -333,7 +328,7 @@ PEM
 `, name)
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
