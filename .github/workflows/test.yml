@@ -80,5 +80,5 @@ jobs:
       - env:
           TF_ACC: "1"
           TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
-        run: go test -v -cover ./internal/provider/
+        run: go test -parallel 8 -v -cover ./internal/provider/
         timeout-minutes: 10
