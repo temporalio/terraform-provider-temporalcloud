@@ -8,7 +8,6 @@ import (
 )
 
 func TestAccNamespaceWithSearchAttributes(t *testing.T) {
-	t.Parallel()
 	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString())
 	config := func(name string, saName string) string {
 		return fmt.Sprintf(`
@@ -56,7 +55,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 }`, name, saName)
 	}
 
-	resource.Test(t, resource.TestCase{
+	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{

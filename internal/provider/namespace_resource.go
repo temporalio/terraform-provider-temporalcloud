@@ -30,6 +30,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
@@ -80,8 +81,9 @@ type (
 )
 
 var (
-	_ resource.Resource              = (*namespaceResource)(nil)
-	_ resource.ResourceWithConfigure = (*namespaceResource)(nil)
+	_ resource.Resource                = (*namespaceResource)(nil)
+	_ resource.ResourceWithConfigure   = (*namespaceResource)(nil)
+	_ resource.ResourceWithImportState = (*namespaceResource)(nil)
 
 	namespaceCertificateFilterAttrs = map[string]attr.Type{
 		"common_name":              types.StringType,
@@ -382,6 +384,10 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 }
 
+func (r *namespaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
 func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *namespaceResourceModel) []string {
 	regions := make([]types.String, 0, len(plan.Regions.Elements()))
 	diags.Append(plan.Regions.ElementsAs(ctx, &regions, false)...)
@@ -399,6 +405,7 @@ func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *name
 
 func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *namespaceResourceModel, ns *namespacev1.Namespace) {
 	state.ID = types.StringValue(ns.GetNamespace())
+	state.Name = types.StringValue(ns.GetSpec().GetName())
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
