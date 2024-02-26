@@ -70,27 +70,28 @@ func (r *namespaceSearchAttributeResource) Metadata(_ context.Context, req resou
 
 func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "A search attribute for visibility of Temporal Cloud namespaces. See [this documentation page](https://docs.temporal.io/visibility#search-attribute) for more information on search attributes.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Description: "The ID of this search attribute",
+				Description: "The ID of this search attribute.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"namespace_id": schema.StringAttribute{
-				Description: "The ID of the namespace to which this search attribute belongs",
+				Description: "The ID of the namespace to which this search attribute belongs.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"name": schema.StringAttribute{
-				Description: "The name of the search attribute",
+				Description: "The name of the search attribute.",
 				Required:    true,
 			},
 			"type": schema.StringAttribute{
-				Description: "The type of the search attribute",
+				Description: "The type of the search attribute. Must be one of `Bool`, `Datetime`, `Double`, `Int`, `Keyword`, or `Text`.",
 				Required:    true,
 			},
 		},
