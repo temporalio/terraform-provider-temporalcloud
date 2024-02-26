@@ -129,20 +129,24 @@ func (r *namespaceResource) Metadata(_ context.Context, req resource.MetadataReq
 // Schema defines the schema for the resource.
 func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Provisions a Temporal Cloud namespace.",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
-				Required: true,
+				Description: "The name of the namespace.",
+				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"id": schema.StringAttribute{
-				Computed: true,
+				Description: "The unique identifier of the namespace across all Temporal Cloud tenants.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"regions": schema.ListAttribute{
+				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is \"global\" which is currently a preview feature with restricted access. Please reach out to Temporal support for more information on this feature.",
 				ElementType: types.StringType,
 				Required:    true,
 				PlanModifiers: []planmodifier.List{
@@ -150,44 +154,55 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
-				Required: true,
+				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.",
+				Required:    true,
 			},
 			"retention_days": schema.Int64Attribute{
-				Required: true,
+				Description: "The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.",
+				Required:    true,
 			},
 			"certificate_filters": schema.ListNestedAttribute{
-				Optional: true,
+				Description: "A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters.",
+				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"common_name": schema.StringAttribute{
-							Optional: true,
+							Description: "The certificate's common name.",
+							Optional:    true,
 						},
 						"organization": schema.StringAttribute{
-							Optional: true,
+							Description: "The certificate's organization.",
+							Optional:    true,
 						},
 						"organizational_unit": schema.StringAttribute{
-							Optional: true,
+							Description: "The certificate's organizational unit.",
+							Optional:    true,
 						},
 						"subject_alternative_name": schema.StringAttribute{
-							Optional: true,
+							Description: "The certificate's subject alternative name (or SAN).",
+							Optional:    true,
 						},
 					},
 				},
 			},
 			"codec_server": schema.SingleNestedAttribute{
+				Description: "A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted.",
 				Attributes: map[string]schema.Attribute{
 					"endpoint": schema.StringAttribute{
-						Required: true,
+						Description: "The endpoint of the codec server. Must begin with \"https\".",
+						Required:    true,
 					},
 					"pass_access_token": schema.BoolAttribute{
-						Computed: true,
-						Default:  booldefault.StaticBool(false),
-						Optional: true,
+						Description: "If true, Tempora Cloud will pass the access token to the codec server upon each request.",
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Optional:    true,
 					},
 					"include_cross_origin_credentials": schema.BoolAttribute{
-						Computed: true,
-						Default:  booldefault.StaticBool(false),
-						Optional: true,
+						Description: "If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.",
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Optional:    true,
 					},
 				},
 				Optional: true,

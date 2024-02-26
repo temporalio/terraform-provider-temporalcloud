@@ -38,16 +38,33 @@ func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.Meta
 
 func (p *TerraformCloudProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: `Use the Temporal Cloud provider to interact with resources supported by Temporal Cloud.
+		
+Use the navigation to the left to learn about the available resources supported by this provider.
+
+## Provider Configuration 
+
+Credentials for Temporal Cloud can be provided by adding an "api_key" property or by setting the environment variable "TEMPORAL_CLOUD_API_KEY".
+You can generate an API key for Temporal Cloud by following the instructions [here](https://docs.temporal.io/cloud/api-keys).
+
+!> Hard-coded credentials are not recommended in any Terraform configuration and should not be committed
+in version control. We recommend passing credentials to this provider via environment variables.
+
+
+`,
 		Attributes: map[string]schema.Attribute{
 			"api_key": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
+				MarkdownDescription: "The API key for Temporal Cloud. See [this documentation](https://docs.temporal.io/cloud/api-keys) for information on how to obtain an API key.",
+				Optional:            true,
+				Sensitive:           true,
 			},
 			"endpoint": schema.StringAttribute{
-				Optional: true,
+				Description: "The endpoint for the Temporal Cloud API. Defaults to `saas-api.tmprl.cloud:443`.",
+				Optional:    true,
 			},
 			"allow_insecure": schema.BoolAttribute{
-				Optional: true,
+				Description: "If set, allows for an insecure connection to the Temporal Cloud API. Defaults to `false`.",
+				Optional:    true,
 			},
 		},
 	}
