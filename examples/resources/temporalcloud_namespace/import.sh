@@ -1,0 +1,1 @@
+terraform import temporalcloud_namespace.terraform terraform.badf00d
