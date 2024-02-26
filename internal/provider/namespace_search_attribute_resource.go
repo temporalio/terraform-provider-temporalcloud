@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -32,8 +33,9 @@ type (
 )
 
 var (
-	_ resource.Resource              = (*namespaceSearchAttributeResource)(nil)
-	_ resource.ResourceWithConfigure = (*namespaceSearchAttributeResource)(nil)
+	_ resource.Resource                = (*namespaceSearchAttributeResource)(nil)
+	_ resource.ResourceWithConfigure   = (*namespaceSearchAttributeResource)(nil)
+	_ resource.ResourceWithImportState = (*namespaceSearchAttributeResource)(nil)
 
 	// namespaceLocks is a per-namespace mutex that protects against concurrent updates to the same namespace spec,
 	// which can happen when we are modifying multiple search attributes in parallel.
@@ -271,6 +273,27 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 		"Delete Ignored",
 		"The Temporal Cloud API does not support deleting a search attribute. Terraform will silently drop this resource but will not delete it from the Temporal Cloud namespace.",
 	)
+}
+
+func (r *namespaceSearchAttributeResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	components := strings.Split(req.ID, "/")
+	if len(components) != 2 {
+		resp.Diagnostics.AddError("Invalid import ID for Namespace search attribute", "The import ID must be in the format `NamepaceID/SearchAttributeName`, such as `yournamespace.deadbeef/CustomSearchAttribute`")
+		return
+	}
+
+	nsID, saName := components[0], components[1]
+	id, err := uuid.GenerateUUID()
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to generate UUID", err.Error())
+		return
+	}
+
+	var state namespaceSearchAttributeModel
+	state.ID = types.StringValue(id)
+	state.NamespaceID = types.StringValue(nsID)
+	state.Name = types.StringValue(saName)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
 func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.NamespaceSpec) diag.Diagnostics {
