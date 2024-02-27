@@ -75,16 +75,20 @@ func (d *regionsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Description: "The unique identifier for the region, e.g. `aws-us-east-1`.",
+							Computed:    true,
 						},
 						"cloud_provider": schema.StringAttribute{
-							Computed: true,
+							Description: "The name of the Cloud provider for this region, e.g. `aws`.",
+							Computed:    true,
 						},
 						"cloud_provider_region": schema.StringAttribute{
-							Computed: true,
+							Description: "The name of the region within the Cloud provider, e.g. `us-east-1`.",
+							Computed:    true,
 						},
 						"location": schema.StringAttribute{
-							Computed: true,
+							Description: "The physical location of the region, e.g. \"US East (N. Virginia)\".",
+							Computed:    true,
 						},
 					},
 				},
