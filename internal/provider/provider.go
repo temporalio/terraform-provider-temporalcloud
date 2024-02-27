@@ -42,7 +42,7 @@ func (p *TerraformCloudProvider) Schema(ctx context.Context, req provider.Schema
 		
 Use the navigation to the left to learn about the available resources supported by this provider.
 
-~> This provider is in Public Preview, is under active development, and is subject to change. We reserve the right to make breaking changes during this pre-release period, though we will do our best to maintain compatibility wherever possible.
+~> This provider is in Public Preview, is under active development, and is subject to change. We reserve the right to make breaking changes during this pre-GA period, though we will do our best to maintain compatibility wherever possible.
 
 ## Provider Configuration 
 
