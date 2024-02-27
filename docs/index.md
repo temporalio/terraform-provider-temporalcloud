@@ -5,6 +5,7 @@ subcategory: ""
 description: |-
   Use the Temporal Cloud provider to interact with resources supported by Temporal Cloud.
   Use the navigation to the left to learn about the available resources supported by this provider.
+  ~> This provider is in Public Preview, is under active development, and is subject to change. We reserve the right to make breaking changes during this pre-release period, though we will do our best to maintain compatibility wherever possible.
   Provider Configuration
   Credentials for Temporal Cloud can be provided by adding an "apikey" property or by setting the environment variable "TEMPORALCLOUDAPIKEY".
   You can generate an API key for Temporal Cloud by following the instructions here https://docs.temporal.io/cloud/api-keys.
@@ -17,6 +18,8 @@ description: |-
 Use the Temporal Cloud provider to interact with resources supported by Temporal Cloud.
 		
 Use the navigation to the left to learn about the available resources supported by this provider.
+
+~> This provider is in Public Preview, is under active development, and is subject to change. We reserve the right to make breaking changes during this pre-release period, though we will do our best to maintain compatibility wherever possible.
 
 ## Provider Configuration 
 
