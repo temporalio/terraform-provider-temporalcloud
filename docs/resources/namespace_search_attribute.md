@@ -8,7 +8,7 @@ description: |-
 
 # temporalcloud_namespace_search_attribute (Resource)
 
-A search attribute for visibility of Temporal Cloud namespaces. See [this documentation page](https://docs.temporal.io/visibility#search-attribute) for more information on search attributes.
+Create a [search attribute](https://docs.temporal.io/visibility#search-attribute) in a Temporal Cloud [namespace](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/namespace).
 
 ## Example Usage
 

@@ -1,11 +1,17 @@
 # Temporal Cloud Terraform Provider
 
-## Requirements
+[registry.terraform.io/providers/temporalio/temporalcloud](https://registry.terraform.io/providers/temporalio/temporalcloud/latest)
+
+[Documentation](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs)
+
+## Contributing
+
+### Requirements
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.0
 - [Go](https://golang.org/doc/install) >= 1.19
 
-## Building The Provider
+### Building The Provider
 
 1. Clone the repository
 1. Enter the repository directory
@@ -15,7 +21,7 @@
 go install
 ```
 
-## Adding Dependencies
+### Adding Dependencies
 
 This provider uses [Go modules](https://github.com/golang/go/wiki/Modules).
 Please see the Go documentation for the most up to date information about using Go modules.
@@ -29,11 +35,8 @@ go mod tidy
 
 Then commit the changes to `go.mod` and `go.sum`.
 
-## Using the provider
 
-Fill this in for each provider
-
-## Developing the Provider
+### Developing the Provider
 
 If you wish to work on the provider, you'll first need [Go](http://www.golang.org) installed on your machine (see [Requirements](#requirements) above).
 
@@ -49,7 +52,7 @@ In order to run the full suite of Acceptance tests, run `make testacc`.
 make testacc
 ```
 
-## Testing with Terraform
+### Testing with Terraform
 
 In order to test your code you need an api key for temporal cloud. Docs on how to generate this is here:
 https://github.com/temporalio/tcld/tree/release/apikeys#api-key-management-preview
