@@ -193,7 +193,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Required:    true,
 					},
 					"pass_access_token": schema.BoolAttribute{
-						Description: "If true, Tempora Cloud will pass the access token to the codec server upon each request.",
+						Description: "If true, Temporal Cloud will pass the access token to the codec server upon each request.",
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
 						Optional:    true,

@@ -13,6 +13,14 @@ A search attribute for visibility of Temporal Cloud namespaces. See [this docume
 ## Example Usage
 
 ```terraform
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "temporalio/temporalcloud"
+    }
+  }
+}
+
 provider "temporalcloud" {
 
 }

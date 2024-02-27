@@ -13,6 +13,14 @@ Provisions a Temporal Cloud namespace.
 ## Example Usage
 
 ```terraform
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "temporalio/temporalcloud"
+    }
+  }
+}
+
 provider "temporalcloud" {
 
 }
@@ -66,7 +74,7 @@ Required:
 Optional:
 
 - `include_cross_origin_credentials` (Boolean) If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.
-- `pass_access_token` (Boolean) If true, Tempora Cloud will pass the access token to the codec server upon each request.
+- `pass_access_token` (Boolean) If true, Temporal Cloud will pass the access token to the codec server upon each request.
 
 
 <a id="nestedblock--timeouts"></a>

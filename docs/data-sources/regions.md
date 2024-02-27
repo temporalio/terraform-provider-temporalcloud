@@ -13,6 +13,14 @@ description: |-
 ## Example Usage
 
 ```terraform
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "temporalio/temporalcloud"
+    }
+  }
+}
+
 provider "temporalcloud" {
 
 }
@@ -37,7 +45,7 @@ output "regions" {
 
 Read-Only:
 
-- `cloud_provider` (String)
-- `cloud_provider_region` (String)
-- `id` (String)
-- `location` (String)
+- `cloud_provider` (String) The name of the Cloud provider for this region, e.g. `aws`.
+- `cloud_provider_region` (String) The name of the region within the Cloud provider, e.g. `us-east-1`.
+- `id` (String) The unique identifier for the region, e.g. `aws-us-east-1`.
+- `location` (String) The physical location of the region, e.g. "US East (N. Virginia)".

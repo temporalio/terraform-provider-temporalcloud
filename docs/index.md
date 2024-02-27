@@ -32,7 +32,7 @@ in version control. We recommend passing credentials to this provider via enviro
 terraform {
   required_providers {
     temporalcloud = {
-      source = "hashicorp/temporalcloud"
+      source = "temporalio/temporalcloud"
     }
   }
 }
