@@ -70,7 +70,7 @@ func (r *namespaceSearchAttributeResource) Metadata(_ context.Context, req resou
 
 func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "A search attribute for visibility of Temporal Cloud namespaces. See [this documentation page](https://docs.temporal.io/visibility#search-attribute) for more information on search attributes.",
+		MarkdownDescription: "Create a [search attribute](https://docs.temporal.io/visibility#search-attribute) in a Temporal Cloud [namespace](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/namespace).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The ID of this search attribute.",
