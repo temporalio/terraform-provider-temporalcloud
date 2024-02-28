@@ -3,12 +3,12 @@
 page_title: "temporalcloud_namespace_search_attribute Resource - terraform-provider-temporalcloud"
 subcategory: ""
 description: |-
-  A search attribute for visibility of Temporal Cloud namespaces. See this documentation page https://docs.temporal.io/visibility#search-attribute for more information on search attributes.
+  Create a search attribute https://docs.temporal.io/visibility#search-attribute in a Temporal Cloud namespace https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/namespace. Note the limits on quantity https://docs.temporal.io/cloud/limits#number-of-custom-search-attributes and naming https://docs.temporal.io/cloud/limits#custom-search-attribute-names.
 ---
 
 # temporalcloud_namespace_search_attribute (Resource)
 
-A search attribute for visibility of Temporal Cloud namespaces. See [this documentation page](https://docs.temporal.io/visibility#search-attribute) for more information on search attributes.
+Create a [search attribute](https://docs.temporal.io/visibility#search-attribute) in a Temporal Cloud [namespace](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/namespace). Note the limits on [quantity](https://docs.temporal.io/cloud/limits#number-of-custom-search-attributes) and [naming](https://docs.temporal.io/cloud/limits#custom-search-attribute-names).
 
 ## Example Usage
 
