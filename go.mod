@@ -13,7 +13,7 @@ require (
 	github.com/jpillora/maplock v0.0.0-20160420012925-5c725ac6e22a
 	google.golang.org/genproto/googleapis/api v0.0.0-20231106174013-bbf56f31fb17
 	google.golang.org/grpc v1.61.1
-	google.golang.org/protobuf v1.31.0
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
