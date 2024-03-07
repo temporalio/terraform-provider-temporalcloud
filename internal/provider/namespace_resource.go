@@ -319,9 +319,12 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resourceVersion, err := getCurrentResourceVersion(ctx, r.client, &plan)
+
+	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: plan.ID.ValueString(),
+	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get current resource version", err.Error())
+		resp.Diagnostics.AddError("Failed to get current namespace status", err.Error())
 		return
 	}
 	codecServer := getCodecServerFromModel(ctx, resp.Diagnostics, &plan)
@@ -338,9 +341,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
 				CertificateFilters: certFilters,
 			},
-			CodecServer: codecServer,
+			CodecServer:            codecServer,
+			CustomSearchAttributes: currentNs.GetNamespace().GetSpec().GetCustomSearchAttributes(),
 		},
-		ResourceVersion: resourceVersion,
+		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
@@ -378,16 +382,18 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	resouceVersion, err := getCurrentResourceVersion(ctx, r.client, &state)
+	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: state.ID.ValueString(),
+	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get current resource version", err.Error())
+		resp.Diagnostics.AddError("Failed to get current namespace status", err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 	svcResp, err := r.client.DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
 		Namespace:       state.ID.ValueString(),
-		ResourceVersion: resouceVersion,
+		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete namespace", err.Error())
@@ -507,17 +513,6 @@ func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model 
 	}
 
 	return certificateFilters
-}
-
-func getCurrentResourceVersion(ctx context.Context, client cloudservicev1.CloudServiceClient, model *namespaceResourceModel) (string, error) {
-	ns, err := client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
-		Namespace: model.ID.ValueString(),
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return ns.GetNamespace().GetResourceVersion(), nil
 }
 
 func getCodecServerFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) *namespacev1.CodecServerSpec {
