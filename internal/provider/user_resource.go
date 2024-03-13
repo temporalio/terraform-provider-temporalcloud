@@ -38,8 +38,8 @@ type (
 	}
 
 	userNamespaceAccessModel struct {
-		Namespace  types.String `tfsdk:"namespace"`
-		Permission types.String `tfsdk:"permission"`
+		NamespaceID types.String `tfsdk:"namespace_id"`
+		Permission  types.String `tfsdk:"permission"`
 	}
 )
 
@@ -49,8 +49,8 @@ var (
 	_ resource.ResourceWithImportState = (*userResource)(nil)
 
 	userNamespaceAccessAttrs = map[string]attr.Type{
-		"namespace":  types.StringType,
-		"permission": types.StringType,
+		"namespace_id": types.StringType,
+		"permission":   types.StringType,
 	}
 )
 
@@ -117,7 +117,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
-						"namespace": schema.StringAttribute{
+						"namespace_id": schema.StringAttribute{
 							Description: "The namespace to assign permissions to.",
 							Required:    true,
 						},
@@ -329,7 +329,7 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 		if diags.HasError() {
 			return nil
 		}
-		namespaceAccesses[model.Namespace.ValueString()] = &identityv1.NamespaceAccess{
+		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
 			Permission: model.Permission.ValueString(),
 		}
 	}
@@ -348,8 +348,8 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
 			model := userNamespaceAccessModel{
-				Namespace:  types.StringValue(ns),
-				Permission: types.StringValue(namespaceAccess.GetPermission()),
+				NamespaceID: types.StringValue(ns),
+				Permission:  types.StringValue(namespaceAccess.GetPermission()),
 			}
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)

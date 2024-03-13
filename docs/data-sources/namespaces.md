@@ -90,7 +90,7 @@ Read-Only:
 
 Optional:
 
-- `aws_private_link_info` (Attributes) The AWS PrivateLink info. This will only be set for an AWS region. (see [below for nested schema](#nestedatt--namespaces--private_connectivities--aws_private_link_info))
+- `aws_private_link_info` (Attributes) The AWS PrivateLink info. This will only be set for namespaces whose cloud provider is AWS. (see [below for nested schema](#nestedatt--namespaces--private_connectivities--aws_private_link_info))
 
 Read-Only:
 
@@ -111,8 +111,8 @@ Read-Only:
 
 Read-Only:
 
-- `grpc_address` (String) The grpc hostport address that the temporal workers, clients and tctl connect to.
-- `web_address` (String) The web ui address.
+- `grpc_address` (String) The gRPC hostport address that the temporal workers, clients and tctl connect to.
+- `web_address` (String) The web UI address.
 
 
 <a id="nestedatt--namespaces--limits"></a>

@@ -338,9 +338,9 @@ type Endpoints struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The web ui address.
+	// The web UI address.
 	WebAddress string `protobuf:"bytes,1,opt,name=web_address,json=webAddress,proto3" json:"web_address,omitempty"`
-	// The grpc hostport address that the temporal workers, clients and tctl connect to.
+	// The gRPC hostport address that the temporal workers, clients and tctl connect to.
 	GrpcAddress string `protobuf:"bytes,2,opt,name=grpc_address,json=grpcAddress,proto3" json:"grpc_address,omitempty"`
 }
 
@@ -504,7 +504,7 @@ type PrivateConnectivity struct {
 	// The id of the region where the private connectivity applies.
 	Region string `protobuf:"bytes,1,opt,name=region,proto3" json:"region,omitempty"`
 	// The AWS PrivateLink info.
-	// This will only be set for an aws region.
+	// This will only be set for namespaces whose cloud provider is AWS.
 	AwsPrivateLink *AWSPrivateLinkInfo `protobuf:"bytes,2,opt,name=aws_private_link,json=awsPrivateLink,proto3" json:"aws_private_link,omitempty"`
 }
 

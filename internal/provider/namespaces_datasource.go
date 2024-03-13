@@ -203,12 +203,12 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 							Description: "The endpoints for the namespace.",
 							Attributes: map[string]schema.Attribute{
 								"web_address": schema.StringAttribute{
-									Description: "The web ui address.",
+									Description: "The web UI address.",
 									Computed:    true,
 								},
 								"grpc_address": schema.StringAttribute{
 									Computed:    true,
-									Description: "The grpc hostport address that the temporal workers, clients and tctl connect to.",
+									Description: "The gRPC hostport address that the temporal workers, clients and tctl connect to.",
 								},
 							},
 						},
@@ -225,7 +225,7 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 									"aws_private_link_info": schema.SingleNestedAttribute{
 										Computed:    true,
 										Optional:    true,
-										Description: "The AWS PrivateLink info. This will only be set for an AWS region.",
+										Description: "The AWS PrivateLink info. This will only be set for namespaces whose cloud provider is AWS.",
 										Attributes: map[string]schema.Attribute{
 											"allowed_principal_arns": schema.ListAttribute{
 												Computed:    true,

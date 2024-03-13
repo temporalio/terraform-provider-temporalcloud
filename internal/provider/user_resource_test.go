@@ -17,13 +17,12 @@ import (
 )
 
 const (
-	// TODO change email address.
 	emailDomain   = "temporal.io"
-	emailBaseAddr = "test"
+	emailBaseAddr = "saas-cicd-prod"
 )
 
 func createRandomEmail() string {
-	return fmt.Sprintf("%s+%s@%s", emailBaseAddr, randomString(), emailDomain)
+	return fmt.Sprintf("%s+terraformprovider-%s@%s", emailBaseAddr, randomString(), emailDomain)
 }
 
 func TestAccBasicUser(t *testing.T) {
