@@ -126,91 +126,116 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The unique identifier of the namespace across all Temporal Cloud tenants.",
 						},
 						"name": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The name of the namespace.",
 						},
 						"state": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The current state of the namespace.",
 						},
 						"active_region": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The currently active region for the namespace.",
 						},
 						"regions": schema.ListAttribute{
 							Computed:    true,
+							Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is \"global\" which is currently a preview feature with restricted access. Please reach out to Temporal support for more information on this feature.",
 							ElementType: types.StringType,
 						},
 						"accepted_client_ca": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.",
 						},
 						"retention_days": schema.Int64Attribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.",
 						},
 						"certificate_filters": schema.ListNestedAttribute{
-							Computed: true,
-							Optional: true,
+							Computed:    true,
+							Optional:    true,
+							Description: "A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"common_name": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The certificate's common name.",
 									},
 									"organization": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The certificate's organization.",
 									},
 									"organizational_unit": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The certificate's organizational unit.",
 									},
 									"subject_alternative_name": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The certificate's subject alternative name (or SAN).",
 									},
 								},
 							},
 						},
 						"codec_server": schema.SingleNestedAttribute{
-							Optional: true,
-							Computed: true,
+							Optional:    true,
+							Computed:    true,
+							Description: "A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted.",
 							Attributes: map[string]schema.Attribute{
 								"endpoint": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "The endpoint of the codec server.",
 								},
 								"pass_access_token": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "If true, Temporal Cloud will pass the access token to the codec server upon each request.",
 								},
 								"include_cross_origin_credentials": schema.BoolAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.",
 								},
 							},
 						},
 						"endpoints": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The endpoints for the namespace.",
 							Attributes: map[string]schema.Attribute{
 								"web_address": schema.StringAttribute{
-									Computed: true,
+									Description: "The web ui address.",
+									Computed:    true,
 								},
 								"grpc_address": schema.StringAttribute{
-									Computed: true,
+									Computed:    true,
+									Description: "The grpc hostport address that the temporal workers, clients and tctl connect to.",
 								},
 							},
 						},
 						"private_connectivities": schema.ListNestedAttribute{
-							Optional: true,
-							Computed: true,
+							Optional:    true,
+							Computed:    true,
+							Description: "The private connectivities for the namespace, if any.",
 							NestedObject: schema.NestedAttributeObject{
 								Attributes: map[string]schema.Attribute{
 									"region": schema.StringAttribute{
-										Computed: true,
+										Computed:    true,
+										Description: "The id of the region where the private connectivity applies.",
 									},
 									"aws_private_link_info": schema.SingleNestedAttribute{
-										Computed: true,
+										Computed:    true,
+										Optional:    true,
+										Description: "The AWS PrivateLink info. This will only be set for an AWS region.",
 										Attributes: map[string]schema.Attribute{
 											"allowed_principal_arns": schema.ListAttribute{
 												Computed:    true,
 												ElementType: types.StringType,
+												Description: "The list of principal arns that are allowed to access the namespace on the private link.",
 											},
 											"vpc_endpoint_service_names": schema.ListAttribute{
 												Computed:    true,
 												ElementType: types.StringType,
+												Description: "The list of vpc endpoint service names that are associated with the namespace.",
 											},
 										},
 									},
@@ -221,20 +246,26 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 							Computed:    true,
 							Optional:    true,
 							ElementType: types.StringType,
+							Description: "The custom search attributes to use for the namespace.",
 						},
 						"limits": schema.SingleNestedAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The limits set on the namespace currently.",
 							Attributes: map[string]schema.Attribute{
 								"actions_per_second_limit": schema.Int64Attribute{
-									Computed: true,
+									Computed:    true,
+									Description: "The number of actions per second (APS) that is currently allowed for the namespace. The namespace may be throttled if its APS exceeds the limit.",
 								},
 							},
 						},
 						"created_time": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Description: "The date and time when the namespace was created.",
 						},
 						"last_modified_time": schema.StringAttribute{
-							Computed: true,
+							Computed:    true,
+							Optional:    true,
+							Description: "The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.",
 						},
 					},
 				},
@@ -273,7 +304,11 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			AcceptedClientCA: types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa()),
 			RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
 			CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
-			LastModifiedTime: types.StringValue(ns.GetLastModifiedTime().AsTime().Format(time.RFC3339)),
+		}
+		if ns.GetLastModifiedTime().String() != "" {
+			namespaceModel.LastModifiedTime = types.StringValue(ns.GetLastModifiedTime().AsTime().Format(time.RFC3339))
+		} else {
+			namespaceModel.LastModifiedTime = types.StringNull()
 		}
 
 		regions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
