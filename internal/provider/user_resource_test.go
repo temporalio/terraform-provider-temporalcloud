@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	// TODO change email address
+	// TODO change email address.
 	emailDomain   = "temporal.io"
 	emailBaseAddr = "test"
 )

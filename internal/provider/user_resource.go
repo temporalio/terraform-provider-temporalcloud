@@ -345,7 +345,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
-		namespaceAccessObjects := make([]types.Object, len(user.GetSpec().GetAccess().GetNamespaceAccesses()))
+		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
 			model := userNamespaceAccessModel{
 				Namespace:  types.StringValue(ns),

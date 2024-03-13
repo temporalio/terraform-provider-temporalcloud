@@ -18,16 +18,16 @@ resource "temporalcloud_namespace" "namespace" {
 }
 
 resource "temporalcloud_user" "global_admin" {
-  email = "admin@yourdomain.com"
+  email          = "admin@yourdomain.com"
   account_access = "admin"
 }
 
 resource "temporalcloud_user" "namespace_admin" {
-  email = "developer@yourdomain.com"
+  email          = "developer@yourdomain.com"
   account_access = "developer"
   namespace_accesses = [
     {
-      namespace = temporalcloud_namespace.namespace.id
+      namespace  = temporalcloud_namespace.namespace.id
       permission = "admin"
     }
   ]
