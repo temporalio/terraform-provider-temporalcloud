@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
 
@@ -24,7 +25,7 @@ type TerraformCloudProvider struct {
 	version string
 }
 
-// TerraformCloudProvider describes the provider data model.
+// TerraformCloudProviderModel describes the provider data model.
 type TerraformCloudProviderModel struct {
 	APIKey        types.String `tfsdk:"api_key"`
 	Endpoint      types.String `tfsdk:"endpoint"`
@@ -136,12 +137,14 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 	return []func() resource.Resource{
 		NewNamespaceResource,
 		NewNamespaceSearchAttributeResource,
+		NewUserResource,
 	}
 }
 
 func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
 		NewRegionsDataSource,
+		NewNamespacesDataSource,
 	}
 }
 

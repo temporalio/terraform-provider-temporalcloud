@@ -70,9 +70,9 @@ message NamespaceSpec {
 }
 
 message Endpoints {
-    // The web ui address.
+    // The web UI address.
     string web_address = 1;
-    // The grpc hostport address that the temporal workers, clients and tctl connect to.
+    // The gRPC hostport address that the temporal workers, clients and tctl connect to.
     string grpc_address = 2;
 }
 
@@ -94,7 +94,7 @@ message PrivateConnectivity {
     // The id of the region where the private connectivity applies.
     string region = 1;
     // The AWS PrivateLink info.
-    // This will only be set for an aws region.
+    // This will only be set for namespaces whose cloud provider is AWS.
     AWSPrivateLinkInfo aws_private_link = 2;
 }
 
