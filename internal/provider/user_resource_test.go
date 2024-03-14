@@ -100,7 +100,7 @@ resource "temporalcloud_user" "terraform" {
   account_access = "{{ .AccountPerm }}"
   namespace_accesses = [
     {
-      namespace = temporalcloud_namespace.test.id
+      namespace_id = temporalcloud_namespace.test.id
       permission = "{{ .NamespacePerm }}"
     }
   ]
