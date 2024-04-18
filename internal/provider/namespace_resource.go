@@ -39,6 +39,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
@@ -62,6 +63,7 @@ type (
 		RetentionDays      types.Int64  `tfsdk:"retention_days"`
 		CertificateFilters types.List   `tfsdk:"certificate_filters"`
 		CodecServer        types.Object `tfsdk:"codec_server"`
+		Endpoints          types.Object `tfsdk:"endpoints"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -77,6 +79,11 @@ type (
 		Endpoint                      types.String `tfsdk:"endpoint"`
 		PassAccessToken               types.Bool   `tfsdk:"pass_access_token"`
 		IncludeCrossOriginCredentials types.Bool   `tfsdk:"include_cross_origin_credentials"`
+	}
+
+	endpointsModel struct {
+		WebAddress  types.String `tfsdk:"web_address"`
+		GrpcAddress types.String `tfsdk:"grpc_address"`
 	}
 )
 
@@ -96,6 +103,11 @@ var (
 		"endpoint":                         types.StringType,
 		"pass_access_token":                types.BoolType,
 		"include_cross_origin_credentials": types.BoolType,
+	}
+
+	endpointsAttrs = map[string]attr.Type{
+		"web_address":  types.StringType,
+		"grpc_address": types.StringType,
 	}
 )
 
@@ -206,6 +218,20 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					},
 				},
 				Optional: true,
+			},
+			"endpoints": schema.SingleNestedAttribute{
+				Description: "The endpoints for the namespace.",
+				Attributes: map[string]schema.Attribute{
+					"grpc_address": schema.StringAttribute{
+						Description: "The gRPC endpoint for the namespace that clients can connect to.",
+						Computed:    true,
+					},
+					"web_address": schema.StringAttribute{
+						Description: "The address in the Temporal Cloud Web UI for the namespace",
+						Computed:    true,
+					},
+				},
+				Computed: true,
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -477,8 +503,19 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	} else {
 		codecServerState = types.ObjectNull(codecServerAttrs)
 	}
-
 	state.CodecServer = codecServerState
+
+	endpoints := &endpointsModel{
+		GrpcAddress: stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
+		WebAddress:  stringOrNull(ns.GetEndpoints().GetWebAddress()),
+	}
+	endpointsState, objectDiags := types.ObjectValueFrom(ctx, endpointsAttrs, endpoints)
+	diags.Append(objectDiags...)
+	if diags.HasError() {
+		return
+	}
+
+	state.Endpoints = endpointsState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
 	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
