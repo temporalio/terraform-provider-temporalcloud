@@ -51,6 +51,7 @@ resource "temporalcloud_namespace" "terraform" {
 
 ### Read-Only
 
+- `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--endpoints))
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
 
 <a id="nestedatt--certificate_filters"></a>
@@ -84,6 +85,15 @@ Optional:
 
 - `create` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 - `delete` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Setting a timeout for a Delete operation is only applicable if changes are saved into state before the destroy operation occurs.
+
+
+<a id="nestedatt--endpoints"></a>
+### Nested Schema for `endpoints`
+
+Read-Only:
+
+- `grpc_address` (String) The gRPC endpoint for the namespace that clients can connect to.
+- `web_address` (String) The address in the Temporal Cloud Web UI for the namespace
 
 ## Import
 
