@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	identityv1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/identity/v1"
 )
@@ -28,18 +29,18 @@ type (
 	}
 
 	userResourceModel struct {
-		ID                types.String `tfsdk:"id"`
-		State             types.String `tfsdk:"state"`
-		Email             types.String `tfsdk:"email"`
-		AccountAccess     types.String `tfsdk:"account_access"`
-		NamespaceAccesses types.List   `tfsdk:"namespace_accesses"`
+		ID                types.String                             `tfsdk:"id"`
+		State             types.String                             `tfsdk:"state"`
+		Email             types.String                             `tfsdk:"email"`
+		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
 
 	userNamespaceAccessModel struct {
-		NamespaceID types.String `tfsdk:"namespace_id"`
-		Permission  types.String `tfsdk:"permission"`
+		NamespaceID types.String                             `tfsdk:"namespace_id"`
+		Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
 	}
 )
 
@@ -50,7 +51,7 @@ var (
 
 	userNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
-		"permission":   types.StringType,
+		"permission":   internaltypes.CaseInsensitiveStringType{},
 	}
 )
 
@@ -106,6 +107,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"account_access": schema.StringAttribute{
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
 				Required:    true,
 				Validators: []validator.String{
@@ -122,6 +124,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							Required:    true,
 						},
 						"permission": schema.StringAttribute{
+							CustomType:  internaltypes.CaseInsensitiveStringType{},
 							Description: "The permission to assign. Must be one of [admin, write, read] (case-insensitive)",
 							Required:    true,
 							Validators: []validator.String{
@@ -341,7 +344,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 	state.ID = types.StringValue(user.GetId())
 	state.State = types.StringValue(user.GetState())
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
-	state.AccountAccess = types.StringValue(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	state.AccountAccess = internaltypes.CaseInsensitiveString(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
@@ -349,7 +352,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
 			model := userNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
-				Permission:  types.StringValue(namespaceAccess.GetPermission()),
+				Permission:  internaltypes.CaseInsensitiveString(namespaceAccess.GetPermission()),
 			}
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)
