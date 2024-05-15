@@ -107,6 +107,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"account_access": schema.StringAttribute{
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
 				Required:    true,
 				Validators: []validator.String{
@@ -123,6 +124,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							Required:    true,
 						},
 						"permission": schema.StringAttribute{
+							CustomType:  internaltypes.CaseInsensitiveStringType{},
 							Description: "The permission to assign. Must be one of [admin, write, read] (case-insensitive)",
 							Required:    true,
 							Validators: []validator.String{

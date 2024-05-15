@@ -80,7 +80,7 @@ func (v CaseInsensitiveStringValue) Equal(o attr.Value) bool {
 		return false
 	}
 
-	return strings.EqualFold(v.ValueString(), other.ValueString())
+	return v.StringValue.Equal(other.StringValue)
 }
 
 func (v CaseInsensitiveStringValue) Type(ctx context.Context) attr.Type {
