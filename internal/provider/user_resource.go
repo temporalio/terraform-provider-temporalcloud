@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -167,7 +168,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: strings.ToLower(plan.AccountAccess.ValueString()),
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -240,7 +241,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: strings.ToLower(plan.AccountAccess.ValueString()),
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -330,7 +331,7 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 			return nil
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: model.Permission.ValueString(),
+			Permission: strings.ToLower(model.Permission.ValueString()),
 		}
 	}
 
@@ -341,7 +342,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 	state.ID = types.StringValue(user.GetId())
 	state.State = types.StringValue(user.GetState())
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
-	state.AccountAccess = types.StringValue(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	state.AccountAccess = types.StringValue(strings.ToLower(user.GetSpec().GetAccess().GetAccountAccess().GetRole()))
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
@@ -349,7 +350,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
 			model := userNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
-				Permission:  types.StringValue(namespaceAccess.GetPermission()),
+				Permission:  types.StringValue(strings.ToLower(namespaceAccess.GetPermission())),
 			}
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)
