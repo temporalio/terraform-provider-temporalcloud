@@ -66,7 +66,7 @@ in version control. We recommend passing credentials to this provider via enviro
 				Optional:    true,
 			},
 			"allow_insecure": schema.BoolAttribute{
-				Description: "If set to True, allows for an insecure connection to the Temporal Cloud API. It should never be set to 'true' in production and defaults to false.",				
+				Description: "If set to True, it allows for an insecure connection to the Temporal Cloud API. This should never be set to 'true' in production and defaults to false.",
 				Optional:    true,
 			},
 		},
