@@ -99,11 +99,11 @@ func (d *namespacesDataSource) Configure(_ context.Context, req datasource.Confi
 		return
 	}
 
-	clientStore, ok := req.ProviderData.(client.ClientStore)
+	clientStore, ok := req.ProviderData.(*client.ClientStore)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.ClientStore, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return

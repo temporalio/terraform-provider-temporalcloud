@@ -52,11 +52,11 @@ func (r *namespaceSearchAttributeResource) Configure(_ context.Context, req reso
 		return
 	}
 
-	clientStore, ok := req.ProviderData.(client.ClientStore)
+	clientStore, ok := req.ProviderData.(*client.ClientStore)
 	if !ok {
 		resp.Diagnostics.AddError(
-			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *client.ClientStore, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
