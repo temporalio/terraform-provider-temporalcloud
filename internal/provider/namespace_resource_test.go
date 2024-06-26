@@ -357,7 +357,7 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	return client
+	return client.CloudServiceClient()
 }
 
 func randomString() string {
