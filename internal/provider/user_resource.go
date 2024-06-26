@@ -64,11 +64,11 @@ func (r *userResource) Configure(_ context.Context, req resource.ConfigureReques
 		return
 	}
 
-	clientStore, ok := req.ProviderData.(*client.ClientStore)
+	clientStore, ok := req.ProviderData.(*client.Store)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *client.ClientStore, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Store, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
