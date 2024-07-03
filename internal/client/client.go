@@ -31,13 +31,15 @@ import (
 	"strings"
 	"time"
 
+	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	operationv1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/operation/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+
+	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
+	operationv1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/operation/v1"
 )
 
 const TemporalCloudAPIVersionHeader = "temporal-cloud-api-version"
@@ -54,10 +56,24 @@ var (
 )
 
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, opts ...grpc.DialOption) (*Client, error) {
+	defaultOpts := []grpc.DialOption{
+		grpc.WithPerRPCCredentials(NewAPIKeyRPCCredential(apiKey, allowInsecure)),
+		grpc.WithChainUnaryInterceptor(
+			grpcretry.UnaryClientInterceptor(
+				grpcretry.WithBackoff(
+					grpcretry.BackoffExponentialWithJitter(250*time.Millisecond, 0.1),
+				),
+				grpcretry.WithMax(5),
+			),
+		),
+	}
+
+	opts = append(defaultOpts, opts...)
+
 	return newConnection(
 		addrStr,
 		allowInsecure,
-		append(opts, grpc.WithPerRPCCredentials(NewAPIKeyRPCCredential(apiKey, allowInsecure)))...,
+		opts...,
 	)
 }
 
