@@ -63,7 +63,7 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, 
 				grpcretry.WithBackoff(
 					grpcretry.BackoffExponentialWithJitter(250*time.Millisecond, 0.1),
 				),
-				grpcretry.WithMax(10),
+				grpcretry.WithMax(5),
 			),
 		),
 	}
