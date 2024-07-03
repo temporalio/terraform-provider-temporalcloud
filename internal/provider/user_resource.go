@@ -165,7 +165,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	svcResp, err := r.client.CreateUser(ctx, &cloudservicev1.CreateUserRequest{
+	svcResp, err := client.Retry(r.client.CreateUser, ctx, &cloudservicev1.CreateUserRequest{
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
@@ -186,7 +186,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	user, err := r.client.GetUser(ctx, &cloudservicev1.GetUserRequest{
+	user, err := client.Retry(r.client.GetUser, ctx, &cloudservicev1.GetUserRequest{
 		UserId: svcResp.UserId,
 	})
 	if err != nil {
@@ -205,7 +205,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	user, err := r.client.GetUser(ctx, &cloudservicev1.GetUserRequest{
+	user, err := client.Retry(r.client.GetUser, ctx, &cloudservicev1.GetUserRequest{
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -229,7 +229,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	currentUser, err := r.client.GetUser(ctx, &cloudservicev1.GetUserRequest{
+	currentUser, err := client.Retry(r.client.GetUser, ctx, &cloudservicev1.GetUserRequest{
 		UserId: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	svcResp, err := r.client.UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
+	svcResp, err := client.Retry(r.client.UpdateUser, ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
@@ -260,7 +260,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	user, err := r.client.GetUser(ctx, &cloudservicev1.GetUserRequest{
+	user, err := client.Retry(r.client.GetUser, ctx, &cloudservicev1.GetUserRequest{
 		UserId: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -285,7 +285,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	currentUser, err := r.client.GetUser(ctx, &cloudservicev1.GetUserRequest{
+	currentUser, err := client.Retry(r.client.GetUser, ctx, &cloudservicev1.GetUserRequest{
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -296,7 +296,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 
-	svcResp, err := r.client.DeleteUser(ctx, &cloudservicev1.DeleteUserRequest{
+	svcResp, err := client.Retry(r.client.DeleteUser, ctx, &cloudservicev1.DeleteUserRequest{
 		UserId:          state.ID.ValueString(),
 		ResourceVersion: currentUser.GetUser().GetResourceVersion(),
 	})

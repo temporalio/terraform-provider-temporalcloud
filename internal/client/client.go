@@ -90,7 +90,7 @@ func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudService
 	for {
 		select {
 		case <-ticker.C:
-			status, err := client.GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
+			status, err := Retry(client.GetAsyncOperation, ctx, &cloudservicev1.GetAsyncOperationRequest{
 				AsyncOperationId: op.Id,
 			})
 			if err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
 )
@@ -280,7 +281,7 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	var namespaces []*namespacev1.Namespace
 	pageToken := ""
 	for {
-		r, err := d.client.GetNamespaces(ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
+		r, err := client.Retry(d.client.GetNamespaces, ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
 		if err != nil {
 			resp.Diagnostics.AddError("Unable to fetch namespaces", err.Error())
 			return

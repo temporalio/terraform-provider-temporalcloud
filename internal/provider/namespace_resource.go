@@ -275,7 +275,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 	}
-	svcResp, err := r.client.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
+	svcResp, err := client.Retry(r.client.CreateNamespace, ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
 			Regions:       regions,
@@ -297,7 +297,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	ns, err := client.Retry(r.client.GetNamespace, ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: svcResp.Namespace,
 	})
 	if err != nil {
@@ -317,7 +317,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	model, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	model, err := client.Retry(r.client.GetNamespace, ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -346,7 +346,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	currentNs, err := client.Retry(r.client.GetNamespace, ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -357,7 +357,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+	svcResp, err := client.Retry(r.client.UpdateNamespace, ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
@@ -382,7 +382,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	ns, err := client.Retry(r.client.GetNamespace, ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -408,7 +408,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	currentNs, err := client.Retry(r.client.GetNamespace, ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -417,7 +417,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
-	svcResp, err := r.client.DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
+	svcResp, err := client.Retry(r.client.DeleteNamespace, ctx, &cloudservicev1.DeleteNamespaceRequest{
 		Namespace:       state.ID.ValueString(),
 		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
 	})

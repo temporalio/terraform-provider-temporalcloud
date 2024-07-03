@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 )
 
@@ -101,7 +102,7 @@ func (d *regionsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 func (d *regionsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var state regionsDataModel
 
-	regions, err := d.client.GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
+	regions, err := client.Retry(d.client.GetRegions, ctx, &cloudservicev1.GetRegionsRequest{})
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to fetch regions", err.Error())
 		return
