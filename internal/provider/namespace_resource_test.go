@@ -344,6 +344,68 @@ PEM
 	})
 }
 
+func TestAccSpacesBetweenCertificateStrings(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIByTCCAVCgAwIBAgIRAWHkC+6JUf3s9Tq43mdp2zgwCgYIKoZIzj0EAwMwEzER
+MA8GA1UEChMIdGVtcG9yYWwwHhcNMjMwODEwMDAwOTQ1WhcNMjQwODA5MDAxMDQ1
+WjATMREwDwYDVQQKEwh0ZW1wb3JhbDB2MBAGByqGSM49AgEGBSuBBAAiA2IABCzQ
+7DwwGSQKM6Zrx3Qtw7IubfxiJ3RSXCqmcGhEbFVeocwAdEgMYlwSlUiWtDZVR2dM
+XM9UZLWK4aGGnDNS5Mhcz6ibSBS7Owf4tRZZA9SpFCjNw2HraaiUVV+EUgxoe6No
+MGYwDgYDVR0PAQH/BAQDAgGGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFG4N
+8lIXqQKxwVs/ixVzdF6XGZm+MCQGA1UdEQQdMBuCGWNsaWVudC5yb290LnRlbXBv
+cmFsLlB1VHMwCgYIKoZIzj0EAwMDZwAwZAIwRLfm9S7rKGd30KdQvUMcOcDJlmDw
+6/oM6UOJFxLeGcpYbgxQ/bFize+Yx9Q9kNeMAjA7GiFsaipaKtWHy5MCOCas3ZP6
++ttLaXNXss3Z5Wk5vhDQnyE8JR3rPeQ2cHXLiA0=
+-----END CERTIFICATE-----
+
+
+-----BEGIN CERTIFICATE-----
+MIIBxjCCAU2gAwIBAgIRA7oa6vxjwtoTwEv3aVvhehwwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNDA4MDIxNjQxNTRaFw0yNTA4MDIxNjQyNTRa
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAQCqUjT
+DQUJ7kwkNy+xdsIwN+DchoJbcuePVOEA0yI4t3NcKyCp2RN8dmP3n1buXmUQM80E
+llAYMh1GpE7UmhOYviUWzqVj3f7K5Bo0OT/R1qrwqVWW/FomNouYq+z8MLSjZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBROU/EH
+xCWCZcIzeSrtt4hHWZ3cuTAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LlFsRFMwCgYIKoZIzj0EAwMDZwAwZAIwVRIHAsna1j7TfyeAdxaCicgM+YGq40U4
+Q7c98BVX73Xu6AgYyAUN5xionBYJIBSqAjALqddjqsToi7HW17yI5n7UsIGZlwkq
+12okB1IGBRmOi9MRJxnVM0exkXaThHFgKhc=
+-----END CERTIFICATE-----
+
+PEM
+)
+
+  retention_days     = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// New namespace with retention of 7
+				Config: config(name, 7),
+			},
+			{
+				Config: config(name, 14),
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
 func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	endpoint := os.Getenv("TEMPORAL_CLOUD_ENDPOINT")
