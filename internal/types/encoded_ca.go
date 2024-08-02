@@ -152,7 +152,8 @@ func (v EncodedCAValue) StringSemanticEquals(ctx context.Context, newValuable ba
 
 	normalizedNewValue, err := normalizeCAString(newValue.ValueString())
 	if err != nil {
-		diags.AddError("Certificate Normalization Error", "Failed to normalize the new certificate: "+err.Error())
+		// The new value may not be a valid CA string. This will get rejected elsewhere in the plan. Since this is just
+		// an equality check, we should return false and continue.
 		return false, diags
 	}
 
