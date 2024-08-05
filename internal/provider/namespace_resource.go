@@ -41,6 +41,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
 	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
 )
@@ -56,14 +57,14 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                 types.String `tfsdk:"id"`
-		Name               types.String `tfsdk:"name"`
-		Regions            types.List   `tfsdk:"regions"`
-		AcceptedClientCA   types.String `tfsdk:"accepted_client_ca"`
-		RetentionDays      types.Int64  `tfsdk:"retention_days"`
-		CertificateFilters types.List   `tfsdk:"certificate_filters"`
-		CodecServer        types.Object `tfsdk:"codec_server"`
-		Endpoints          types.Object `tfsdk:"endpoints"`
+		ID                 types.String                 `tfsdk:"id"`
+		Name               types.String                 `tfsdk:"name"`
+		Regions            types.List                   `tfsdk:"regions"`
+		AcceptedClientCA   internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
+		RetentionDays      types.Int64                  `tfsdk:"retention_days"`
+		CertificateFilters types.List                   `tfsdk:"certificate_filters"`
+		CodecServer        types.Object                 `tfsdk:"codec_server"`
+		Endpoints          types.Object                 `tfsdk:"endpoints"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -166,6 +167,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
+				CustomType:  internaltypes.EncodedCAType{},
 				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.",
 				Required:    true,
 			},
@@ -518,7 +520,7 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	state.Endpoints = endpointsState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
-	state.AcceptedClientCA = types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
+	state.AcceptedClientCA = internaltypes.EncodedCA(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
 }
 
