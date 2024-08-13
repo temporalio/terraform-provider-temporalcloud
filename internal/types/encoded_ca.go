@@ -35,7 +35,7 @@ func (t EncodedCAType) Equal(o attr.Type) bool {
 }
 
 func (t EncodedCAType) ValueFromString(ctx context.Context, in basetypes.StringValue) (basetypes.StringValuable, diag.Diagnostics) {
-	return EncodedCA(in.ValueString()), nil
+	return EncodedCAValue{in}, nil
 }
 
 func (t EncodedCAType) ValueFromTerraform(ctx context.Context, in tftypes.Value) (attr.Value, error) {
