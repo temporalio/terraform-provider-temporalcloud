@@ -42,8 +42,8 @@ resource "temporalcloud_user" "namespace_admin" {
   account_access = "developer"
   namespace_accesses = [
     {
-      namespace  = temporalcloud_namespace.namespace.id
-      permission = "admin"
+      namespace_id = temporalcloud_namespace.namespace.id
+      permission   = "admin"
     }
   ]
 }
