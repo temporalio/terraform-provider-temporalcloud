@@ -236,9 +236,8 @@ type NamespaceSpec struct {
 	// The name is immutable. Once set, it cannot be changed.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The ids of the regions where the namespace should be available.
-	// Specifying more than one region makes the namespace "global", which is currently a preview only feature with restricted access.
-	// Please reach out to Temporal support for more information on global namespaces.
-	// When provisioned the global namespace will be active on the first region in the list and passive on the rest.
+	// Specifying more than one region makes the namespace a "multi-region" namespace, which is currently unsupported by the Terraform provider.
+    // When provisioned, the multi-region namespace will be active on the first region in the list and passive on the rest.
 	// Number of supported regions is 2.
 	// The regions is immutable. Once set, it cannot be changed.
 	Regions []string `protobuf:"bytes,2,rep,name=regions,proto3" json:"regions,omitempty"`

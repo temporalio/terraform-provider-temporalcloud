@@ -60,7 +60,7 @@ Read-Only:
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--namespaces--limits))
 - `name` (String) The name of the namespace.
-- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is "global" which is currently a preview feature with restricted access. Please reach out to Temporal support for more information on this feature.
+- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 - `state` (String) The current state of the namespace.
 
