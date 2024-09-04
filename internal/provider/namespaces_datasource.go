@@ -143,7 +143,7 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 						},
 						"regions": schema.ListAttribute{
 							Computed:    true,
-							Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is \"global\" which is currently a preview feature with restricted access. Please reach out to Temporal support for more information on this feature.",
+							Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.",
 							ElementType: types.StringType,
 						},
 						"accepted_client_ca": schema.StringAttribute{

@@ -46,9 +46,8 @@ message NamespaceSpec {
     // The name is immutable. Once set, it cannot be changed.
     string name = 1;
     // The ids of the regions where the namespace should be available.
-    // Specifying more than one region makes the namespace "global", which is currently a preview only feature with restricted access.
-    // Please reach out to Temporal support for more information on global namespaces.
-    // When provisioned the global namespace will be active on the first region in the list and passive on the rest.
+    // Specifying more than one region makes the namespace a "multi-region" namespace, which is currently unsupported by the Terraform provider.
+    // When provisioned, the multi-region namespace will be active on the first region in the list and passive on the rest.
     // Number of supported regions is 2. 
     // The regions is immutable. Once set, it cannot be changed.
     repeated string regions = 2;
