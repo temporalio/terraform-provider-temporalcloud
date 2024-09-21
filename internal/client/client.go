@@ -108,7 +108,7 @@ func newConnection(addrStr string, allowInsecure bool, opts ...grpc.DialOption) 
 	return &Client{CloudServiceClient: cloudClient}, nil
 } */
 
-func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudServiceClient, op *operationv1.AsyncOperation) error {
+func AwaitAsyncOperation(ctx context.Context, client client.CloudOperationsClient, op *operationv1.AsyncOperation) error {
 	if op == nil {
 		return fmt.Errorf("failed to await response: nil operation")
 	}
@@ -119,7 +119,7 @@ func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudService
 	for {
 		select {
 		case <-ticker.C:
-			status, err := client.GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
+			status, err := client.CloudService().GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
 				AsyncOperationId: op.Id,
 			})
 			if err != nil {
