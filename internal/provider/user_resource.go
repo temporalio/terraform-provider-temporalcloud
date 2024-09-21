@@ -19,8 +19,8 @@ import (
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	identityv1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/identity/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
 
 type (

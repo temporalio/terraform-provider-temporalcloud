@@ -15,8 +15,8 @@ import (
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
 
 type (
