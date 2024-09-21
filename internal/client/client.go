@@ -49,9 +49,10 @@ type Client struct {
 	client.CloudOperationsClient
 }
 
-/*var (
-	_ cloudservicev1.CloudServiceClient = &Client{}
-)*/
+var (
+	// _ cloudservicev1.CloudServiceClient = &Client{}
+	_ client.CloudOperationsClient = &Client{}
+)
 
 // func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, opts ...grpc.DialOption) (*Client, error) {
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {

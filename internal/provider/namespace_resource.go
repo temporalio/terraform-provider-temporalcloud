@@ -54,7 +54,7 @@ const (
 type (
 	namespaceResource struct {
 		// client cloudservicev1.CloudServiceClient
-		client client.Client
+		client *client.Client
 	}
 
 	namespaceResourceModel struct {
@@ -122,11 +122,11 @@ func (r *namespaceResource) Configure(_ context.Context, req resource.ConfigureR
 		return
 	}
 
-	client, ok := req.ProviderData.(client.Client)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return

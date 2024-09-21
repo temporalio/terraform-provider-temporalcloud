@@ -21,7 +21,7 @@ import (
 
 type (
 	namespaceSearchAttributeResource struct {
-		client client.Client
+		client *client.Client
 	}
 
 	namespaceSearchAttributeModel struct {
@@ -51,11 +51,11 @@ func (r *namespaceSearchAttributeResource) Configure(_ context.Context, req reso
 		return
 	}
 
-	client, ok := req.ProviderData.(client.Client)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
