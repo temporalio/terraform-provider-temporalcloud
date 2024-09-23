@@ -1,0 +1,1 @@
+terraform import temporalcloud_user_namespace_access myuserid/terraform.badf00d

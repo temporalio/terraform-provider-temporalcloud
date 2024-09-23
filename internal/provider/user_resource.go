@@ -115,8 +115,9 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
-				Optional:    true,
+				Description:        "The list of namespace accesses.",
+				Optional:           true,
+				DeprecationMessage: "Use the `temporalcloud_user_namespace_access` resource to manage namespace access.",
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"namespace_id": schema.StringAttribute{
