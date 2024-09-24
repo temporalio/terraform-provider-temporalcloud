@@ -42,8 +42,8 @@ import (
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
 
 const (
@@ -53,7 +53,8 @@ const (
 
 type (
 	namespaceResource struct {
-		client cloudservicev1.CloudServiceClient
+		// client cloudservicev1.CloudServiceClient
+		client *client.Client
 	}
 
 	namespaceResourceModel struct {
@@ -121,11 +122,11 @@ func (r *namespaceResource) Configure(_ context.Context, req resource.ConfigureR
 		return
 	}
 
-	client, ok := req.ProviderData.(cloudservicev1.CloudServiceClient)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -277,7 +278,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 	}
-	svcResp, err := r.client.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
+	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
 			Regions:       regions,
@@ -299,7 +300,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: svcResp.Namespace,
 	})
 	if err != nil {
@@ -319,7 +320,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	model, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	model, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -348,7 +349,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	currentNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -359,7 +360,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
@@ -384,7 +385,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -410,7 +411,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	currentNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	currentNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -419,7 +420,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	}
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
-	svcResp, err := r.client.DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
+	svcResp, err := r.client.CloudService().DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
 		Namespace:       state.ID.ValueString(),
 		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
 	})

@@ -10,9 +10,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
 
 var (
@@ -26,7 +27,7 @@ func NewNamespacesDataSource() datasource.DataSource {
 
 type (
 	namespacesDataSource struct {
-		client cloudservicev1.CloudServiceClient
+		client *client.Client
 	}
 
 	namespacesDataModel struct {
@@ -98,11 +99,11 @@ func (d *namespacesDataSource) Configure(_ context.Context, req datasource.Confi
 		return
 	}
 
-	client, ok := req.ProviderData.(cloudservicev1.CloudServiceClient)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -280,7 +281,7 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	var namespaces []*namespacev1.Namespace
 	pageToken := ""
 	for {
-		r, err := d.client.GetNamespaces(ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
+		r, err := d.client.CloudService().GetNamespaces(ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
 		if err != nil {
 			resp.Diagnostics.AddError("Unable to fetch namespaces", err.Error())
 			return

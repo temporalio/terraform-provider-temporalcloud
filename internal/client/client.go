@@ -24,22 +24,16 @@ package client
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
-	"net/url"
-	"strings"
+
 	"time"
 
-	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	operationv1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/operation/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	operationv1 "go.temporal.io/api/cloud/operation/v1"
+	"go.temporal.io/sdk/client"
 )
 
 const TemporalCloudAPIVersionHeader = "temporal-cloud-api-version"
@@ -48,54 +42,31 @@ var TemporalCloudAPIVersion = "2023-10-01-00"
 
 // Client is a client for the Temporal Cloud API.
 type Client struct {
-	cloudservicev1.CloudServiceClient
+	client.CloudOperationsClient
 }
 
 var (
-	_ cloudservicev1.CloudServiceClient = &Client{}
+	_ client.CloudOperationsClient = &Client{}
 )
 
-func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, opts ...grpc.DialOption) (*Client, error) {
-	defaultOpts := []grpc.DialOption{
-		grpc.WithPerRPCCredentials(NewAPIKeyRPCCredential(apiKey, allowInsecure)),
-		grpc.WithChainUnaryInterceptor(
-			grpcretry.UnaryClientInterceptor(
-				grpcretry.WithBackoff(
-					grpcretry.BackoffExponentialWithJitter(250*time.Millisecond, 0.1),
-				),
-				grpcretry.WithMax(5),
-			),
-		),
+func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {
+
+	var cClient client.CloudOperationsClient
+	var err error
+	cClient, err = client.DialCloudOperationsClient(context.Background(), client.CloudOperationsClientOptions{
+		Version:     TemporalCloudAPIVersion,
+		Credentials: client.NewAPIKeyStaticCredentials(apiKey),
+		DisableTLS:  allowInsecure,
+		HostPort:    addrStr,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect `%s`: %v", client.DefaultHostPort, err)
 	}
 
-	opts = append(defaultOpts, opts...)
-
-	return newConnection(
-		addrStr,
-		allowInsecure,
-		opts...,
-	)
+	return &Client{cClient}, nil
 }
 
-func newConnection(addrStr string, allowInsecure bool, opts ...grpc.DialOption) (*Client, error) {
-	addr, err := url.Parse(addrStr)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse server address: %s", err)
-	}
-	defaultOpts := defaultDialOptions(addr, allowInsecure)
-	conn, err := grpc.Dial(
-		addr.String(),
-		append(defaultOpts, opts...)...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial `%s`: %v", addr.String(), err)
-	}
-
-	cloudClient := cloudservicev1.NewCloudServiceClient(conn)
-	return &Client{CloudServiceClient: cloudClient}, nil
-}
-
-func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudServiceClient, op *operationv1.AsyncOperation) error {
+func AwaitAsyncOperation(ctx context.Context, client client.CloudOperationsClient, op *operationv1.AsyncOperation) error {
 	if op == nil {
 		return fmt.Errorf("failed to await response: nil operation")
 	}
@@ -106,7 +77,7 @@ func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudService
 	for {
 		select {
 		case <-ticker.C:
-			status, err := client.GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
+			status, err := client.CloudService().GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
 				AsyncOperationId: op.Id,
 			})
 			if err != nil {
@@ -144,32 +115,4 @@ func AwaitAsyncOperation(ctx context.Context, client cloudservicev1.CloudService
 			return ctx.Err()
 		}
 	}
-}
-
-func defaultDialOptions(addr *url.URL, allowInsecure bool) []grpc.DialOption {
-	var opts []grpc.DialOption
-
-	transport := credentials.NewTLS(&tls.Config{
-		MinVersion: tls.VersionTLS12,
-		ServerName: addr.Hostname(),
-	})
-	if allowInsecure {
-		transport = insecure.NewCredentials()
-	}
-
-	opts = append(opts, grpc.WithTransportCredentials(transport))
-	opts = append(opts, grpc.WithUnaryInterceptor(setAPIVersionInterceptor))
-	return opts
-}
-
-func setAPIVersionInterceptor(
-	ctx context.Context,
-	method string,
-	req, reply interface{},
-	cc *grpc.ClientConn,
-	invoker grpc.UnaryInvoker,
-	opts ...grpc.CallOption,
-) error {
-	ctx = metadata.AppendToOutgoingContext(ctx, TemporalCloudAPIVersionHeader, strings.TrimSpace(TemporalCloudAPIVersion))
-	return invoker(ctx, method, req, reply, cc, opts...)
 }
