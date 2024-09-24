@@ -156,22 +156,27 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	// Convert time.Time to protobuf Timestamp
 	expiryTimestamp := timestamppb.New(expiryTime)
 
+	description := ""
+	if !plan.Description.IsNull() {
+		description = plan.Description.ValueString()
+	}
+
 	svcResp, err := r.client.CloudService().CreateApiKey(ctx, &cloudservicev1.CreateApiKeyRequest{
 		Spec: &identityv1.ApiKeySpec{
 			OwnerId:     plan.OwnerID.ValueString(),
 			OwnerType:   plan.OwnerType.ValueString(),
 			DisplayName: plan.DisplayName.ValueString(),
-			Description: plan.Description.ValueString(),
+			Description: description,
 			ExpiryTime:  expiryTimestamp,
 		},
 	})
 
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to create api key", err.Error())
+		resp.Diagnostics.AddError("Failed to create API key", err.Error())
 		return
 	}
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to create api key", err.Error())
+		resp.Diagnostics.AddError("Failed to create API key", err.Error())
 		return
 	}
 
@@ -179,7 +184,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		KeyId: svcResp.GetKeyId(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get api key after creation", err.Error())
+		resp.Diagnostics.AddError("Failed to get API key after creation", err.Error())
 		return
 	}
 
@@ -198,7 +203,7 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get api key", err.Error())
+		resp.Diagnostics.AddError("Failed to get API key", err.Error())
 		return
 	}
 
@@ -217,7 +222,7 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		KeyId: plan.ID.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get current api key status", err.Error())
+		resp.Diagnostics.AddError("Failed to get current API key status", err.Error())
 		return
 	}
 
@@ -244,12 +249,12 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		ResourceVersion: apiKey.GetApiKey().GetResourceVersion(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to update api key", err.Error())
+		resp.Diagnostics.AddError("Failed to update API key", err.Error())
 		return
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
-		resp.Diagnostics.AddError("Failed to update api key", err.Error())
+		resp.Diagnostics.AddError("Failed to update API key", err.Error())
 		return
 	}
 
@@ -257,7 +262,7 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		KeyId: plan.ID.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get api key after update", err.Error())
+		resp.Diagnostics.AddError("Failed to get API key after update", err.Error())
 		return
 	}
 
@@ -282,7 +287,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get current api key status", err.Error())
+		resp.Diagnostics.AddError("Failed to get current API key status", err.Error())
 		return
 	}
 
@@ -294,12 +299,12 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		ResourceVersion: apiKey.GetApiKey().GetResourceVersion(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to delete api key", err.Error())
+		resp.Diagnostics.AddError("Failed to delete API key", err.Error())
 		return
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to delete api key", err.Error())
+		resp.Diagnostics.AddError("Failed to delete API key", err.Error())
 	}
 }
 
@@ -313,6 +318,8 @@ func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.Ap
 	state.OwnerID = types.StringValue(apikey.GetSpec().GetOwnerId())
 	state.OwnerType = types.StringValue(apikey.GetSpec().GetOwnerType())
 	state.DisplayName = types.StringValue(apikey.GetSpec().GetDisplayName())
-	state.Description = types.StringValue(apikey.GetSpec().GetDescription())
+	if apikey.GetSpec().GetDescription() != "" {
+		state.Description = types.StringValue(apikey.GetSpec().GetDescription())
+	}
 	state.ExpiryTime = types.StringValue(apikey.GetSpec().GetExpiryTime().AsTime().Format(time.RFC3339))
 }
