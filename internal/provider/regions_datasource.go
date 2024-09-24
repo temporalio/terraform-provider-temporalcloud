@@ -7,7 +7,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 )
 
 var (
@@ -22,7 +23,7 @@ func NewRegionsDataSource() datasource.DataSource {
 
 type (
 	regionsDataSource struct {
-		client cloudservicev1.CloudServiceClient
+		client *client.Client
 	}
 
 	regionsDataModel struct {
@@ -45,11 +46,11 @@ func (d *regionsDataSource) Configure(_ context.Context, req datasource.Configur
 		return
 	}
 
-	client, ok := req.ProviderData.(cloudservicev1.CloudServiceClient)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -101,7 +102,7 @@ func (d *regionsDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 func (d *regionsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var state regionsDataModel
 
-	regions, err := d.client.GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
+	regions, err := d.client.CloudService().GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
 	if err != nil {
 		resp.Diagnostics.AddError("Unable to fetch regions", err.Error())
 		return

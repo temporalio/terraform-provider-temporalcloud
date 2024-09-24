@@ -15,13 +15,13 @@ import (
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
-	cloudservicev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/cloudservice/v1"
-	namespacev1 "github.com/temporalio/terraform-provider-temporalcloud/proto/go/temporal/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
 
 type (
 	namespaceSearchAttributeResource struct {
-		client cloudservicev1.CloudServiceClient
+		client *client.Client
 	}
 
 	namespaceSearchAttributeModel struct {
@@ -51,11 +51,11 @@ func (r *namespaceSearchAttributeResource) Configure(_ context.Context, req reso
 		return
 	}
 
-	client, ok := req.ProviderData.(cloudservicev1.CloudServiceClient)
+	client, ok := req.ProviderData.(*client.Client)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected cloudservicev1.CloudServiceClient, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 
 		return
@@ -106,7 +106,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 	}
 
 	withNamespaceLock(plan.NamespaceID.ValueString(), func() {
-		ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 			Namespace: plan.NamespaceID.ValueString(),
 		})
 		if err != nil {
@@ -127,7 +127,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		}
 
 		spec.GetCustomSearchAttributes()[plan.Name.ValueString()] = plan.Type.ValueString()
-		svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 			Namespace:       plan.NamespaceID.ValueString(),
 			Spec:            spec,
 			ResourceVersion: ns.GetNamespace().GetResourceVersion(),
@@ -146,7 +146,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	updatedNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	updatedNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.NamespaceID.ValueString(),
 	})
 	if err != nil {
@@ -177,7 +177,7 @@ func (r *namespaceSearchAttributeResource) Read(ctx context.Context, req resourc
 		return
 	}
 
-	model, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	model, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.NamespaceID.ValueString(),
 	})
 	if err != nil {
@@ -206,7 +206,7 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 	}
 
 	withNamespaceLock(plan.NamespaceID.ValueString(), func() {
-		ns, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 			Namespace: plan.NamespaceID.ValueString(),
 		})
 		if err != nil {
@@ -215,7 +215,7 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 		}
 
 		if !plan.Name.Equal(state.Name) {
-			svcResp, err := r.client.RenameCustomSearchAttribute(ctx, &cloudservicev1.RenameCustomSearchAttributeRequest{
+			svcResp, err := r.client.CloudService().RenameCustomSearchAttribute(ctx, &cloudservicev1.RenameCustomSearchAttributeRequest{
 				Namespace:                         plan.NamespaceID.ValueString(),
 				ExistingCustomSearchAttributeName: state.Name.ValueString(),
 				NewCustomSearchAttributeName:      plan.Name.ValueString(),
@@ -235,7 +235,7 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 		spec := ns.GetNamespace().GetSpec()
 		// Assumption: a search attribute named plan.Name already exists
 		spec.GetCustomSearchAttributes()[plan.Name.ValueString()] = plan.Type.ValueString()
-		svcResp, err := r.client.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 			Namespace:       plan.NamespaceID.ValueString(),
 			Spec:            spec,
 			ResourceVersion: ns.GetNamespace().GetResourceVersion(),
@@ -250,7 +250,7 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 			return
 		}
 
-		updatedNs, err := r.client.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		updatedNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 			Namespace: plan.NamespaceID.ValueString(),
 		})
 		if err != nil {
