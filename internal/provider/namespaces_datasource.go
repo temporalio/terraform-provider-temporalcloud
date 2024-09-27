@@ -44,6 +44,7 @@ type (
 		AcceptedClientCA       types.String `tfsdk:"accepted_client_ca"`
 		RetentionDays          types.Int64  `tfsdk:"retention_days"`
 		CertificateFilters     types.List   `tfsdk:"certificate_filters"`
+		ApiKeyAuth             types.Bool   `tfsdk:"api_key_auth"`
 		CodecServer            types.Object `tfsdk:"codec_server"`
 		Endpoints              types.Object `tfsdk:"endpoints"`
 		PrivateConnectivities  types.List   `tfsdk:"private_connectivities"`
@@ -303,6 +304,7 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			State:            types.StringValue(ns.State),
 			ActiveRegion:     types.StringValue(ns.ActiveRegion),
 			AcceptedClientCA: types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa()),
+			ApiKeyAuth:       types.BoolValue(ns.GetSpec().GetApiKeyAuth().GetEnabled()),
 			RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
 			CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
 		}

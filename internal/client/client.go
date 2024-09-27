@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-const TemporalCloudAPIVersionHeader = "temporal-cloud-api-version"
 
 var TemporalCloudAPIVersion = "2024-05-13-00"
 
@@ -49,12 +48,12 @@ var (
 	_ client.CloudOperationsClient = &Client{}
 )
 
-func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {
+func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, clientVersion string) (*Client, error) {
 
 	var cClient client.CloudOperationsClient
 	var err error
 	cClient, err = client.DialCloudOperationsClient(context.Background(), client.CloudOperationsClientOptions{
-		Version:     TemporalCloudAPIVersion,
+		Version:     clientVersion,
 		Credentials: client.NewAPIKeyStaticCredentials(apiKey),
 		DisableTLS:  allowInsecure,
 		HostPort:    addrStr,

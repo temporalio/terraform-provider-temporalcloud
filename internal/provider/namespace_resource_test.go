@@ -67,6 +67,39 @@ PEM
 
 }
 
+func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+	client_version = "2024-05-13-00"
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  api_key_auth 	 = true
+  retention_days     = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// New namespace with retention of 7
+				Config: config(name, 7),
+			},
+			{
+				Config: config(name, 14),
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+
+}
+
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString())
 	config := func(name string, retention int) string {
@@ -134,18 +167,27 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 			Name          string
 			RetentionDays int
 			CodecServer   *codecServer
+			ApiKeyAuth    bool
 		}
 	)
 
 	name := fmt.Sprintf("%s-%s", "tf-codec-server", randomString())
 	tmpl := template.Must(template.New("config").Parse(`
 provider "temporalcloud" {
-
+	{{ if .ApiKeyAuth }}
+	client_version = "2024-05-13-00"
+	{{ end }}
 }
 
 resource "temporalcloud_namespace" "test" {
-  name               = "{{ .Name }}"
+  name               = "{{ .Name }}-{{ .ApiKeyAuth }}"
   regions            = ["aws-us-east-1"]
+
+	  {{ if .ApiKeyAuth }}
+	  api_key_auth = true
+	  {{ end }}
+
+	{{ if not .ApiKeyAuth }}
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIBxjCCAU2gAwIBAgIRAlyZ5KUmunPLeFAupDwGL8AwCgYIKoZIzj0EAwMwEjEQ
@@ -161,6 +203,7 @@ US8pEmNuIiCguEGwi+pb5CWfabETEHApxmo=
 -----END CERTIFICATE-----
 PEM
 )
+	{{ end }}
 
   retention_days     = {{ .RetentionDays }}
 
@@ -207,7 +250,7 @@ PEM
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t)
+					conn := newConnection(t, "2023-10-01-00")
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -229,13 +272,73 @@ PEM
 				},
 			},
 			{
+				// remove codec server
 				Config: config(configArgs{
 					Name:          name,
 					RetentionDays: 7,
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t)
+					conn := newConnection(t, "2023-10-01-00")
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					if spec.GetCodecServer().GetEndpoint() != "" {
+						return fmt.Errorf("unexpected endpoint: %s", spec.GetCodecServer().GetEndpoint())
+					}
+					return nil
+				},
+			},
+			// use API key auth
+			{
+				Config: config(configArgs{
+					Name:          name,
+					RetentionDays: 7,
+					CodecServer: &codecServer{
+						Endpoint:                      "https://example.com",
+						PassAccessToken:               true,
+						IncludeCrossOriginCredentials: true,
+					},
+					ApiKeyAuth: true,
+				}),
+				Check: func(s *terraform.State) error {
+					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t, "2024-05-13-00")
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					if spec.GetCodecServer().GetEndpoint() != "https://example.com" {
+						return fmt.Errorf("unexpected endpoint: %s", spec.GetCodecServer().GetEndpoint())
+					}
+					if !spec.GetCodecServer().GetPassAccessToken() {
+						return errors.New("expected pass_access_token to be true")
+					}
+					if !spec.GetCodecServer().GetIncludeCrossOriginCredentials() {
+						return errors.New("expected include_cross_origin_credentials to be true")
+					}
+					return nil
+				},
+			},
+			{
+				// remove codec server
+				Config: config(configArgs{
+					Name:          name,
+					RetentionDays: 7,
+					ApiKeyAuth:    true,
+				}),
+				Check: func(s *terraform.State) error {
+					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t, "2023-10-01-00")
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -405,15 +508,21 @@ PEM
 	})
 }
 
-func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
+func newConnection(t *testing.T, clientVersion string) cloudservicev1.CloudServiceClient {
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	endpoint := os.Getenv("TEMPORAL_CLOUD_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "saas-api.tmprl.cloud:443"
 	}
 	allowInsecure := os.Getenv("TEMPORAL_CLOUD_ALLOW_INSECURE") == "true"
+	if clientVersion == "" {
+		clientVersion = os.Getenv("TEMPORAL_CLOUD_CLIENT_VERSION")
+		if clientVersion == "" {
+			clientVersion = "2023-10-01-00"
+		}
+	}
 
-	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
+	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey, clientVersion)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
