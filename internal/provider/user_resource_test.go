@@ -135,7 +135,7 @@ resource "temporalcloud_user" "terraform" {
 				}),
 				Check: func(state *terraform.State) error {
 					id := state.RootModule().Resources["temporalcloud_user.terraform"].Primary.Attributes["id"]
-					conn := newConnection(t)
+					conn := newConnection(t, "2023-10-01-00")
 					user, err := conn.GetUser(context.Background(), &cloudservicev1.GetUserRequest{
 						UserId: id,
 					})

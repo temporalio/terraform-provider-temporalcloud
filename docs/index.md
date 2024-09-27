@@ -59,4 +59,5 @@ provider "temporalcloud" {
 
 - `allow_insecure` (Boolean) If set to True, it allows for an insecure connection to the Temporal Cloud API. This should never be set to 'true' in production and defaults to false.
 - `api_key` (String, Sensitive) The API key for Temporal Cloud. See [this documentation](https://docs.temporal.io/cloud/api-keys) for information on how to obtain an API key.
+- `client_version` (String) The version of the Temporal Cloud API client to use. Defaults to `2023-10-01-00`. To create namespaces with API key authentication enabled, use `2024-05-13-00`.
 - `endpoint` (String) The endpoint for the Temporal Cloud API. Defaults to `saas-api.tmprl.cloud:443`.
