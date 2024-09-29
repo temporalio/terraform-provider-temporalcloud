@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -30,6 +31,7 @@ type (
 		DisplayName types.String   `tfsdk:"display_name"`
 		Description types.String   `tfsdk:"description"`
 		ExpiryTime  types.String   `tfsdk:"expiry_time"` // ISO 8601 format
+		Disabled    types.Bool     `tfsdk:"disabled"`
 		Timeouts    timeouts.Value `tfsdk:"timeouts"`
 	}
 )
@@ -119,6 +121,13 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"disabled": schema.BoolAttribute{
+				Description: "Whether the API key is disabled.",
+				Optional:    true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -161,6 +170,11 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		description = plan.Description.ValueString()
 	}
 
+	disabled := false
+	if !plan.Disabled.IsNull() {
+		disabled = plan.Disabled.ValueBool()
+	}
+
 	svcResp, err := r.client.CloudService().CreateApiKey(ctx, &cloudservicev1.CreateApiKeyRequest{
 		Spec: &identityv1.ApiKeySpec{
 			OwnerId:     plan.OwnerID.ValueString(),
@@ -168,6 +182,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 			DisplayName: plan.DisplayName.ValueString(),
 			Description: description,
 			ExpiryTime:  expiryTimestamp,
+			Disabled:    disabled,
 		},
 	})
 
@@ -237,14 +252,25 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 	// Convert time.Time to protobuf Timestamp
 	expiryTimestamp := timestamppb.New(expiryTime)
 
+	description := ""
+	if !plan.Description.IsNull() {
+		description = plan.Description.ValueString()
+	}
+
+	disabled := false
+	if !plan.Disabled.IsNull() {
+		disabled = plan.Disabled.ValueBool()
+	}
+
 	svcResp, err := r.client.CloudService().UpdateApiKey(ctx, &cloudservicev1.UpdateApiKeyRequest{
 		KeyId: plan.ID.ValueString(),
 		Spec: &identityv1.ApiKeySpec{
 			OwnerId:     plan.OwnerID.ValueString(),
 			OwnerType:   plan.OwnerType.ValueString(),
 			DisplayName: plan.DisplayName.ValueString(),
-			Description: plan.Description.ValueString(),
+			Description: description,
 			ExpiryTime:  expiryTimestamp,
+			Disabled:    disabled,
 		},
 		ResourceVersion: apiKey.GetApiKey().GetResourceVersion(),
 	})
