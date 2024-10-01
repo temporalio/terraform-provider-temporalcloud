@@ -295,7 +295,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
 	} else {
 		if plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("accepted_client_ca is required when API key authentication is disabled", "")
+			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
 			return
 		}
 		var mtlAuth *namespacev1.MtlsAuthSpec
@@ -400,7 +400,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
 	} else {
 		if plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("accepted_client_ca is required when API key authentication is disabled", "")
+			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
 			return
 		}
         mtls := &namespacev1.MtlsAuthSpec{}
