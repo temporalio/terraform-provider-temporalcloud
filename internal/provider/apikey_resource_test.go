@@ -21,18 +21,24 @@ func getExpiryTime() string {
 
 func TestAccBasicApiKey(t *testing.T) {
 	apiKeyName := createRandomApiKeyName()
+	serviceAccountName := createRandomName()
 	description := "TEST API Key"
-	config := func(displayName string, ownerType string, ownerId string, description *string) string {
+	config := func(displayName string, ownerType string, serviceAccountName string, description *string) string {
 		tmpConfig := fmt.Sprintf(`
 provider "temporalcloud" {
 
 }
 
-resource "temporalcloud_apikey" "terraform" {
+resource "temporalcloud_service_account" "terraform1" {
+	name = "%s"
+	account_access = "Admin"
+}
+
+resource "temporalcloud_apikey" "terraform2" {
 	display_name = "%s"
 	owner_type = "%s"
-	owner_id = "%s"
-	expiry_time = "%s"`, displayName, ownerType, ownerId, getExpiryTime())
+	owner_id = temporalcloud_service_account.terraform1.id
+	expiry_time = "%s"`, serviceAccountName, displayName, ownerType, getExpiryTime())
 
 		if description != nil {
 			tmpConfig += fmt.Sprintf(`
@@ -51,9 +57,9 @@ resource "temporalcloud_apikey" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", nil),
+				Config: config(apiKeyName, "service-account", serviceAccountName, nil),
 				Check: func(s *terraform.State) error {
-					id := s.RootModule().Resources["temporalcloud_apikey.terraform"].Primary.Attributes["id"]
+					id := s.RootModule().Resources["temporalcloud_apikey.terraform2"].Primary.Attributes["id"]
 					conn := newConnection(t)
 					apiKey, err := conn.GetApiKey(context.Background(), &cloudservicev1.GetApiKeyRequest{
 						KeyId: id,
@@ -72,17 +78,18 @@ resource "temporalcloud_apikey" "terraform" {
 					if spec.GetOwnerType() != "service-account" {
 						return fmt.Errorf("expected owner type to be service-account, got %s", spec.GetOwnerType())
 					}
-					if spec.GetOwnerId() != "d6d0d3ff3f8c400e82ffe58d15d79fa5" {
+					serviceAccountID := s.RootModule().Resources["temporalcloud_service_account.terraform1"].Primary.Attributes["id"]
+					if spec.GetOwnerId() != serviceAccountID {
 						return fmt.Errorf("expected owner id to be d6d0d3ff3f8c400e82ffe58d15d79fa5, got %s", spec.GetOwnerId())
 					}
 					return nil
 				},
 			},
 			{
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", &description),
+				Config: config(apiKeyName, "service-account", serviceAccountName, &description),
 			},
 			{
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", &description),
+				Config: config(apiKeyName, "service-account", serviceAccountName, &description),
 			},
 		},
 	})
@@ -90,17 +97,23 @@ resource "temporalcloud_apikey" "terraform" {
 
 func TestAccDisableApiKey(t *testing.T) {
 	apiKeyName := createRandomApiKeyName()
-	config := func(displayName string, ownerType string, ownerId string, disable bool) string {
+	serviceAccountName := createRandomName()
+	config := func(displayName string, ownerType string, serviceAccountName string, disable bool) string {
 		tmpConfig := fmt.Sprintf(`
 provider "temporalcloud" {
 
 }
 
+resource "temporalcloud_service_account" "terraform" {
+	name = "%s"
+	account_access = "Admin"
+}
+
 resource "temporalcloud_apikey" "test" {
 	display_name = "%s"
 	owner_type = "%s"
-	owner_id = "%s"
-	expiry_time = "%s"`, displayName, ownerType, ownerId, getExpiryTime())
+	owner_id = temporalcloud_service_account.terraform.id
+	expiry_time = "%s"`, serviceAccountName, displayName, ownerType, getExpiryTime())
 
 		if !disable {
 			tmpConfig += fmt.Sprintf(`
@@ -123,7 +136,7 @@ resource "temporalcloud_apikey" "test" {
 		Steps: []resource.TestStep{
 			{
 				// do nothing
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", false),
+				Config: config(apiKeyName, "service-account", serviceAccountName, false),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_apikey.test"].Primary.Attributes["id"]
 					conn := newConnection(t)
@@ -143,7 +156,7 @@ resource "temporalcloud_apikey" "test" {
 			},
 			{
 				// disable
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", true),
+				Config: config(apiKeyName, "service-account", serviceAccountName, true),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_apikey.test"].Primary.Attributes["id"]
 					conn := newConnection(t)
@@ -163,7 +176,7 @@ resource "temporalcloud_apikey" "test" {
 			},
 			{
 				// enable back again
-				Config: config(apiKeyName, "service-account", "d6d0d3ff3f8c400e82ffe58d15d79fa5", false),
+				Config: config(apiKeyName, "service-account", serviceAccountName, false),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_apikey.test"].Primary.Attributes["id"]
 					conn := newConnection(t)
