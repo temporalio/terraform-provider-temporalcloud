@@ -30,7 +30,6 @@ type TerraformCloudProviderModel struct {
 	APIKey        types.String `tfsdk:"api_key"`
 	Endpoint      types.String `tfsdk:"endpoint"`
 	AllowInsecure types.Bool   `tfsdk:"allow_insecure"`
-	ClientVersion types.String `tfsdk:"client_version"`
 }
 
 func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -70,10 +69,6 @@ in version control. We recommend passing credentials to this provider via enviro
 				Description: "If set to True, it allows for an insecure connection to the Temporal Cloud API. This should never be set to 'true' in production and defaults to false.",
 				Optional:    true,
 			},
-			"client_version": schema.StringAttribute{
-				Description: "The version of the Temporal Cloud API client to use. Defaults to `2023-10-01-00`. To create namespaces with API key authentication enabled, use `2024-05-13-00`.",
-				Optional:    true,
-			},
 		},
 	}
 }
@@ -110,14 +105,6 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 				" Either apply the source of the value first, or statically set the allow_insecure flag via environment variable or in configuration.")
 	}
 
-	if data.ClientVersion.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("client_version"),
-			"Unknown Terraform Cloud Client Version",
-			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for the Temporal Cloud Client Version."+
-				" Either apply the source of the value first, or statically set the Client Version via environment variable or in configuration.")
-	}
-
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	if !data.APIKey.IsNull() {
 		apiKey = data.APIKey.ValueString()
@@ -136,15 +123,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 		allowInsecure = data.AllowInsecure.ValueBool()
 	}
 
-	clientVersion := "2023-10-01-00"
-	if os.Getenv("TEMPORAL_CLOUD_CLIENT_VERSION") != "" {
-		clientVersion = os.Getenv("TEMPORAL_CLOUD_CLIENT_VERSION")
-	}
-	if !data.ClientVersion.IsNull() {
-		clientVersion = data.ClientVersion.ValueString()
-	}
-
-	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey, clientVersion)
+	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", err.Error())
 		return
