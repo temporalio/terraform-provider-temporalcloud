@@ -204,6 +204,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"api_key_auth": schema.BoolAttribute{
 				Description: "If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.",
 				Optional:    true,
+				Computed:    true,
 			},
 			"codec_server": schema.SingleNestedAttribute{
 				Description: "A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted.",
@@ -298,19 +299,14 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
 			return
 		}
-		var mtlAuth *namespacev1.MtlsAuthSpec
-		mtlAuth = &namespacev1.MtlsAuthSpec{
-			AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
-			CertificateFilters: certFilters,
+		mtls := &namespacev1.MtlsAuthSpec{}
+		if plan.AcceptedClientCA.ValueString() != "" {
+			mtls.Enabled = true
+			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.CertificateFilters = certFilters
 		}
-        mtls := &namespacev1.MtlsAuthSpec{}
-        if plan.AcceptedClientCA.ValueString() != "" {
-            mtls.Enabled = true
-            mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
-            mtls.CertificateFilters = certFilters
-        }
 
-		spec.MtlsAuth = mtlAuth
+		spec.MtlsAuth = mtls
 	}
 
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
@@ -403,14 +399,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
 			return
 		}
-        mtls := &namespacev1.MtlsAuthSpec{}
-        if plan.AcceptedClientCA.ValueString() != "" {
-            mtls.Enabled = true
-            mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
-            mtls.CertificateFilters = certFilters
-        }
 
-		spec.MtlsAuth = mtlAuth
+		mtls := &namespacev1.MtlsAuthSpec{}
+		if plan.AcceptedClientCA.ValueString() != "" {
+			mtls.Enabled = true
+			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.CertificateFilters = certFilters
+		}
+
+		spec.MtlsAuth = mtls
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
