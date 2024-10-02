@@ -48,12 +48,14 @@ var (
 	_ client.CloudOperationsClient = &Client{}
 )
 
-func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, clientVersion string) (*Client, error) {
+var TemporalCloudAPIVersion = "2023-10-01-00"
+
+func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {
 
 	var cClient client.CloudOperationsClient
 	var err error
 	cClient, err = client.DialCloudOperationsClient(context.Background(), client.CloudOperationsClientOptions{
-		Version:     clientVersion,
+		Version:     TemporalCloudAPIVersion,
 		Credentials: client.NewAPIKeyStaticCredentials(apiKey),
 		DisableTLS:  allowInsecure,
 		HostPort:    addrStr,

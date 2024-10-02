@@ -72,7 +72,7 @@ func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	config := func(name string, retention int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
-	client_version = "2024-05-13-00"
+
 }
 
 resource "temporalcloud_namespace" "terraform" {
@@ -174,9 +174,7 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-codec-server", randomString())
 	tmpl := template.Must(template.New("config").Parse(`
 provider "temporalcloud" {
-	{{ if .ApiKeyAuth }}
-	client_version = "2024-05-13-00"
-	{{ end }}
+
 }
 
 resource "temporalcloud_namespace" "test" {
@@ -250,7 +248,7 @@ PEM
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t, "2023-10-01-00")
+					conn := newConnection(t)
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -279,7 +277,7 @@ PEM
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t, "2023-10-01-00")
+					conn := newConnection(t)
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -308,7 +306,7 @@ PEM
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t, "2024-05-13-00")
+					conn := newConnection(t)
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -338,7 +336,7 @@ PEM
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t, "2023-10-01-00")
+					conn := newConnection(t)
 					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
 						Namespace: id,
 					})
@@ -508,21 +506,14 @@ PEM
 	})
 }
 
-func newConnection(t *testing.T, clientVersion string) cloudservicev1.CloudServiceClient {
+func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	endpoint := os.Getenv("TEMPORAL_CLOUD_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "saas-api.tmprl.cloud:443"
 	}
 	allowInsecure := os.Getenv("TEMPORAL_CLOUD_ALLOW_INSECURE") == "true"
-	if clientVersion == "" {
-		clientVersion = os.Getenv("TEMPORAL_CLOUD_CLIENT_VERSION")
-		if clientVersion == "" {
-			clientVersion = "2023-10-01-00"
-		}
-	}
-
-	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey, clientVersion)
+	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
