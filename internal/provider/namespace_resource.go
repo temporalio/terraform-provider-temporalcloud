@@ -278,16 +278,19 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 	}
+	mtls := &namespacev1.MtlsAuthSpec{}
+	if plan.AcceptedClientCA.ValueString() != "" {
+		mtls.Enabled = true
+		mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+		mtls.CertificateFilters = certFilters
+	}
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec: &namespacev1.NamespaceSpec{
 			Name:          plan.Name.ValueString(),
 			Regions:       regions,
 			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
-			MtlsAuth: &namespacev1.MtlsAuthSpec{
-				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
-				CertificateFilters: certFilters,
-			},
-			CodecServer: codecServer,
+			MtlsAuth:      mtls,
+			CodecServer:   codecServer,
 		},
 	})
 	if err != nil {
@@ -360,16 +363,19 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	mtls := &namespacev1.MtlsAuthSpec{}
+	if plan.AcceptedClientCA.ValueString() != "" {
+		mtls.Enabled = true
+		mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+		mtls.CertificateFilters = certFilters
+	}
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 		Spec: &namespacev1.NamespaceSpec{
-			Name:          plan.Name.ValueString(),
-			Regions:       regions,
-			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
-			MtlsAuth: &namespacev1.MtlsAuthSpec{
-				AcceptedClientCa:   plan.AcceptedClientCA.ValueString(),
-				CertificateFilters: certFilters,
-			},
+			Name:                   plan.Name.ValueString(),
+			Regions:                regions,
+			RetentionDays:          int32(plan.RetentionDays.ValueInt64()),
+			MtlsAuth:               mtls,
 			CodecServer:            codecServer,
 			CustomSearchAttributes: currentNs.GetNamespace().GetSpec().GetCustomSearchAttributes(),
 		},
