@@ -40,19 +40,19 @@ PEM
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "%s"
-  type         = "Text"
+  type         = "text"
 }
 
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute2" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute2"
-  type         = "Text"
+  type         = "text"
 }
 
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute3"
-  type         = "Text"
+  type         = "text"
 }`, name, saName)
 	}
 
@@ -102,7 +102,7 @@ PEM
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "%s"
-  type         = "Text"
+  type         = "text"
 }
 `, name, saName)
 	}
@@ -159,7 +159,7 @@ PEM
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute"
-  type         = "Text"
+  type         = "text"
 }
 `, name, retentionDays)
 	}

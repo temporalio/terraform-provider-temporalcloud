@@ -38,7 +38,7 @@ import (
 
 const TemporalCloudAPIVersionHeader = "temporal-cloud-api-version"
 
-var TemporalCloudAPIVersion = "2023-10-01-00"
+var TemporalCloudAPIVersion = "2024-05-13-00"
 
 // Client is a client for the Temporal Cloud API.
 type Client struct {
