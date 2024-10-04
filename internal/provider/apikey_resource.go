@@ -29,6 +29,7 @@ type (
 		OwnerType   types.String   `tfsdk:"owner_type"`
 		OwnerID     types.String   `tfsdk:"owner_id"`
 		DisplayName types.String   `tfsdk:"display_name"`
+		Token       types.String   `tfsdk:"token"`
 		Description types.String   `tfsdk:"description"`
 		ExpiryTime  types.String   `tfsdk:"expiry_time"` // ISO 8601 format
 		Disabled    types.Bool     `tfsdk:"disabled"`
@@ -105,6 +106,13 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"token": schema.StringAttribute{
+				Description: "The token for the API key. This field will only be populated with the full key when creating an API key.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"description": schema.StringAttribute{
@@ -204,6 +212,8 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	plan.Token = types.StringValue(svcResp.Token)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
