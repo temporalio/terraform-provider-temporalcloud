@@ -45,6 +45,7 @@ output "namespaces" {
 
 Optional:
 
+- `api_key_auth` (Boolean) If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. (see [below for nested schema](#nestedatt--namespaces--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--namespaces--codec_server))
 - `custom_search_attributes` (Map of String) The custom search attributes to use for the namespace.

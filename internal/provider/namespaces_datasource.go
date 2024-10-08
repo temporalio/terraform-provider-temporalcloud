@@ -44,6 +44,7 @@ type (
 		AcceptedClientCA       types.String `tfsdk:"accepted_client_ca"`
 		RetentionDays          types.Int64  `tfsdk:"retention_days"`
 		CertificateFilters     types.List   `tfsdk:"certificate_filters"`
+		ApiKeyAuth             types.Bool   `tfsdk:"api_key_auth"`
 		CodecServer            types.Object `tfsdk:"codec_server"`
 		Endpoints              types.Object `tfsdk:"endpoints"`
 		PrivateConnectivities  types.List   `tfsdk:"private_connectivities"`
@@ -180,6 +181,10 @@ func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 								},
 							},
 						},
+						"api_key_auth": schema.BoolAttribute{
+							Description: "If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.",
+							Optional:    true,
+						},
 						"codec_server": schema.SingleNestedAttribute{
 							Optional:    true,
 							Computed:    true,
@@ -306,6 +311,11 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
 			CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
 		}
+
+		if ns.GetSpec().GetApiKeyAuth().GetEnabled() {
+			namespaceModel.ApiKeyAuth = types.BoolValue(true)
+		}
+
 		if ns.GetLastModifiedTime().String() != "" {
 			namespaceModel.LastModifiedTime = types.StringValue(ns.GetLastModifiedTime().AsTime().Format(time.RFC3339))
 		} else {
