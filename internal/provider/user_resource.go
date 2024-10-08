@@ -108,10 +108,10 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive)",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
+					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
