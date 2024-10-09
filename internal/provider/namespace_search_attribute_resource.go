@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -154,13 +153,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	id, err := uuid.GenerateUUID()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to generate UUID", err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(id)
+	plan.ID = types.StringValue(updatedNs.GetNamespace().GetNamespace() + "/" + plan.Name.ValueString())
 	plan.NamespaceID = types.StringValue(updatedNs.GetNamespace().GetNamespace())
 	resp.Diagnostics.Append(plan.updateFromSpec(updatedNs.GetNamespace().GetSpec())...)
 	if resp.Diagnostics.HasError() {
@@ -284,14 +277,8 @@ func (r *namespaceSearchAttributeResource) ImportState(ctx context.Context, req 
 	}
 
 	nsID, saName := components[0], components[1]
-	id, err := uuid.GenerateUUID()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to generate UUID", err.Error())
-		return
-	}
-
 	var state namespaceSearchAttributeModel
-	state.ID = types.StringValue(id)
+	state.ID = types.StringValue(req.ID)
 	state.NamespaceID = types.StringValue(nsID)
 	state.Name = types.StringValue(saName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
