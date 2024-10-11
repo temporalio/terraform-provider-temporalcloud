@@ -54,7 +54,7 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive).
+- `account_access` (String) The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive)
 - `email` (String) The email address for the user.
 
 ### Optional
