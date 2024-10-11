@@ -108,7 +108,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
