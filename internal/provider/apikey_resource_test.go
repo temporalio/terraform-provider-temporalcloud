@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	"testing"
-	"time"
 )
 
 func createRandomApiKeyName() string {
@@ -116,11 +117,11 @@ resource "temporalcloud_apikey" "test" {
 	expiry_time = "%s"`, serviceAccountName, displayName, ownerType, getExpiryTime())
 
 		if !disable {
-			tmpConfig += fmt.Sprintf(`
-	disabled = false`)
+			tmpConfig += `
+	disabled = false`
 		} else {
-			tmpConfig += fmt.Sprintf(`
-	disabled = true`)
+			tmpConfig += `
+	disabled = true`
 		}
 
 		tmpConfig += `

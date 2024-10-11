@@ -46,7 +46,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute2" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute2"
-  type         = "text"
+  type         = "Text"
 }
 
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {

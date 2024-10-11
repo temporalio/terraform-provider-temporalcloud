@@ -15,6 +15,7 @@ import (
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
@@ -25,10 +26,10 @@ type (
 	}
 
 	namespaceSearchAttributeModel struct {
-		ID          types.String `tfsdk:"id"`
-		NamespaceID types.String `tfsdk:"namespace_id"`
-		Name        types.String `tfsdk:"name"`
-		Type        types.String `tfsdk:"type"`
+		ID          types.String                             `tfsdk:"id"`
+		NamespaceID types.String                             `tfsdk:"namespace_id"`
+		Name        types.String                             `tfsdk:"name"`
+		Type        internaltypes.CaseInsensitiveStringValue `tfsdk:"type"`
 	}
 )
 
@@ -91,7 +92,8 @@ func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resourc
 				Required:    true,
 			},
 			"type": schema.StringAttribute{
-				Description: "The type of the search attribute. Must be one of `Bool`, `Datetime`, `Double`, `Int`, `Keyword`, or `Text`.",
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
+				Description: "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)",
 				Required:    true,
 			},
 		},
@@ -312,7 +314,7 @@ func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.Namespa
 	// plan.ID is already set
 	// plan.NamespaceID is already set
 	// plan.Name is already set
-	m.Type = types.StringValue(searchAttrType)
+	m.Type = internaltypes.CaseInsensitiveString(searchAttrType)
 	return diags
 }
 
