@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/go-uuid"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,6 +14,7 @@ import (
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
 )
@@ -25,10 +25,10 @@ type (
 	}
 
 	namespaceSearchAttributeModel struct {
-		ID          types.String `tfsdk:"id"`
-		NamespaceID types.String `tfsdk:"namespace_id"`
-		Name        types.String `tfsdk:"name"`
-		Type        types.String `tfsdk:"type"`
+		ID          types.String                             `tfsdk:"id"`
+		NamespaceID types.String                             `tfsdk:"namespace_id"`
+		Name        types.String                             `tfsdk:"name"`
+		Type        internaltypes.CaseInsensitiveStringValue `tfsdk:"type"`
 	}
 )
 
@@ -91,7 +91,8 @@ func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resourc
 				Required:    true,
 			},
 			"type": schema.StringAttribute{
-				Description: "The type of the search attribute. Must be one of `Bool`, `Datetime`, `Double`, `Int`, `Keyword`, or `Text`.",
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
+				Description: "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)",
 				Required:    true,
 			},
 		},
@@ -154,13 +155,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		return
 	}
 
-	id, err := uuid.GenerateUUID()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to generate UUID", err.Error())
-		return
-	}
-
-	plan.ID = types.StringValue(id)
+	plan.ID = types.StringValue(updatedNs.GetNamespace().GetNamespace() + "/" + plan.Name.ValueString())
 	plan.NamespaceID = types.StringValue(updatedNs.GetNamespace().GetNamespace())
 	resp.Diagnostics.Append(plan.updateFromSpec(updatedNs.GetNamespace().GetSpec())...)
 	if resp.Diagnostics.HasError() {
@@ -284,14 +279,8 @@ func (r *namespaceSearchAttributeResource) ImportState(ctx context.Context, req 
 	}
 
 	nsID, saName := components[0], components[1]
-	id, err := uuid.GenerateUUID()
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to generate UUID", err.Error())
-		return
-	}
-
 	var state namespaceSearchAttributeModel
-	state.ID = types.StringValue(id)
+	state.ID = types.StringValue(req.ID)
 	state.NamespaceID = types.StringValue(nsID)
 	state.Name = types.StringValue(saName)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -312,7 +301,7 @@ func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.Namespa
 	// plan.ID is already set
 	// plan.NamespaceID is already set
 	// plan.Name is already set
-	m.Type = types.StringValue(searchAttrType)
+	m.Type = internaltypes.CaseInsensitiveString(searchAttrType)
 	return diags
 }
 
