@@ -293,7 +293,12 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	if plan.ApiKeyAuth.ValueBool() {
+		if !plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
+			return
+		}
 		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+
 	} else {
 		if plan.AcceptedClientCA.IsNull() {
 			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
@@ -393,6 +398,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	if plan.ApiKeyAuth.ValueBool() {
+		if !plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
+			return
+		}
 		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
 	} else {
 		if plan.AcceptedClientCA.IsNull() {
