@@ -140,6 +140,7 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 		NewUserResource,
 		NewServiceAccountResource,
 		NewApiKeyResource,
+		NewMetricsEndpointResource,
 	}
 }
 
