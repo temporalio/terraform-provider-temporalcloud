@@ -64,6 +64,7 @@ type (
 		AcceptedClientCA   internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
 		RetentionDays      types.Int64                  `tfsdk:"retention_days"`
 		CertificateFilters types.List                   `tfsdk:"certificate_filters"`
+		ApiKeyAuth         types.Bool                   `tfsdk:"api_key_auth"`
 		CodecServer        types.Object                 `tfsdk:"codec_server"`
 		Endpoints          types.Object                 `tfsdk:"endpoints"`
 
@@ -170,7 +171,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"accepted_client_ca": schema.StringAttribute{
 				CustomType:  internaltypes.EncodedCAType{},
 				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.",
-				Required:    true,
+				Optional:    true,
 			},
 			"retention_days": schema.Int64Attribute{
 				Description: "The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.",
@@ -199,6 +200,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						},
 					},
 				},
+			},
+			"api_key_auth": schema.BoolAttribute{
+				Description: "If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"codec_server": schema.SingleNestedAttribute{
 				Description: "A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted.",
@@ -278,21 +284,40 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 	}
-	mtls := &namespacev1.MtlsAuthSpec{}
-	if plan.AcceptedClientCA.ValueString() != "" {
-		mtls.Enabled = true
-		mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
-		mtls.CertificateFilters = certFilters
+
+	var spec = &namespacev1.NamespaceSpec{
+		Name:          plan.Name.ValueString(),
+		Regions:       regions,
+		RetentionDays: int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:   codecServer,
 	}
+
+	if plan.ApiKeyAuth.ValueBool() {
+		if !plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
+			return
+		}
+		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+
+	} else {
+		if plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
+			return
+		}
+		mtls := &namespacev1.MtlsAuthSpec{}
+		if plan.AcceptedClientCA.ValueString() != "" {
+			mtls.Enabled = true
+			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.CertificateFilters = certFilters
+		}
+
+		spec.MtlsAuth = mtls
+	}
+
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
-		Spec: &namespacev1.NamespaceSpec{
-			Name:          plan.Name.ValueString(),
-			Regions:       regions,
-			RetentionDays: int32(plan.RetentionDays.ValueInt64()),
-			MtlsAuth:      mtls,
-			CodecServer:   codecServer,
-		},
+		Spec: spec,
 	})
+
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create namespace", err.Error())
 		return
@@ -363,22 +388,40 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	mtls := &namespacev1.MtlsAuthSpec{}
-	if plan.AcceptedClientCA.ValueString() != "" {
-		mtls.Enabled = true
-		mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
-		mtls.CertificateFilters = certFilters
+
+	var spec = &namespacev1.NamespaceSpec{
+		Name:                   plan.Name.ValueString(),
+		Regions:                regions,
+		RetentionDays:          int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:            codecServer,
+		CustomSearchAttributes: currentNs.GetNamespace().GetSpec().GetCustomSearchAttributes(),
 	}
+
+	if plan.ApiKeyAuth.ValueBool() {
+		if !plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
+			return
+		}
+		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+	} else {
+		if plan.AcceptedClientCA.IsNull() {
+			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
+			return
+		}
+
+		mtls := &namespacev1.MtlsAuthSpec{}
+		if plan.AcceptedClientCA.ValueString() != "" {
+			mtls.Enabled = true
+			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.CertificateFilters = certFilters
+		}
+
+		spec.MtlsAuth = mtls
+	}
+
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-		Namespace: plan.ID.ValueString(),
-		Spec: &namespacev1.NamespaceSpec{
-			Name:                   plan.Name.ValueString(),
-			Regions:                regions,
-			RetentionDays:          int32(plan.RetentionDays.ValueInt64()),
-			MtlsAuth:               mtls,
-			CodecServer:            codecServer,
-			CustomSearchAttributes: currentNs.GetNamespace().GetSpec().GetCustomSearchAttributes(),
-		},
+		Namespace:       plan.ID.ValueString(),
+		Spec:            spec,
 		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
 	})
 	if err != nil {
@@ -495,6 +538,14 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		certificateFilter = filters
 	}
 
+	if ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa() != "" {
+		state.AcceptedClientCA = internaltypes.EncodedCA(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
+	}
+
+	if ns.GetSpec().GetApiKeyAuth() != nil {
+		state.ApiKeyAuth = types.BoolValue(ns.GetSpec().GetApiKeyAuth().GetEnabled())
+	}
+
 	var codecServerState basetypes.ObjectValue
 	// The API always returns a non-empty CodecServerSpec, even if it wasn't specified on object creation. We explicitly
 	// map an endpoint whose value is the empty string to `null`, since an empty endpoint implies that the codec server
@@ -527,7 +578,7 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	state.Endpoints = endpointsState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
-	state.AcceptedClientCA = internaltypes.EncodedCA(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
+
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
 }
 
