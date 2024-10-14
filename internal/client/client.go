@@ -36,8 +36,6 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-const TemporalCloudAPIVersionHeader = "temporal-cloud-api-version"
-
 var TemporalCloudAPIVersion = "2024-05-13-00"
 
 // Client is a client for the Temporal Cloud API.

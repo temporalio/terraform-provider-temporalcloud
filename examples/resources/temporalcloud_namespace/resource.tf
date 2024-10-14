@@ -86,3 +86,11 @@ resource "temporalcloud_namespace" "terraform2" {
   accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
   retention_days     = 14
 }
+
+// example namespace that uses API Key for authentication
+resource "temporalcloud_namespace" "terraform3" {
+  name           = "terraform3"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 14
+}

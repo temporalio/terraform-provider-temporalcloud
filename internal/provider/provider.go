@@ -94,7 +94,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 			path.Root("endpoint"),
 			"Unknown Terraform Cloud Endpoint",
 			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for the Temporal Cloud API Endpoint."+
-				" Either apply the source of the value first, or statically set the API Key via environment variable or in configuration.")
+				" Either apply the source of the value first, or statically set the Endpoint via environment variable or in configuration.")
 	}
 
 	if data.AllowInsecure.IsUnknown() {
@@ -102,7 +102,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 			path.Root("allow_insecure"),
 			"Unknown Terraform Cloud Endpoint",
 			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for `allow_insecure`."+
-				" Either apply the source of the value first, or statically set the API Key via environment variable or in configuration.")
+				" Either apply the source of the value first, or statically set the allow_insecure flag via environment variable or in configuration.")
 	}
 
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
