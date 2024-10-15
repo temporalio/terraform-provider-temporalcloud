@@ -171,7 +171,8 @@ Optional:
 
 Read-Only:
 
-- `grpc_address` (String) The gRPC endpoint for the namespace that clients can connect to.
+- `grpc_address` (String) The gRPC address for API key client connections (may be empty if API keys are disabled).
+- `mtls_grpc_address` (String) The gRPC address for mTLS client connections (may be empty if mTLS is disabled).
 - `web_address` (String) The address in the Temporal Cloud Web UI for the namespace
 
 ## Import
