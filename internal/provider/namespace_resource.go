@@ -85,8 +85,9 @@ type (
 	}
 
 	endpointsModel struct {
-		WebAddress  types.String `tfsdk:"web_address"`
-		GrpcAddress types.String `tfsdk:"grpc_address"`
+		WebAddress      types.String `tfsdk:"web_address"`
+		GrpcAddress     types.String `tfsdk:"grpc_address"`
+		MtlsGrpcAddress types.String `tfsdk:"mtls_grpc_address"`
 	}
 )
 
@@ -109,8 +110,9 @@ var (
 	}
 
 	endpointsAttrs = map[string]attr.Type{
-		"web_address":  types.StringType,
-		"grpc_address": types.StringType,
+		"web_address":       types.StringType,
+		"grpc_address":      types.StringType,
+		"mtls_grpc_address": types.StringType,
 	}
 )
 
@@ -232,7 +234,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Description: "The endpoints for the namespace.",
 				Attributes: map[string]schema.Attribute{
 					"grpc_address": schema.StringAttribute{
-						Description: "The gRPC endpoint for the namespace that clients can connect to.",
+						Description: "The gRPC address for API key client connections (may be empty if API keys are disabled).",
+						Computed:    true,
+					},
+					"mtls_grpc_address": schema.StringAttribute{
+						Description: "The gRPC address for mTLS client connections (may be empty if mTLS is disabled).",
 						Computed:    true,
 					},
 					"web_address": schema.StringAttribute{
@@ -566,8 +572,9 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	state.CodecServer = codecServerState
 
 	endpoints := &endpointsModel{
-		GrpcAddress: stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
-		WebAddress:  stringOrNull(ns.GetEndpoints().GetWebAddress()),
+		GrpcAddress:     stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
+		WebAddress:      stringOrNull(ns.GetEndpoints().GetWebAddress()),
+		MtlsGrpcAddress: stringOrNull(ns.GetEndpoints().GetMtlsGrpcAddress()),
 	}
 	endpointsState, objectDiags := types.ObjectValueFrom(ctx, endpointsAttrs, endpoints)
 	diags.Append(objectDiags...)
