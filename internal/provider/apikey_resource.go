@@ -218,7 +218,11 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	err = updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert apikey spec", err.Error())
+		return
+	}
 	plan.Token = types.StringValue(svcResp.Token)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
