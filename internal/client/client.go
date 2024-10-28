@@ -29,7 +29,9 @@ import (
 
 	"time"
 
+	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc"
 
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	operationv1 "go.temporal.io/api/cloud/operation/v1"
@@ -56,6 +58,18 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) 
 		Credentials: client.NewAPIKeyStaticCredentials(apiKey),
 		DisableTLS:  allowInsecure,
 		HostPort:    addrStr,
+		ConnectionOptions: client.ConnectionOptions{
+			DialOptions: []grpc.DialOption{
+				grpc.WithChainUnaryInterceptor(
+					grpcretry.UnaryClientInterceptor(
+						grpcretry.WithBackoff(
+							grpcretry.BackoffExponentialWithJitter(250*time.Millisecond, 0.1),
+						),
+						grpcretry.WithMax(5),
+					),
+				),
+			},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect `%s`: %v", client.DefaultHostPort, err)
