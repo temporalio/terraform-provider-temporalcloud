@@ -1,0 +1,19 @@
+name: Rotate API Key for CI/CD
+on: [push]
+jobs:
+  rotate:
+    name: Rotate API Key 
+    runs-on: ubuntu-latest
+    steps:
+      - name: rotate gcp keys
+        uses: anekkanti/github-action-rotate-temporalcloud-apikey@main
+        with:
+          apikey: "${{ secrets.TEMPORAL_CLOUD_API_KEY }}"
+          serviceAccountId: "${{ secrets.TEMPORAL_CLOUD_SERVICE_ACCOUNT_ID }}"
+          apikeyNamePrefix: "${{ github.repository }}-ci"
+          duration: 90
+          description: "Apikey used for CI/CD in {{ github.repository }}"
+          deleteOldApikeys: true
+          personalAccessToken: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+          repositories: ${{ github.repository }}
+          secretName: "TEMPORAL_CLOUD_API_KEY_TEST"
