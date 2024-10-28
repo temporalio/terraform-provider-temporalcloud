@@ -1,8 +1,8 @@
 name: Rotate API Key for CI/CD
 on: 
-  - workflow_dispatch:
-  - schedule:
-      - cron: '0 0 * * *'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 jobs:
   rotate:
     name: Rotate API Key 
