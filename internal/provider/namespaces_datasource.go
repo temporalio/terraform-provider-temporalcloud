@@ -333,7 +333,6 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		for _, region := range ns.GetSpec().GetRegions() {
 			regionStrs = append(regionStrs, types.StringValue(region))
 		}
-		types.StringValue(ns.GetSpec().GetName())
 		regions, listDiags := types.ListValue(types.StringType, regionStrs)
 		resp.Diagnostics.Append(listDiags...)
 		if resp.Diagnostics.HasError() {
