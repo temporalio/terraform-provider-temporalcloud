@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
@@ -165,12 +166,17 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
+	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+		return
+	}
 	svcResp, err := r.client.CloudService().CreateServiceAccount(ctx, &cloudservicev1.CreateServiceAccountRequest{
 		Spec: &identityv1.ServiceAccountSpec{
 			Name: plan.Name.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: role,
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -237,13 +243,18 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+		return
+	}
 	svcResp, err := r.client.CloudService().UpdateServiceAccount(ctx, &cloudservicev1.UpdateServiceAccountRequest{
 		ServiceAccountId: plan.ID.ValueString(),
 		Spec: &identityv1.ServiceAccountSpec{
 			Name: plan.Name.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: role,
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -332,8 +343,13 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag
 		if diags.HasError() {
 			return nil
 		}
+		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		if err != nil {
+			diags.AddError("Failed to convert namespace access permission", err.Error())
+			return nil
+		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: model.Permission.ValueString(),
+			Permission: persmission,
 		}
 	}
 
@@ -342,17 +358,32 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag
 
 func updateServiceAccountModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) {
 	state.ID = types.StringValue(serviceAccount.GetId())
-	state.State = types.StringValue(serviceAccount.GetState())
+	stateStr, err := enums.FromResourceState(serviceAccount.GetState())
+	if err != nil {
+		diags.AddError("Failed to convert resource state", err.Error())
+
+	}
+	state.State = types.StringValue(stateStr)
 	state.Name = types.StringValue(serviceAccount.GetSpec().GetName())
-	state.AccountAccess = internaltypes.CaseInsensitiveString(serviceAccount.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	role, err := enums.FromAccountAccessRole(serviceAccount.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil {
+		diags.AddError("Failed to convert account access role", err.Error())
+		return
+	}
+	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	if len(serviceAccount.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range serviceAccount.GetSpec().GetAccess().GetNamespaceAccesses() {
+			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
+			if err != nil {
+				diags.AddError("Failed to convert namespace access permission", err.Error())
+				return
+			}
 			model := serviceAccountNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
-				Permission:  internaltypes.CaseInsensitiveString(namespaceAccess.GetPermission()),
+				Permission:  internaltypes.CaseInsensitiveString(permission),
 			}
 			obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
 			diags.Append(d...)
