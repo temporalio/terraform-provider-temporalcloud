@@ -329,7 +329,12 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			namespaceModel.LastModifiedTime = types.StringNull()
 		}
 
-		regions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
+		var regionStrs []attr.Value
+		for _, region := range ns.GetSpec().GetRegions() {
+			regionStrs = append(regionStrs, types.StringValue(region))
+		}
+		types.StringValue(ns.GetSpec().GetName())
+		regions, listDiags := types.ListValue(types.StringType, regionStrs)
 		resp.Diagnostics.Append(listDiags...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -435,7 +440,16 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 
 		searchAttributes := types.MapNull(types.StringType)
 		if len(ns.GetSpec().GetSearchAttributes()) > 0 {
-			sa, diag := types.MapValueFrom(ctx, types.StringType, ns.GetSpec().GetSearchAttributes())
+			sas := make(map[string]attr.Value)
+			for k, v := range ns.GetSpec().GetSearchAttributes() {
+				sa, err := enums.FromNamespaceSearchAttribute(v)
+				if err != nil {
+					resp.Diagnostics.AddError("Unable to convert namespace search attribute", err.Error())
+					return
+				}
+				sas[k] = types.StringValue(sa)
+			}
+			sa, diag := types.MapValue(types.StringType, sas)
 			resp.Diagnostics.Append(diag...)
 			if resp.Diagnostics.HasError() {
 				return
