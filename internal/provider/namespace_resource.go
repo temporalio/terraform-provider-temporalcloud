@@ -58,15 +58,16 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                 types.String                 `tfsdk:"id"`
-		Name               types.String                 `tfsdk:"name"`
-		Regions            types.List                   `tfsdk:"regions"`
-		AcceptedClientCA   internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
-		RetentionDays      types.Int64                  `tfsdk:"retention_days"`
-		CertificateFilters types.List                   `tfsdk:"certificate_filters"`
-		ApiKeyAuth         types.Bool                   `tfsdk:"api_key_auth"`
-		CodecServer        types.Object                 `tfsdk:"codec_server"`
-		Endpoints          types.Object                 `tfsdk:"endpoints"`
+		ID                    types.String                 `tfsdk:"id"`
+		Name                  types.String                 `tfsdk:"name"`
+		Regions               types.List                   `tfsdk:"regions"`
+		AcceptedClientCA      internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
+		RetentionDays         types.Int64                  `tfsdk:"retention_days"`
+		CertificateFilters    types.List                   `tfsdk:"certificate_filters"`
+		ApiKeyAuth            types.Bool                   `tfsdk:"api_key_auth"`
+		CodecServer           types.Object                 `tfsdk:"codec_server"`
+		Endpoints             types.Object                 `tfsdk:"endpoints"`
+		PrivateConnectivities types.List                   `tfsdk:"private_connectivities"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -88,6 +89,21 @@ type (
 		WebAddress      types.String `tfsdk:"web_address"`
 		GrpcAddress     types.String `tfsdk:"grpc_address"`
 		MtlsGrpcAddress types.String `tfsdk:"mtls_grpc_address"`
+	}
+
+	privateConnectivity struct {
+		// The id of the region where the private connectivity applies.
+		Region types.String `tfsdk:"region"`
+		// The AWS PrivateLink info.
+		// This will only be set for an aws region.
+		AwsPrivateLink types.Object `tfsdk:"aws_private_link"`
+	}
+
+	awsPrivateLinkInfo struct {
+		// The list of principal arns that are allowed to access the namespace on the private link.
+		AllowedPrincipalArns types.List `tfsdk:"allowed_principal_arns"`
+		// The list of vpc endpoint service names that are associated with the namespace.
+		VpcEndpointServiceNames types.List `tfsdk:"vpc_endpoint_service_names"`
 	}
 )
 
@@ -245,6 +261,39 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Description: "The address in the Temporal Cloud Web UI for the namespace",
 						Computed:    true,
 					},
+				},
+				Computed: true,
+			},
+			"private_connectivities": schema.ListNestedAttribute{
+				Description: "The private connectivities for the namespace, if any.",
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"region": schema.StringAttribute{
+							Description: "The id of the region where the private connectivity applies.",
+							Computed:    true,
+						},
+						"aws_private_link": schema.SingleNestedAttribute{
+							Description: "The AWS PrivateLink info. This will only be set for an aws region.",
+							Attributes: map[string]schema.Attribute{
+								"allowed_principal_arns": schema.ListAttribute{
+									Description: "The list of principal arns that are allowed to access the namespace on the private link.",
+									Computed:    true,
+								},
+								"mtls_grpc_address": schema.StringAttribute{
+									Description: "The gRPC address for mTLS client connections (may be empty if mTLS is disabled).",
+									Computed:    true,
+								},
+								"web_address": schema.StringAttribute{
+									Description: "The address in the Temporal Cloud Web UI for the namespace",
+									Computed:    true,
+								},
+							},
+							Computed: true,
+						},
+					},
+					CustomType:    nil,
+					Validators:    nil,
+					PlanModifiers: nil,
 				},
 				Computed: true,
 			},
