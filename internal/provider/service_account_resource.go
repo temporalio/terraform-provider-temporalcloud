@@ -200,7 +200,10 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	updateServiceAccountModelFromSpec(ctx, resp.Diagnostics, &plan, serviceAccount.ServiceAccount)
+	resp.Diagnostics.Append(updateServiceAccountModelFromSpec(ctx, &plan, serviceAccount.ServiceAccount)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -219,7 +222,10 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	updateServiceAccountModelFromSpec(ctx, resp.Diagnostics, &state, serviceAccount.ServiceAccount)
+	resp.Diagnostics.Append(updateServiceAccountModelFromSpec(ctx, &state, serviceAccount.ServiceAccount)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -279,7 +285,10 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	updateServiceAccountModelFromSpec(ctx, resp.Diagnostics, &plan, serviceAccount.ServiceAccount)
+	resp.Diagnostics.Append(updateServiceAccountModelFromSpec(ctx, &plan, serviceAccount.ServiceAccount)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -356,21 +365,16 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag
 	return namespaceAccesses
 }
 
-func updateServiceAccountModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) {
-	state.ID = types.StringValue(serviceAccount.GetId())
+func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
+	var diags diag.Diagnostics
 	stateStr, err := enums.FromResourceState(serviceAccount.GetState())
 	if err != nil {
 		diags.AddError("Failed to convert resource state", err.Error())
-
 	}
-	state.State = types.StringValue(stateStr)
-	state.Name = types.StringValue(serviceAccount.GetSpec().GetName())
 	role, err := enums.FromAccountAccessRole(serviceAccount.GetSpec().GetAccess().GetAccountAccess().GetRole())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
-		return
 	}
-	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	if len(serviceAccount.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
@@ -379,7 +383,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, diags diag.Diagnosti
 			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
 			if err != nil {
 				diags.AddError("Failed to convert namespace access permission", err.Error())
-				return
+				continue
 			}
 			model := serviceAccountNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
@@ -387,19 +391,28 @@ func updateServiceAccountModelFromSpec(ctx context.Context, diags diag.Diagnosti
 			}
 			obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
 			diags.Append(d...)
-			if diags.HasError() {
-				return
+			if d.HasError() {
+				continue
 			}
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, namespaceAccessObjects)
+		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
-		if diags.HasError() {
-			return
+		if !diags.HasError() {
+			namespaceAccesses = accesses
 		}
-
-		namespaceAccesses = accesses
 	}
+
+	if diags.HasError() {
+		return diags
+	}
+
+	state.ID = types.StringValue(serviceAccount.GetId())
+	state.State = types.StringValue(stateStr)
+	state.Name = types.StringValue(serviceAccount.GetSpec().GetName())
+	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 	state.NamespaceAccesses = namespaceAccesses
+
+	return nil
 }
