@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
@@ -165,12 +166,18 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
+	if err != nil {
+		diags.AddError("Failed to convert account access role", err.Error())
+		return
+	}
+
 	svcResp, err := r.client.CloudService().CreateUser(ctx, &cloudservicev1.CreateUserRequest{
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: role,
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -237,13 +244,18 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
+	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+		return
+	}
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess: &identityv1.AccountAccess{
-					Role: plan.AccountAccess.ValueString(),
+					Role: role,
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
@@ -332,8 +344,13 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 		if diags.HasError() {
 			return nil
 		}
+		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		if err != nil {
+			diags.AddError("Failed to convert namespace permission", err.Error())
+			return nil
+		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: model.Permission.ValueString(),
+			Permission: persmission,
 		}
 	}
 
@@ -342,17 +359,32 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 
 func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
 	state.ID = types.StringValue(user.GetId())
-	state.State = types.StringValue(user.GetState())
+	stateStr, err := enums.FromResourceState(user.GetState())
+	if err != nil {
+		diags.AddError("Failed to convert resource state", err.Error())
+		return
+	}
+	state.State = types.StringValue(stateStr)
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
-	state.AccountAccess = internaltypes.CaseInsensitiveString(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil {
+		diags.AddError("Failed to convert account access role", err.Error())
+		return
+	}
+	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
 	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
+			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
+			if err != nil {
+				diags.AddError("Failed to convert namespace access permission", err.Error())
+				return
+			}
 			model := userNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
-				Permission:  internaltypes.CaseInsensitiveString(namespaceAccess.GetPermission()),
+				Permission:  internaltypes.CaseInsensitiveString(permission),
 			}
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)

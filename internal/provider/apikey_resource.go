@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -11,10 +13,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"time"
 )
 
 type (
@@ -174,10 +176,15 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		disabled = plan.Disabled.ValueBool()
 	}
 
+	ownerType, err := enums.ToOwnerType(plan.OwnerType.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(err.Error(), "")
+		return
+	}
 	svcResp, err := r.client.CloudService().CreateApiKey(ctx, &cloudservicev1.CreateApiKeyRequest{
 		Spec: &identityv1.ApiKeySpec{
 			OwnerId:     plan.OwnerID.ValueString(),
-			OwnerType:   plan.OwnerType.ValueString(),
+			OwnerType:   ownerType,
 			DisplayName: plan.DisplayName.ValueString(),
 			Description: description,
 			ExpiryTime:  expiryTimestamp,
@@ -202,7 +209,11 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 		return
 	}
 
-	updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	err = updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert apikey spec", err.Error())
+		return
+	}
 	plan.Token = types.StringValue(svcResp.Token)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
@@ -223,7 +234,10 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 
-	updateApiKeyModelFromSpec(&state, apiKey.ApiKey)
+	if err := updateApiKeyModelFromSpec(&state, apiKey.ApiKey); err != nil {
+		resp.Diagnostics.AddError("Failed to convert apikey spec", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -263,11 +277,16 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		disabled = plan.Disabled.ValueBool()
 	}
 
+	ownerType, err := enums.ToOwnerType(plan.OwnerType.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(err.Error(), "")
+		return
+	}
 	svcResp, err := r.client.CloudService().UpdateApiKey(ctx, &cloudservicev1.UpdateApiKeyRequest{
 		KeyId: plan.ID.ValueString(),
 		Spec: &identityv1.ApiKeySpec{
 			OwnerId:     plan.OwnerID.ValueString(),
-			OwnerType:   plan.OwnerType.ValueString(),
+			OwnerType:   ownerType,
 			DisplayName: plan.DisplayName.ValueString(),
 			Description: description,
 			ExpiryTime:  expiryTimestamp,
@@ -293,7 +312,10 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 		return
 	}
 
-	updateApiKeyModelFromSpec(&plan, apiKey.ApiKey)
+	if err := updateApiKeyModelFromSpec(&plan, apiKey.ApiKey); err != nil {
+		resp.Diagnostics.AddError("Failed to convert apikey spec", err.Error())
+		return
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -339,14 +361,23 @@ func (r *apiKeyResource) ImportState(ctx context.Context, req resource.ImportSta
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.ApiKey) {
+func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.ApiKey) error {
 	state.ID = types.StringValue(apikey.GetId())
-	state.State = types.StringValue(apikey.GetState())
+	stateStr, err := enums.FromResourceState(apikey.GetState())
+	if err != nil {
+		return err
+	}
+	state.State = types.StringValue(stateStr)
 	state.OwnerID = types.StringValue(apikey.GetSpec().GetOwnerId())
-	state.OwnerType = types.StringValue(apikey.GetSpec().GetOwnerType())
+	ownerType, err := enums.FromOwnerType(apikey.GetSpec().GetOwnerType())
+	if err != nil {
+		return err
+	}
+	state.OwnerType = types.StringValue(ownerType)
 	state.DisplayName = types.StringValue(apikey.GetSpec().GetDisplayName())
 	if apikey.GetSpec().GetDescription() != "" {
 		state.Description = types.StringValue(apikey.GetSpec().GetDescription())
 	}
 	state.ExpiryTime = types.StringValue(apikey.GetSpec().GetExpiryTime().AsTime().Format(time.RFC3339))
+	return nil
 }

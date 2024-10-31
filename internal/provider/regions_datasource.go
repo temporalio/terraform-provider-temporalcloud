@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 )
 
@@ -109,9 +110,14 @@ func (d *regionsDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	for _, region := range regions.GetRegions() {
+		provider, err := enums.FromRegionCloudProvider(region.GetCloudProvider())
+		if err != nil {
+			resp.Diagnostics.AddError("Unable to convert region cloud provider", err.Error())
+			return
+		}
 		regionModel := regionDataModel{
 			ID:                  types.StringValue(region.GetId()),
-			CloudProvider:       types.StringValue(region.GetCloudProvider()),
+			CloudProvider:       types.StringValue(provider),
 			CloudProviderRegion: types.StringValue(region.GetCloudProviderRegion()),
 			Location:            types.StringValue(region.GetLocation()),
 		}

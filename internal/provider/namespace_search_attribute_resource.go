@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
@@ -116,10 +117,10 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 		}
 
 		spec := ns.GetNamespace().GetSpec()
-		if spec.GetCustomSearchAttributes() == nil {
-			spec.CustomSearchAttributes = make(map[string]string)
+		if spec.GetSearchAttributes() == nil {
+			spec.SearchAttributes = make(map[string]namespacev1.NamespaceSpec_SearchAttributeType)
 		}
-		if _, present := spec.GetCustomSearchAttributes()[plan.Name.ValueString()]; present {
+		if _, present := spec.GetSearchAttributes()[plan.Name.ValueString()]; present {
 			resp.Diagnostics.AddError(
 				"Search attribute already exists",
 				fmt.Sprintf("Search attribute with name `%s` already exists on namespace `%s`", plan.Name.ValueString(), plan.NamespaceID.ValueString()),
@@ -127,7 +128,13 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 			return
 		}
 
-		spec.GetCustomSearchAttributes()[plan.Name.ValueString()] = plan.Type.ValueString()
+		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid search attribute type", err.Error())
+			return
+		}
+
+		spec.GetSearchAttributes()[plan.Name.ValueString()] = saType
 		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 			Namespace:       plan.NamespaceID.ValueString(),
 			Spec:            spec,
@@ -228,8 +235,13 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 		}
 
 		spec := ns.GetNamespace().GetSpec()
+		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid search attribute type", err.Error())
+			return
+		}
 		// Assumption: a search attribute named plan.Name already exists
-		spec.GetCustomSearchAttributes()[plan.Name.ValueString()] = plan.Type.ValueString()
+		spec.GetSearchAttributes()[plan.Name.ValueString()] = saType
 		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 			Namespace:       plan.NamespaceID.ValueString(),
 			Spec:            spec,
@@ -288,7 +300,7 @@ func (r *namespaceSearchAttributeResource) ImportState(ctx context.Context, req 
 
 func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.NamespaceSpec) diag.Diagnostics {
 	var diags diag.Diagnostics
-	newCSA := spec.GetCustomSearchAttributes()
+	newCSA := spec.GetSearchAttributes()
 	searchAttrType, ok := newCSA[m.Name.ValueString()]
 	if !ok {
 		diags.AddError(
@@ -301,7 +313,12 @@ func (m *namespaceSearchAttributeModel) updateFromSpec(spec *namespacev1.Namespa
 	// plan.ID is already set
 	// plan.NamespaceID is already set
 	// plan.Name is already set
-	m.Type = internaltypes.CaseInsensitiveString(searchAttrType)
+	saTypeStr, err := enums.FromNamespaceSearchAttribute(searchAttrType)
+	if err != nil {
+		diags.AddError("Failed to convert search attribute type", err.Error())
+		return diags
+	}
+	m.Type = internaltypes.CaseInsensitiveString(saTypeStr)
 	return diags
 }
 
