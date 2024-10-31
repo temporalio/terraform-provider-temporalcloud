@@ -38,7 +38,7 @@ import (
 	"go.temporal.io/sdk/client"
 )
 
-var TemporalCloudAPIVersion = "2024-05-13-00"
+var TemporalCloudAPIVersion = "2024-10-01-00"
 
 // Client is a client for the Temporal Cloud API.
 type Client struct {
@@ -102,19 +102,20 @@ func AwaitAsyncOperation(ctx context.Context, client client.CloudOperationsClien
 
 			// https://github.com/temporalio/api-cloud/blob/main/temporal/api/cloud/operation/v1/message.proto#L15
 			switch newOp.GetState() {
-			case "pending":
-			case "in_progress":
+			case operationv1.AsyncOperation_STATE_PENDING:
+				fallthrough
+			case operationv1.AsyncOperation_STATE_IN_PROGRESS:
 				tflog.Debug(ctx, "retrying in 1 second", map[string]any{
 					"state": newOp.GetState(),
 				})
 				continue
-			case "failed":
+			case operationv1.AsyncOperation_STATE_FAILED:
 				tflog.Debug(ctx, "request failed")
 				return errors.New(newOp.GetFailureReason())
-			case "cancelled":
+			case operationv1.AsyncOperation_STATE_CANCELLED:
 				tflog.Debug(ctx, "request cancelled")
 				return errors.New("request cancelled")
-			case "fulfilled":
+			case operationv1.AsyncOperation_STATE_FULFILLED:
 				tflog.Debug(ctx, "request fulfilled, terminating loop")
 				return nil
 			default:

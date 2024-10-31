@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
@@ -302,12 +304,17 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	for _, ns := range namespaces {
+		stateStr, err := enums.FromResourceState(ns.State)
+		if err != nil {
+			resp.Diagnostics.AddError("Unable to convert namespace state", err.Error())
+			return
+		}
 		namespaceModel := namespaceDataModel{
 			ID:               types.StringValue(ns.Namespace),
 			Name:             types.StringValue(ns.GetSpec().GetName()),
-			State:            types.StringValue(ns.State),
+			State:            types.StringValue(stateStr),
 			ActiveRegion:     types.StringValue(ns.ActiveRegion),
-			AcceptedClientCA: types.StringValue(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa()),
+			AcceptedClientCA: types.StringValue(base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())),
 			RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
 			CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
 		}
@@ -322,7 +329,11 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			namespaceModel.LastModifiedTime = types.StringNull()
 		}
 
-		regions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
+		var regionStrs []attr.Value
+		for _, region := range ns.GetSpec().GetRegions() {
+			regionStrs = append(regionStrs, types.StringValue(region))
+		}
+		regions, listDiags := types.ListValue(types.StringType, regionStrs)
 		resp.Diagnostics.Append(listDiags...)
 		if resp.Diagnostics.HasError() {
 			return
@@ -427,8 +438,17 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		namespaceModel.PrivateConnectivities = privateConnectivites
 
 		searchAttributes := types.MapNull(types.StringType)
-		if len(ns.GetSpec().GetCustomSearchAttributes()) > 0 {
-			sa, diag := types.MapValueFrom(ctx, types.StringType, ns.GetSpec().GetCustomSearchAttributes())
+		if len(ns.GetSpec().GetSearchAttributes()) > 0 {
+			sas := make(map[string]attr.Value)
+			for k, v := range ns.GetSpec().GetSearchAttributes() {
+				sa, err := enums.FromNamespaceSearchAttribute(v)
+				if err != nil {
+					resp.Diagnostics.AddError("Unable to convert namespace search attribute", err.Error())
+					return
+				}
+				sas[k] = types.StringValue(sa)
+			}
+			sa, diag := types.MapValue(types.StringType, sas)
 			resp.Diagnostics.Append(diag...)
 			if resp.Diagnostics.HasError() {
 				return

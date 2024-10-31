@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
 
 func createRandomApiKeyName() string {
@@ -76,7 +77,7 @@ resource "temporalcloud_apikey" "terraform2" {
 					if spec.GetDisplayName() != apiKeyName {
 						return fmt.Errorf("expected display name to be %s, got %s", apiKeyName, spec.GetDisplayName())
 					}
-					if spec.GetOwnerType() != "service-account" {
+					if spec.GetOwnerType() != identityv1.OWNER_TYPE_SERVICE_ACCOUNT {
 						return fmt.Errorf("expected owner type to be service-account, got %s", spec.GetOwnerType())
 					}
 					serviceAccountID := s.RootModule().Resources["temporalcloud_service_account.terraform1"].Primary.Attributes["id"]

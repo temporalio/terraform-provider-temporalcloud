@@ -24,6 +24,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -312,8 +313,13 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 		mtls := &namespacev1.MtlsAuthSpec{}
 		if plan.AcceptedClientCA.ValueString() != "" {
+			certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
+				return
+			}
 			mtls.Enabled = true
-			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.AcceptedClientCa = certs
 			mtls.CertificateFilters = certFilters
 		}
 
@@ -396,11 +402,11 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	var spec = &namespacev1.NamespaceSpec{
-		Name:                   plan.Name.ValueString(),
-		Regions:                regions,
-		RetentionDays:          int32(plan.RetentionDays.ValueInt64()),
-		CodecServer:            codecServer,
-		CustomSearchAttributes: currentNs.GetNamespace().GetSpec().GetCustomSearchAttributes(),
+		Name:             plan.Name.ValueString(),
+		Regions:          regions,
+		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:      codecServer,
+		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
 	}
 
 	if plan.ApiKeyAuth.ValueBool() {
@@ -416,9 +422,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 
 		mtls := &namespacev1.MtlsAuthSpec{}
+
 		if plan.AcceptedClientCA.ValueString() != "" {
+			certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
+			if err != nil {
+				resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
+				return
+			}
 			mtls.Enabled = true
-			mtls.AcceptedClientCa = plan.AcceptedClientCA.ValueString()
+			mtls.AcceptedClientCa = certs
 			mtls.CertificateFilters = certFilters
 		}
 
@@ -544,8 +556,10 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		certificateFilter = filters
 	}
 
-	if ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa() != "" {
-		state.AcceptedClientCA = internaltypes.EncodedCA(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())
+	if len(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa()) > 0 {
+		state.AcceptedClientCA = internaltypes.EncodedCA(
+			base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa()),
+		)
 	}
 
 	if ns.GetSpec().GetApiKeyAuth() != nil {
@@ -585,7 +599,6 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	state.Endpoints = endpointsState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
-
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
 }
 
