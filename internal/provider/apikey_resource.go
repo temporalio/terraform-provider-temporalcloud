@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -106,13 +105,11 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			"display_name": schema.StringAttribute{
 				Description: "The display name for the API key.",
 				Required:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"token": schema.StringAttribute{
 				Description: "The token for the API key. This field will only be populated with the full key when creating an API key.",
 				Computed:    true,
+				Sensitive:   true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -120,9 +117,6 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			"description": schema.StringAttribute{
 				Description: "The description for the API key.",
 				Optional:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 			"expiry_time": schema.StringAttribute{
 				Description: "The expiry time for the API key in ISO 8601 format.",
@@ -134,9 +128,6 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			"disabled": schema.BoolAttribute{
 				Description: "Whether the API key is disabled.",
 				Optional:    true,
-				PlanModifiers: []planmodifier.Bool{
-					boolplanmodifier.RequiresReplace(),
-				},
 			},
 		},
 		Blocks: map[string]schema.Block{
