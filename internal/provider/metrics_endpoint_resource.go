@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -16,6 +17,7 @@ import (
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 type (
@@ -24,9 +26,9 @@ type (
 	}
 
 	metricsEndpointResourceModel struct {
-		ID               types.String `tfsdk:"id"`
-		AcceptedClientCA types.String `tfsdk:"accepted_client_ca"`
-		Uri              types.String `tfsdk:"uri"`
+		ID               types.String                 `tfsdk:"id"`
+		AcceptedClientCA internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
+		Uri              types.String                 `tfsdk:"uri"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -78,6 +80,7 @@ func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaR
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
+				CustomType:  internaltypes.EncodedCAType{},
 				Description: "The Base64-encoded CA cert in PEM format used to authenticate clients connecting to the metrics endpoint.",
 				Required:    true,
 			},
@@ -118,18 +121,24 @@ func (r *metricsEndpointResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
-	defer cancel()
+	certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
+		return
+	}
 
 	// create just enables the metrics endpoint by providing a CA certificate
 	metricsReq := &cloudservicev1.UpdateAccountRequest{
 		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
 		Spec: &accountv1.AccountSpec{
 			Metrics: &accountv1.MetricsSpec{
-				AcceptedClientCa: []byte(plan.AcceptedClientCA.ValueString()),
+				AcceptedClientCa: certs,
 			},
 		},
 	}
+
+	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 
 	metricsResp, err := r.client.CloudService().UpdateAccount(createCtx, metricsReq)
 	if err != nil {
@@ -189,17 +198,23 @@ func (r *metricsEndpointResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	updateCtx, cancel := context.WithTimeout(ctx, updateTimeout)
-	defer cancel()
+	certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
+		return
+	}
 
 	metricsReq := &cloudservicev1.UpdateAccountRequest{
 		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
 		Spec: &accountv1.AccountSpec{
 			Metrics: &accountv1.MetricsSpec{
-				AcceptedClientCa: []byte(plan.AcceptedClientCA.ValueString()),
+				AcceptedClientCa: certs,
 			},
 		},
 	}
+
+	updateCtx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 
 	metricsResp, err := r.client.CloudService().UpdateAccount(updateCtx, metricsReq)
 	if err != nil {
@@ -241,9 +256,6 @@ func (r *metricsEndpointResource) Delete(ctx context.Context, req resource.Delet
 		return
 	}
 
-	deleteCtx, cancel := context.WithTimeout(ctx, deleteTimeout)
-	defer cancel()
-
 	// can't actually "delete" account metrics config, removing the CA cert is the best equivalent
 	metricsReq := &cloudservicev1.UpdateAccountRequest{
 		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
@@ -251,6 +263,9 @@ func (r *metricsEndpointResource) Delete(ctx context.Context, req resource.Delet
 			Metrics: &accountv1.MetricsSpec{},
 		},
 	}
+
+	deleteCtx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	metricsResp, err := r.client.CloudService().UpdateAccount(deleteCtx, metricsReq)
 	if err != nil {
@@ -269,7 +284,7 @@ func (r *metricsEndpointResource) ImportState(ctx context.Context, req resource.
 }
 
 func updateMetricsEndpointModelFromSpec(state *metricsEndpointResourceModel, spec *accountv1.Account) {
-	state.AcceptedClientCA = types.StringValue(string(spec.GetSpec().GetMetrics().GetAcceptedClientCa()))
+	state.AcceptedClientCA = internaltypes.EncodedCA(base64.StdEncoding.EncodeToString(spec.GetSpec().GetMetrics().GetAcceptedClientCa()))
 	state.Uri = types.StringValue(spec.GetMetrics().GetUri())
 	state.ID = types.StringValue(fmt.Sprintf("account-%s-metrics", spec.GetId()))
 }
