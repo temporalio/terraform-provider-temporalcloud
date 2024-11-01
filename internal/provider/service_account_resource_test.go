@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"text/template"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
 
 func createRandomName() string {
@@ -145,14 +145,14 @@ resource "temporalcloud_service_account" "terraform" {
 						return fmt.Errorf("failed to get namespace: %v", err)
 					}
 					spec := serviceAccount.ServiceAccount.GetSpec()
-					if strings.ToLower(spec.GetAccess().GetAccountAccess().GetRole()) != "read" {
+					if spec.GetAccess().GetAccountAccess().GetRole() != identityv1.AccountAccess_ROLE_READ {
 						return errors.New("expected account role to be read")
 					}
 					nsPerm, ok := spec.GetAccess().GetNamespaceAccesses()[ns.Namespace.GetNamespace()]
 					if !ok {
 						return fmt.Errorf("expected entry in NamespaceAccesses for namespace %s", ns.Namespace.GetNamespace())
 					}
-					if strings.ToLower(nsPerm.GetPermission()) != "write" {
+					if nsPerm.GetPermission() != identityv1.NamespaceAccess_PERMISSION_WRITE {
 						return errors.New("expected namespace access permission to be write")
 					}
 					return nil
