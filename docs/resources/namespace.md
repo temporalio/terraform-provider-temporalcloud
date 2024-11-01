@@ -122,7 +122,7 @@ resource "temporalcloud_namespace" "terraform3" {
 
 ### Optional
 
-- `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.
+- `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud. This is a required field when a Namespace uses mTLS authentication.
 - `api_key_auth` (Boolean) If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
@@ -180,5 +180,10 @@ Read-Only:
 Import is supported using the following syntax:
 
 ```shell
-terraform import temporalcloud_namespace.terraform terraform.badf00d
+# Namespace's can be imported to incorporate existing Namespaces into your Terraform pipeline. 
+# To import a Namespace, you need
+# - a resource configuration in your Terraform configuration file/module to accept the imported Namespace. In the example below, the placeholder is "temporalcloud_namespace" "terraform"
+# - the Namespace ID, which includes the Namespace Name and Account ID available at the top of the Namespace's page in the Temporal Cloud UI. In the example below, this is namespaceid.acctid
+
+terraform import temporalcloud_namespace.terraform namespaceid.acctid
 ```

@@ -173,7 +173,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"accepted_client_ca": schema.StringAttribute{
 				CustomType:  internaltypes.EncodedCAType{},
-				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.",
+				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud. This is a required field when a Namespace uses mTLS authentication.",
 				Optional:    true,
 			},
 			"retention_days": schema.Int64Attribute{
