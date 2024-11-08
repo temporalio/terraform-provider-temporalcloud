@@ -33,16 +33,19 @@ func (m caseInsensitivePlanModifier) MarkdownDescription(ctx context.Context) st
 // PlanModifyString implements the plan modification logic.
 func (m caseInsensitivePlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
 	if req.State.Raw.IsNull() {
+		// Its a create operation, no need to update the plan.
 		return
 	}
-
 	if req.Plan.Raw.IsNull() {
+		// Its a delete operation, no need to update the plan.
 		return
 	}
-
 	if strings.EqualFold(req.PlanValue.ValueString(), req.StateValue.ValueString()) {
+		// The state and the plan values are equal.
+		// No need to update the resource, use the same as the one in the state.
 		resp.PlanValue = req.StateValue
 		return
 	}
+	// Its a change in the value, update the plan with the new value.
 	resp.PlanValue = types.StringValue(req.PlanValue.ValueString())
 }
