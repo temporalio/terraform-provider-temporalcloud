@@ -13,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/jpillora/maplock"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/modifiers"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -95,6 +96,11 @@ func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resourc
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					modifiers.NewCaseInsensitivePlanModifier(
+						"Case-insensitive search attribute type",
+						"The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)"),
+				},
 			},
 		},
 	}
