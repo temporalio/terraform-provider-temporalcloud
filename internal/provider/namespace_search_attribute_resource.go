@@ -92,9 +92,10 @@ func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resourc
 				Required:    true,
 			},
 			"type": schema.StringAttribute{
-				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)",
-				Required:    true,
+				CustomType:    internaltypes.CaseInsensitiveStringType{},
+				Description:   "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, `keyword_list` or `text`. (case-insensitive)",
+				Required:      true,
+				PlanModifiers: []planmodifier.String{newSearchAttrTypePlanModifier()},
 			},
 		},
 	}
@@ -329,4 +330,53 @@ func withNamespaceLock(ns string, f func()) {
 		_ = namespaceLocks.Unlock(ns)
 	}()
 	f()
+}
+
+func newSearchAttrTypePlanModifier() planmodifier.String {
+	return &searchAttrTypePlanModifier{}
+}
+
+type searchAttrTypePlanModifier struct {
+}
+
+// Description returns a human-readable description of the plan modifier.
+func (m searchAttrTypePlanModifier) Description(_ context.Context) string {
+	return "If the value of the search attribute changes (case-insensitive), update the resource accordingly."
+}
+
+// MarkdownDescription returns a markdown description of the plan modifier.
+func (m searchAttrTypePlanModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+// PlanModifyString implements the plan modification logic.
+func (m searchAttrTypePlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.State.Raw.IsNull() {
+		// Its a create operation, no need to update the plan.
+		return
+	}
+	if req.Plan.Raw.IsNull() {
+		// Its a delete operation, no need to update the plan.
+		return
+	}
+
+	saTypePlan, err := enums.ToNamespaceSearchAttribute(req.PlanValue.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse search attribute type in plan", err.Error())
+		return
+	}
+	saTypeState, err := enums.ToNamespaceSearchAttribute(req.StateValue.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to parse search attribute type in state", err.Error())
+		return
+	}
+
+	if saTypePlan == saTypeState {
+		// The state and the plan values are equal.
+		// No need to update the resource, update the response to the same as the one in the state to avoid an update.
+		resp.PlanValue = req.StateValue
+		return
+	}
+	// Its a change in the value, update the response accordingly.
+	resp.PlanValue = types.StringValue(req.PlanValue.ValueString())
 }

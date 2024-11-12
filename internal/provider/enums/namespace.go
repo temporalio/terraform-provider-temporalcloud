@@ -26,12 +26,11 @@ func ToNamespaceSearchAttribute(s string) (namespace.NamespaceSpec_SearchAttribu
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_BOOL, nil
 	case "datetime":
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_DATETIME, nil
-	case "keyword_list", "keywordlist":
+	case "keyword_list", "keywordlist", "keyword-list":
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_KEYWORD_LIST, nil
 	default:
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidNamespaceSearchAttribute, s)
 	}
-
 }
 
 func FromNamespaceSearchAttribute(r namespace.NamespaceSpec_SearchAttributeType) (string, error) {
