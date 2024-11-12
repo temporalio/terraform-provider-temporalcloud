@@ -349,14 +349,6 @@ func (m searchAttrTypePlanModifier) MarkdownDescription(ctx context.Context) str
 	return m.Description(ctx)
 }
 
-func isKeywordList(v types.String) bool {
-	t, err := enums.ToNamespaceSearchAttribute(v.ValueString())
-	if err != nil {
-		return false
-	}
-	return t == namespacev1.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_KEYWORD_LIST
-}
-
 // PlanModifyString implements the plan modification logic.
 func (m searchAttrTypePlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
 	if req.State.Raw.IsNull() {
