@@ -93,7 +93,7 @@ func (r *namespaceSearchAttributeResource) Schema(ctx context.Context, _ resourc
 			},
 			"type": schema.StringAttribute{
 				CustomType:    internaltypes.CaseInsensitiveStringType{},
-				Description:   "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)",
+				Description:   "The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, `keyword_list` or `text`. (case-insensitive)",
 				Required:      true,
 				PlanModifiers: []planmodifier.String{newSearchAttrTypePlanModifier()},
 			},
