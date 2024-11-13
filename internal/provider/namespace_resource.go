@@ -26,6 +26,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -202,6 +204,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 							Optional:    true,
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 			"api_key_auth": schema.BoolAttribute{
