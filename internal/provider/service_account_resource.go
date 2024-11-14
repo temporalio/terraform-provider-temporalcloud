@@ -186,7 +186,6 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 			},
 		},
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Service Account", err.Error())
 		return
