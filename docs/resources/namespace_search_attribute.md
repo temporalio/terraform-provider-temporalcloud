@@ -58,7 +58,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 
 - `name` (String) The name of the search attribute.
 - `namespace_id` (String) The ID of the namespace to which this search attribute belongs.
-- `type` (String) The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, or `text`. (case-insensitive)
+- `type` (String) The type of the search attribute. Must be one of `bool`, `datetime`, `double`, `int`, `keyword`, `keyword_list` or `text`. (case-insensitive)
 
 ### Read-Only
 
