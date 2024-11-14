@@ -402,5 +402,18 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 
 		namespaceAccesses = accesses
 	}
-	state.NamespaceAccesses = namespaceAccesses
+
+	// This block is here to preserve the user's intent for specifying a null list or an empty list.
+	switch {
+	case state.NamespaceAccesses.IsNull():
+		// If the input is null than use the value we computed above, this value defaults to null so it should capture
+		// a null list or drift correctly.
+		state.NamespaceAccesses = namespaceAccesses
+	case len(state.NamespaceAccesses.Elements()) == 0 && namespaceAccesses.IsNull():
+		// If the input is not null but is empty and the computed value is null then don't update the value and preserve
+		// the input
+	default:
+		// Otherwise copy the computed value
+		state.NamespaceAccesses = namespaceAccesses
+	}
 }
