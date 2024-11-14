@@ -60,12 +60,16 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) 
 		HostPort:    addrStr,
 		ConnectionOptions: client.ConnectionOptions{
 			DialOptions: []grpc.DialOption{
+				// Make sure to keep this a chain interceptor and make this a inner interceptor.
+				// This will make sure to exercise this retry before the retry interceptor in the SDK.
+				// TODO (abhinav): Move this retry interceptor to the SDK.
 				grpc.WithChainUnaryInterceptor(
 					grpcretry.UnaryClientInterceptor(
+						// max backoff = 64s (+/- 32s jitter)
 						grpcretry.WithBackoff(
-							grpcretry.BackoffExponentialWithJitter(250*time.Millisecond, 0.1),
+							grpcretry.BackoffExponentialWithJitter(500*time.Millisecond, 0.5),
 						),
-						grpcretry.WithMax(5),
+						grpcretry.WithMax(7),
 					),
 				),
 			},
