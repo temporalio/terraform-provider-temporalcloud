@@ -3,9 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -34,7 +34,7 @@ type (
 		State             types.String                             `tfsdk:"state"`
 		Email             types.String                             `tfsdk:"email"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -115,7 +115,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
-			"namespace_accesses": schema.ListNestedAttribute{
+			"namespace_accesses": schema.SetNestedAttribute{
 				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
@@ -134,8 +134,8 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 						},
 					},
 				},
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
 				},
 			},
 		},
@@ -376,7 +376,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
-	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
+	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
@@ -397,7 +397,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, namespaceAccessObjects)
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if diags.HasError() {
 			return
