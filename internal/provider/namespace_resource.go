@@ -651,3 +651,7 @@ func stringOrNull(s string) types.String {
 	}
 	return types.StringValue(s)
 }
+
+func testSemgrep(ctx context.Context, diags diag.Diagnostics) {
+	diags.Append(nil)
+}
