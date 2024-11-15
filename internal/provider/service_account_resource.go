@@ -111,14 +111,14 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. admins implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{

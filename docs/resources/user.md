@@ -54,12 +54,12 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import.
+- `account_access` (String) The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.
 - `email` (String) The email address for the user.
 
 ### Optional
 
-- `namespace_accesses` (Attributes List) The list of namespace accesses.Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_accesses` (Attributes List) The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
