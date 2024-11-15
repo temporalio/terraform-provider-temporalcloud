@@ -107,7 +107,7 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 				Required:    true,
 			},
 			"token": schema.StringAttribute{
-				Description: "The token for the API key. This field will only be populated with the full key when creating an API key.",
+				Description: "The token for the API key. This field is populated with the full key when creating an API key. To retrieve the value of this field, use an output.tf file and follow Terraform's guidance on working with sensitive fields.",
 				Computed:    true,
 				Sensitive:   true,
 				PlanModifiers: []planmodifier.String{
