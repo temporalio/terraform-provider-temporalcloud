@@ -59,7 +59,7 @@ resource "temporalcloud_apikey" "global_apikey" {
 
 - `id` (String) The unique identifier of the API key.
 - `state` (String) The current state of the API key.
-- `token` (String, Sensitive) The token for the API key. This field will only be populated with the full key when creating an API key.
+- `token` (String, Sensitive) The token for the API key. This field is populated with the full key when creating an API key. To retrieve the value of this field, use an output.tf file and follow Terraform's guidance on working with sensitive fields.
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`
