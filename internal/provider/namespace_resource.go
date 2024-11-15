@@ -282,17 +282,21 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	regions := getRegionsFromModel(ctx, resp.Diagnostics, &plan)
+	regions, d := getRegionsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	certFilters := getCertFiltersFromModel(ctx, resp.Diagnostics, &plan)
+	certFilters, d := getCertFiltersFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 	var codecServer *namespacev1.CodecServerSpec
 	if !plan.CodecServer.IsNull() {
-		codecServer = getCodecServerFromModel(ctx, resp.Diagnostics, &plan)
+		var d diag.Diagnostics
+		codecServer, d = getCodecServerFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -354,7 +358,11 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	updateModelFromSpec(ctx, resp.Diagnostics, &plan, ns.Namespace)
+	resp.Diagnostics.Append(updateModelFromSpec(ctx, &plan, ns.Namespace)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -374,7 +382,11 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	updateModelFromSpec(ctx, resp.Diagnostics, &state, model.Namespace)
+	resp.Diagnostics.Append(updateModelFromSpec(ctx, &state, model.Namespace)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -386,11 +398,13 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	regions := getRegionsFromModel(ctx, resp.Diagnostics, &plan)
+	regions, d := getRegionsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	certFilters := getCertFiltersFromModel(ctx, resp.Diagnostics, &plan)
+	certFilters, d := getCertFiltersFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -402,9 +416,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Failed to get current namespace status", err.Error())
 		return
 	}
-	codecServer := getCodecServerFromModel(ctx, resp.Diagnostics, &plan)
-	if resp.Diagnostics.HasError() {
-		return
+
+	var codecServer *namespacev1.CodecServerSpec
+	if !plan.CodecServer.IsNull() {
+		var d diag.Diagnostics
+		codecServer, d = getCodecServerFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	var spec = &namespacev1.NamespaceSpec{
@@ -466,7 +486,11 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	updateModelFromSpec(ctx, resp.Diagnostics, &plan, ns.Namespace)
+	resp.Diagnostics.Append(updateModelFromSpec(ctx, &plan, ns.Namespace)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -511,11 +535,12 @@ func (r *namespaceResource) ImportState(ctx context.Context, req resource.Import
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *namespaceResourceModel) []string {
+func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
 	regions := make([]types.String, 0, len(plan.Regions.Elements()))
 	diags.Append(plan.Regions.ElementsAs(ctx, &regions, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	requestRegions := make([]string, len(regions))
@@ -523,16 +548,18 @@ func getRegionsFromModel(ctx context.Context, diags diag.Diagnostics, plan *name
 		requestRegions[i] = region.ValueString()
 	}
 
-	return requestRegions
+	return requestRegions, diags
 }
 
-func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *namespaceResourceModel, ns *namespacev1.Namespace) {
+func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns *namespacev1.Namespace) diag.Diagnostics {
+	var diags diag.Diagnostics
+
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
-		return
+		return diags
 	}
 
 	certificateFilter := types.ListNull(types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs})
@@ -548,7 +575,7 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 			obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
 			diags.Append(diag...)
 			if diags.HasError() {
-				return
+				return diags
 			}
 			certificateFilterObjects[i] = obj
 		}
@@ -556,7 +583,7 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 		filters, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
 		diags.Append(diag...)
 		if diags.HasError() {
-			return
+			return diags
 		}
 
 		certificateFilter = filters
@@ -585,6 +612,10 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 
 		state, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, codecServer)
 		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+
 		codecServerState = state
 	} else {
 		codecServerState = types.ObjectNull(codecServerAttrs)
@@ -599,24 +630,28 @@ func updateModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *nam
 	endpointsState, objectDiags := types.ObjectValueFrom(ctx, endpointsAttrs, endpoints)
 	diags.Append(objectDiags...)
 	if diags.HasError() {
-		return
+		return diags
 	}
 
 	state.Endpoints = endpointsState
 	state.Regions = planRegions
 	state.CertificateFilters = certificateFilter
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
+
+	return diags
 }
 
-func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) []*namespacev1.CertificateFilterSpec {
+func getCertFiltersFromModel(ctx context.Context, model *namespaceResourceModel) ([]*namespacev1.CertificateFilterSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
 	elements := make([]types.Object, 0, len(model.CertificateFilters.Elements()))
 	diags.Append(model.CertificateFilters.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	if len(elements) == 0 {
-		return nil
+		return nil, diags
 	}
 
 	certificateFilters := make([]*namespacev1.CertificateFilterSpec, len(elements))
@@ -624,7 +659,7 @@ func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model 
 		var model namespaceCertificateFilterModel
 		diags.Append(filter.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil
+			return nil, diags
 		}
 
 		certificateFilters[i] = &namespacev1.CertificateFilterSpec{
@@ -635,20 +670,21 @@ func getCertFiltersFromModel(ctx context.Context, diags diag.Diagnostics, model 
 		}
 	}
 
-	return certificateFilters
+	return certificateFilters, diags
 }
 
-func getCodecServerFromModel(ctx context.Context, diags diag.Diagnostics, model *namespaceResourceModel) *namespacev1.CodecServerSpec {
+func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.CodecServerSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
 	var codecServer codecServerModel
 	diags.Append(model.CodecServer.As(ctx, &codecServer, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 	return &namespacev1.CodecServerSpec{
 		Endpoint:                      codecServer.Endpoint.ValueString(),
 		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
 		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
-	}
+	}, diags
 }
 
 func stringOrNull(s string) types.String {
