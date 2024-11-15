@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -116,7 +116,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +133,9 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							},
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 		},

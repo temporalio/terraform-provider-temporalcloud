@@ -28,6 +28,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -181,7 +184,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required:    true,
 			},
 			"certificate_filters": schema.ListNestedAttribute{
-				Description: "A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters.",
+				Description: "A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -202,6 +205,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 							Optional:    true,
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 			"api_key_auth": schema.BoolAttribute{
