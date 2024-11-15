@@ -59,7 +59,7 @@ resource "temporalcloud_service_account" "namespace_admin" {
 
 ### Optional
 
-- `namespace_accesses` (Attributes List) The list of namespace accesses. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_accesses` (Attributes List) The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
