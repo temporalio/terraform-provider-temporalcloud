@@ -394,7 +394,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, namespaceAccessObjects)
+		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if diags.HasError() {
 			return
