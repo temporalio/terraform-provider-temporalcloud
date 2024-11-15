@@ -161,7 +161,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses := getNamespaceAccessesFromModel(ctx, &resp.Diagnostics, &plan)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -201,7 +201,11 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	updateUserModelFromSpec(ctx, &resp.Diagnostics, &plan, user.User)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -220,7 +224,11 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &state, user.User)
+	updateUserModelFromSpec(ctx, &resp.Diagnostics, &state, user.User)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -231,7 +239,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses := getNamespaceAccessesFromModel(ctx, &resp.Diagnostics, &plan)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -280,7 +288,11 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	updateUserModelFromSpec(ctx, &resp.Diagnostics, &plan, user.User)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -326,7 +338,7 @@ func (r *userResource) ImportState(ctx context.Context, req resource.ImportState
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, model *userResourceModel) map[string]*identityv1.NamespaceAccess {
+func getNamespaceAccessesFromModel(ctx context.Context, diags *diag.Diagnostics, model *userResourceModel) map[string]*identityv1.NamespaceAccess {
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
@@ -357,7 +369,7 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 	return namespaceAccesses
 }
 
-func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
+func updateUserModelFromSpec(ctx context.Context, diags *diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
 	state.ID = types.StringValue(user.GetId())
 	stateStr, err := enums.FromResourceState(user.GetState())
 	if err != nil {
