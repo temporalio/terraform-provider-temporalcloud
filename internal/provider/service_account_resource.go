@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -117,7 +118,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
