@@ -54,12 +54,12 @@ resource "temporalcloud_service_account" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of [admin, developer, read] (case-insensitive)
+- `account_access` (String) The role on the account. Must be one of [admin, developer, read] (case-insensitive).
 - `name` (String) The name associated with the service account.
 
 ### Optional
 
-- `namespace_accesses` (Attributes List) The list of namespace accesses. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_accesses` (Attributes List) The list of namespace accesses. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. admins implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

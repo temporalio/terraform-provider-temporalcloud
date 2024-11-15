@@ -109,14 +109,14 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import.",
+				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+				Description: "The list of namespace accesses. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
