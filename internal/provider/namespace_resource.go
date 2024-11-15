@@ -410,10 +410,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		resp.Diagnostics.AddError("Failed to get current namespace status", err.Error())
 		return
 	}
-	codecServer, d := getCodecServerFromModel(ctx, &plan)
-	resp.Diagnostics.Append(d...)
-	if resp.Diagnostics.HasError() {
-		return
+
+	var codecServer *namespacev1.CodecServerSpec
+	if !plan.CodecServer.IsNull() {
+		var d diag.Diagnostics
+		codecServer, d = getCodecServerFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 	}
 
 	var spec = &namespacev1.NamespaceSpec{
@@ -601,6 +606,10 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 
 		state, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, codecServer)
 		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+
 		codecServerState = state
 	} else {
 		codecServerState = types.ObjectNull(codecServerAttrs)
