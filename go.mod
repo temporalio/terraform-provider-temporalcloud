@@ -1,7 +1,6 @@
 module github.com/temporalio/terraform-provider-temporalcloud
 
 go 1.22.0
-
 toolchain go1.23.2
 
 require (
@@ -16,7 +15,7 @@ require (
 	github.com/jpillora/maplock v0.0.0-20160420012925-5c725ac6e22a
 	go.temporal.io/api v1.41.0
 	go.temporal.io/sdk v1.30.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.2
 )
 
