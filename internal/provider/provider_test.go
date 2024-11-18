@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
-	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -22,10 +21,6 @@ func testAccPreCheck(t *testing.T) {
 	// You can add code here to run prior to any test case execution, for example assertions
 	// about the appropriate environment variables being set are common to see in a pre-check
 	// function.
-
-	if v := os.Getenv("TF_ACC"); v != "1" {
-		t.Skip()
-	}
 }
 
 func TestProviderSchema(t *testing.T) {
