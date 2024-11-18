@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -16,7 +17,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -109,14 +109,14 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import.",
+				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +133,9 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							},
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 		},

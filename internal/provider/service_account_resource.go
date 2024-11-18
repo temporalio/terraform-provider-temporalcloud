@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -109,14 +111,14 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. admins implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +135,9 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 							},
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 		},
@@ -183,7 +188,6 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 			},
 		},
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Service Account", err.Error())
 		return
