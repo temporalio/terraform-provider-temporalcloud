@@ -377,6 +377,6 @@ func (m searchAttrTypePlanModifier) PlanModifyString(ctx context.Context, req pl
 		resp.PlanValue = req.StateValue
 		return
 	}
-	// Its a change in the value, update the response accordingly.
-	resp.PlanValue = types.StringValue(req.PlanValue.ValueString())
+	// Its a change in the value, we don't allow changing the search attribute type, error out
+	resp.Diagnostics.AddError("Search attribute type change not allowed", "Changing the search attribute type is not allowed.")
 }
