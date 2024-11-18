@@ -1,6 +1,7 @@
 module github.com/temporalio/terraform-provider-temporalcloud
 
-go 1.22.0
+go 1.22.7
+
 toolchain go1.23.2
 
 require (
