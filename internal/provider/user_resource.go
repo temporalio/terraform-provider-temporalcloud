@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -30,7 +32,17 @@ type (
 		client *client.Client
 	}
 
-	userResourceModel struct {
+	userResourceModelV0 struct {
+		ID                types.String                             `tfsdk:"id"`
+		State             types.String                             `tfsdk:"state"`
+		Email             types.String                             `tfsdk:"email"`
+		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+
+		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	userResourceModelV1 struct {
 		ID                types.String                             `tfsdk:"id"`
 		State             types.String                             `tfsdk:"state"`
 		Email             types.String                             `tfsdk:"email"`
@@ -85,6 +97,7 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version:     1,
 		Description: "Provisions a Temporal Cloud user.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -151,7 +164,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 }
 
 func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan userResourceModel
+	var plan userResourceModelV1
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -211,7 +224,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 }
 
 func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state userResourceModel
+	var state userResourceModelV1
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -230,7 +243,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan userResourceModel
+	var plan userResourceModelV1
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -290,7 +303,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 }
 
 func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state userResourceModel
+	var state userResourceModelV1
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -331,7 +344,120 @@ func (r *userResource) ImportState(ctx context.Context, req resource.ImportState
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, model *userResourceModel) map[string]*identityv1.NamespaceAccess {
+func (r *userResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		// State upgrade implementation from 0 (prior state version) to 1 (Schema.Version)
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"id": schema.StringAttribute{
+						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"state": schema.StringAttribute{
+						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"email": schema.StringAttribute{
+						Required: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+					"account_access": schema.StringAttribute{
+						CustomType: internaltypes.CaseInsensitiveStringType{},
+						Required:   true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
+						},
+					},
+					"namespace_accesses": schema.ListNestedAttribute{
+						Optional: true,
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"namespace_id": schema.StringAttribute{
+									Description: "The namespace to assign permissions to.",
+									Required:    true,
+								},
+								"permission": schema.StringAttribute{
+									CustomType:  internaltypes.CaseInsensitiveStringType{},
+									Description: "The permission to assign. Must be one of [admin, write, read] (case-insensitive)",
+									Required:    true,
+									Validators: []validator.String{
+										stringvalidator.OneOfCaseInsensitive("admin", "write", "read"),
+									},
+								},
+							},
+						},
+						Validators: []validator.List{
+							listvalidator.SizeAtLeast(1),
+						},
+					},
+				},
+				Blocks: map[string]schema.Block{
+					"timeouts": timeouts.Block(ctx, timeouts.Opts{
+						Create: true,
+						Delete: true,
+					}),
+				},
+			},
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var priorStateData userResourceModelV0
+
+				resp.Diagnostics.Append(req.State.Get(ctx, &priorStateData)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				// Only the namespace access field needs to be upgraded
+				upgradedStateData := userResourceModelV1{
+					ID:            priorStateData.ID,
+					State:         priorStateData.State,
+					Email:         priorStateData.Email,
+					AccountAccess: priorStateData.AccountAccess,
+					Timeouts:      priorStateData.Timeouts,
+				}
+
+				tflog.Info(ctx, "upgrading state from v0 -> v1", map[string]interface{}{
+					"namespace_accesses_length": len(priorStateData.NamespaceAccesses.Elements()),
+				})
+
+				// Copy the list entries into the new set object
+				namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+				if len(priorStateData.NamespaceAccesses.Elements()) > 0 {
+					namespaceAccessObjects := make([]basetypes.ObjectValuable, 0)
+					for _, oldAccessRaw := range priorStateData.NamespaceAccesses.Elements() {
+						oldAccess, ok := oldAccessRaw.(basetypes.ObjectValuable)
+						if !ok {
+							// Shouldn't happen
+							resp.Diagnostics.AddError("Unexpected list element type", fmt.Sprintf("expected list entry to be an object, got: %s", oldAccessRaw.Type(ctx).String()))
+							return
+						}
+
+						namespaceAccessObjects = append(namespaceAccessObjects, oldAccess)
+					}
+
+					accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+					resp.Diagnostics.Append(d...)
+					if resp.Diagnostics.HasError() {
+						return
+					}
+
+					namespaceAccesses = accesses
+				}
+
+				upgradedStateData.NamespaceAccesses = namespaceAccesses
+
+				resp.Diagnostics.Append(resp.State.Set(ctx, upgradedStateData)...)
+			},
+		},
+	}
+}
+func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, model *userResourceModelV1) map[string]*identityv1.NamespaceAccess {
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
@@ -362,7 +488,7 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 	return namespaceAccesses
 }
 
-func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
+func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModelV1, user *identityv1.User) {
 	state.ID = types.StringValue(user.GetId())
 	stateStr, err := enums.FromResourceState(user.GetState())
 	if err != nil {

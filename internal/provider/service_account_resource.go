@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -31,7 +33,17 @@ type (
 		client *client.Client
 	}
 
-	serviceAccountResourceModel struct {
+	serviceAccountResourceModelV0 struct {
+		ID                types.String                             `tfsdk:"id"`
+		State             types.String                             `tfsdk:"state"`
+		Name              types.String                             `tfsdk:"name"`
+		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+
+		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	serviceAccountResourceModelV1 struct {
 		ID                types.String                             `tfsdk:"id"`
 		State             types.String                             `tfsdk:"state"`
 		Name              types.String                             `tfsdk:"name"`
@@ -86,6 +98,7 @@ func (r *serviceAccountResource) Metadata(_ context.Context, req resource.Metada
 
 func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Version:     1,
 		Description: "Provisions a Temporal Cloud Service Account.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -152,7 +165,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 }
 
 func (r *serviceAccountResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan serviceAccountResourceModel
+	var plan serviceAccountResourceModelV1
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -214,7 +227,7 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 }
 
 func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var state serviceAccountResourceModel
+	var state serviceAccountResourceModelV1
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -236,7 +249,7 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 }
 
 func (r *serviceAccountResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan serviceAccountResourceModel
+	var plan serviceAccountResourceModelV1
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -300,7 +313,7 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 }
 
 func (r *serviceAccountResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	var state serviceAccountResourceModel
+	var state serviceAccountResourceModelV1
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -341,7 +354,119 @@ func (r *serviceAccountResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *serviceAccountResourceModel) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
+func (r *serviceAccountResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		// State upgrade implementation from 0 (prior state version) to 1 (Schema.Version)
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"id": schema.StringAttribute{
+						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"state": schema.StringAttribute{
+						Computed: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
+					},
+					"name": schema.StringAttribute{
+						Required: true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+					"account_access": schema.StringAttribute{
+						CustomType: internaltypes.CaseInsensitiveStringType{},
+						Required:   true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
+						},
+					},
+					"namespace_accesses": schema.ListNestedAttribute{
+						Optional: true,
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"namespace_id": schema.StringAttribute{
+									Required: true,
+								},
+								"permission": schema.StringAttribute{
+									CustomType: internaltypes.CaseInsensitiveStringType{},
+									Required:   true,
+									Validators: []validator.String{
+										stringvalidator.OneOfCaseInsensitive("admin", "write", "read"),
+									},
+								},
+							},
+						},
+						Validators: []validator.List{
+							listvalidator.SizeAtLeast(1),
+						},
+					},
+				},
+				Blocks: map[string]schema.Block{
+					"timeouts": timeouts.Block(ctx, timeouts.Opts{
+						Create: true,
+						Delete: true,
+					}),
+				},
+			},
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var priorStateData serviceAccountResourceModelV0
+
+				resp.Diagnostics.Append(req.State.Get(ctx, &priorStateData)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				// Only the namespace access field needs to be upgraded
+				upgradedStateData := serviceAccountResourceModelV1{
+					ID:            priorStateData.ID,
+					State:         priorStateData.State,
+					Name:          priorStateData.Name,
+					AccountAccess: priorStateData.AccountAccess,
+					Timeouts:      priorStateData.Timeouts,
+				}
+
+				tflog.Info(ctx, "upgrading state from v0 -> v1", map[string]interface{}{
+					"namespace_accesses_length": len(priorStateData.NamespaceAccesses.Elements()),
+				})
+
+				// Copy the list entries into the new set object
+				namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+				if len(priorStateData.NamespaceAccesses.Elements()) > 0 {
+					namespaceAccessObjects := make([]basetypes.ObjectValuable, 0)
+					for _, oldAccessRaw := range priorStateData.NamespaceAccesses.Elements() {
+						oldAccess, ok := oldAccessRaw.(basetypes.ObjectValuable)
+						if !ok {
+							// Shouldn't happen
+							resp.Diagnostics.AddError("Unexpected list element type", fmt.Sprintf("expected list entry to be an object, got: %s", oldAccessRaw.Type(ctx).String()))
+							return
+						}
+
+						namespaceAccessObjects = append(namespaceAccessObjects, oldAccess)
+					}
+
+					accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+					resp.Diagnostics.Append(d...)
+					if resp.Diagnostics.HasError() {
+						return
+					}
+
+					namespaceAccesses = accesses
+				}
+
+				upgradedStateData.NamespaceAccesses = namespaceAccesses
+
+				resp.Diagnostics.Append(resp.State.Set(ctx, upgradedStateData)...)
+			},
+		},
+	}
+}
+
+func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *serviceAccountResourceModelV1) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
@@ -373,7 +498,7 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *ser
 	return namespaceAccesses, diags
 }
 
-func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
+func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModelV1, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
 	var diags diag.Diagnostics
 	stateStr, err := enums.FromResourceState(serviceAccount.GetState())
 	if err != nil {
