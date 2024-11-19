@@ -13,12 +13,35 @@ import (
 	"text/template"
 	"time"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 )
+
+func TestNamespaceSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	// Instantiate the resource.Resource and call its Schema method
+	NewNamespaceResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	// Validate the schema
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
 
 func TestAccBasicNamespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())

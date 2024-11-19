@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"regexp"
 	"testing"
 	"text/template"
@@ -16,6 +17,28 @@ import (
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
+
+func TestServiceAccountSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	// Instantiate the resource.Resource and call its Schema method
+	NewServiceAccountResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	// Validate the schema
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
 
 func createRandomName() string {
 	return fmt.Sprintf("%s-terraformprovider-name", randomString())

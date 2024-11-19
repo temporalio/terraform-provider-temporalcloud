@@ -1,12 +1,36 @@
 package provider
 
 import (
+	"context"
 	"fmt"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
+
+func TestSearchAttrSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	// Instantiate the resource.Resource and call its Schema method
+	NewNamespaceSearchAttributeResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	// Validate the schema
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
 
 func TestAccNamespaceWithSearchAttributes(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString())
