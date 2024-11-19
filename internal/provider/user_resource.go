@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -116,7 +117,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
-				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -136,6 +137,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
+					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
 		},
