@@ -1,5 +1,10 @@
 default: testacc
 
+# Run unit tests
+.PHONY: test
+test:
+	TF_ACC="" go test ./... -v $(TESTARGS)
+
 # Run acceptance tests
 .PHONY: testacc
 testacc:
