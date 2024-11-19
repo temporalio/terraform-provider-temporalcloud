@@ -263,7 +263,7 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(configArgs{
 					Email: emailAddr,
 				}),
-				ExpectError: regexp.MustCompile("namespace_id must be unique accross all set entries"),
+				ExpectError: regexp.MustCompile("namespace_id must be unique across all set entries"),
 			},
 		},
 	})

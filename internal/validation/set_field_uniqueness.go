@@ -122,7 +122,7 @@ func (s setFieldUnique) ValidateSet(ctx context.Context, req validator.SetReques
 			resp.Diagnostics.AddAttributeError(
 				elementPath,
 				"validation error: unique set field",
-				fmt.Sprintf("%s must be unique accross all set entries but recieved duplicate for namespace: %s", s.attrFieldName, str),
+				fmt.Sprintf("%s must be unique across all set entries but recieved duplicate for namespace: %s", s.attrFieldName, str),
 			)
 
 			return
