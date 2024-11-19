@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"testing"
 	"text/template"
 	"time"
@@ -164,10 +165,11 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 		}
 
 		configArgs struct {
-			Name          string
-			RetentionDays int
-			CodecServer   *codecServer
-			ApiKeyAuth    bool
+			Name                 string
+			RetentionDays        int
+			CodecServer          *codecServer
+			ApiKeyAuth           bool
+			CertFiltersEmptyList bool
 		}
 	)
 
@@ -205,6 +207,10 @@ PEM
 
   retention_days     = {{ .RetentionDays }}
 
+  {{ if .CertFiltersEmptyList }}
+  certificate_filters = []
+  {{ end }}
+
   {{ with .CodecServer }}
   codec_server = {
     endpoint                         = "{{ .Endpoint }}"
@@ -235,6 +241,15 @@ PEM
 					Name:          name,
 					RetentionDays: 7,
 				}),
+			},
+			{
+				// Error on empty cert filers
+				Config: config(configArgs{
+					Name:                 name,
+					RetentionDays:        7,
+					CertFiltersEmptyList: true,
+				}),
+				ExpectError: regexp.MustCompile("certificate_filters list must contain at least 1 elements"),
 			},
 			{
 				Config: config(configArgs{

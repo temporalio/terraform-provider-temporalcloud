@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -109,14 +111,14 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
 				},
 			},
 			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. admins implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +135,9 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 							},
 						},
 					},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
 				},
 			},
 		},
@@ -161,7 +166,8 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses := getNamespaceAccessesFromServiceAccountModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -182,7 +188,6 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 			},
 		},
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Service Account", err.Error())
 		return
@@ -236,7 +241,8 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	namespaceAccesses := getNamespaceAccessesFromServiceAccountModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -334,15 +340,16 @@ func (r *serviceAccountResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag.Diagnostics, model *serviceAccountResourceModel) map[string]*identityv1.NamespaceAccess {
+func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *serviceAccountResourceModel) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	if len(elements) == 0 {
-		return nil
+		return nil, diags
 	}
 
 	namespaceAccesses := make(map[string]*identityv1.NamespaceAccess, len(elements))
@@ -350,19 +357,19 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag
 		var model serviceAccountNamespaceAccessModel
 		diags.Append(access.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil
+			return nil, diags
 		}
 		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace access permission", err.Error())
-			return nil
+			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
 			Permission: persmission,
 		}
 	}
 
-	return namespaceAccesses
+	return namespaceAccesses, diags
 }
 
 func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
