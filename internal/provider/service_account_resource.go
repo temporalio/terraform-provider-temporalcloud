@@ -21,6 +21,7 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
@@ -117,7 +118,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
-				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. admins implicitly receive access to all Namespaces.",
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -137,6 +138,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 				},
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
+					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
 		},

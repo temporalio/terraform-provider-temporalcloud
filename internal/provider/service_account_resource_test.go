@@ -210,3 +210,60 @@ resource "temporalcloud_service_account" "terraform" {
 		},
 	})
 }
+
+func TestAccBasicServiceAccountWithDuplicateNamespaceAccesses(t *testing.T) {
+	type configArgs struct {
+		Name        string
+		AccountPerm string
+	}
+
+	name := createRandomName()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_service_account" "terraform" {
+  name = "{{ .Name }}"
+  account_access = "{{ .AccountPerm }}"
+  namespace_accesses = [
+    {
+       namespace_id = "NS1"
+       permission = "Read"
+    },
+    {
+       namespace_id = "NS1"
+       permission = "Write"
+    }
+  ]
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template:  %v", err)
+			t.FailNow()
+		}
+
+		writer.Flush()
+		return buf.String()
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{
+					Name:        name,
+					AccountPerm: "Read",
+				}),
+				ExpectError: regexp.MustCompile("namespace_id must be unique accross all set entries"),
+			},
+		},
+	})
+}
