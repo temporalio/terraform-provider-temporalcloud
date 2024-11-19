@@ -59,7 +59,7 @@ func (s setFieldUnique) ValidateSet(ctx context.Context, req validator.SetReques
 		}
 
 		if _, ok := duplicates[str]; ok {
-			resp.Diagnostics.AddError("validation: unique set field", fmt.Sprintf("%s must be unique accross all set entries", s.attrFieldName))
+			resp.Diagnostics.AddError("validation: unique set field", fmt.Sprintf("%s must be unique accross all set entries but recieved duplicate for namespace: %s", s.attrFieldName, str))
 			return
 		}
 
