@@ -166,7 +166,8 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -206,7 +207,11 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &plan, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -225,7 +230,11 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &state, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &state, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -236,7 +245,8 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -285,7 +295,11 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &plan, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -331,15 +345,17 @@ func (r *userResource) ImportState(ctx context.Context, req resource.ImportState
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, model *userResourceModel) map[string]*identityv1.NamespaceAccess {
+func getNamespaceAccessesFromModel(ctx context.Context, model *userResourceModel) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	if len(elements) == 0 {
-		return nil
+		return nil, diags
 	}
 
 	namespaceAccesses := make(map[string]*identityv1.NamespaceAccess, len(elements))
@@ -347,34 +363,35 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 		var model userNamespaceAccessModel
 		diags.Append(access.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil
+			return nil, diags
 		}
 		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace permission", err.Error())
-			return nil
+			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
 			Permission: persmission,
 		}
 	}
 
-	return namespaceAccesses
+	return namespaceAccesses, diags
 }
 
-func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
+func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user *identityv1.User) diag.Diagnostics {
+	var diags diag.Diagnostics
 	state.ID = types.StringValue(user.GetId())
 	stateStr, err := enums.FromResourceState(user.GetState())
 	if err != nil {
 		diags.AddError("Failed to convert resource state", err.Error())
-		return
+		return diags
 	}
 	state.State = types.StringValue(stateStr)
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
 	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
-		return
+		return diags
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
@@ -385,7 +402,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
 			if err != nil {
 				diags.AddError("Failed to convert namespace access permission", err.Error())
-				return
+				return diags
 			}
 			model := userNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
@@ -394,7 +411,7 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)
 			if diags.HasError() {
-				return
+				return diags
 			}
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
@@ -402,10 +419,12 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if diags.HasError() {
-			return
+			return diags
 		}
 
 		namespaceAccesses = accesses
 	}
 	state.NamespaceAccesses = namespaceAccesses
+
+	return diags
 }
