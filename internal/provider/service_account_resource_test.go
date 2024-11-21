@@ -228,7 +228,7 @@ resource "temporalcloud_service_account" "terraform" {
 					Name:        name,
 					AccountPerm: "Read",
 				}),
-				ExpectError: regexp.MustCompile("namespace_accesses list must contain at least 1 elements"),
+				ExpectError: regexp.MustCompile("namespace_accesses set must contain at least 1 elements"),
 			},
 		},
 	})

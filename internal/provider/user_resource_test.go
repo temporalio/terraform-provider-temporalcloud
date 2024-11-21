@@ -231,7 +231,7 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(configArgs{
 					Email: emailAddr,
 				}),
-				ExpectError: regexp.MustCompile("namespace_accesses list must contain at least 1 elements, got: 0"),
+				ExpectError: regexp.MustCompile("namespace_accesses set must contain at least 1 elements, got: 0"),
 			},
 		},
 	})
