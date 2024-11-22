@@ -3,12 +3,12 @@
 page_title: "temporalcloud_service_account Resource - terraform-provider-temporalcloud"
 subcategory: ""
 description: |-
-  Provisions a Temporal Cloud Service Account.
+  Provisions a Temporal Cloud Service Account. To avoid overwrting service account permisisons, manage a specific service account in one and only one .tf file.
 ---
 
 # temporalcloud_service_account (Resource)
 
-Provisions a Temporal Cloud Service Account.
+Provisions a Temporal Cloud Service Account. To avoid overwrting service account permisisons, manage a specific service account in one and only one .tf file.
 
 ## Example Usage
 

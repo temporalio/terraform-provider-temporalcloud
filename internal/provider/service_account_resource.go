@@ -86,7 +86,7 @@ func (r *serviceAccountResource) Metadata(_ context.Context, req resource.Metada
 
 func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Provisions a Temporal Cloud Service Account.",
+		Description: "Provisions a Temporal Cloud Service Account. To avoid overwrting service account permisisons, manage a specific service account in one and only one .tf file. ",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The unique identifier of the Service Account.",
