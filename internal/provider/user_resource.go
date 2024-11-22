@@ -84,7 +84,7 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Provisions a Temporal Cloud user.",
+		Description: "Provisions a Temporal Cloud user. To prevent overwriting, include each user's Temporal configuration in one and only one Terraform file.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The unique identifier of the user.",

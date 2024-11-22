@@ -3,12 +3,12 @@
 page_title: "temporalcloud_user Resource - terraform-provider-temporalcloud"
 subcategory: ""
 description: |-
-  Provisions a Temporal Cloud user.
+  Provisions a Temporal Cloud user. To prevent overwriting, include each user's Temporal configuration in one and only one Terraform file.
 ---
 
 # temporalcloud_user (Resource)
 
-Provisions a Temporal Cloud user.
+Provisions a Temporal Cloud user. To prevent overwriting, include each user's Temporal configuration in one and only one Terraform file.
 
 ## Example Usage
 
