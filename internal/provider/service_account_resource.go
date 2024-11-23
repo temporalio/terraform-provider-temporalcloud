@@ -360,13 +360,13 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *ser
 		if diags.HasError() {
 			return nil, diags
 		}
-		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		permission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace access permission", err.Error())
 			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: persmission,
+			Permission: permission,
 		}
 	}
 
