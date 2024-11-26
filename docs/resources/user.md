@@ -59,7 +59,7 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Optional
 
-- `namespace_accesses` (Attributes List) The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
