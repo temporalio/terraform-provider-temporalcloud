@@ -3,9 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -34,7 +35,7 @@ type (
 		State             types.String                             `tfsdk:"state"`
 		Email             types.String                             `tfsdk:"email"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -115,8 +116,8 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
-			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses. Empty lists are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
+			"namespace_accesses": schema.SetNestedAttribute{
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -134,8 +135,9 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 						},
 					},
 				},
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
+					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
 		},
@@ -363,13 +365,13 @@ func getNamespaceAccessesFromModel(ctx context.Context, model *userResourceModel
 		if diags.HasError() {
 			return nil, diags
 		}
-		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		permission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace permission", err.Error())
 			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: persmission,
+			Permission: permission,
 		}
 	}
 
@@ -393,7 +395,7 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
-	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
+	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
@@ -414,7 +416,7 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if diags.HasError() {
 			return diags

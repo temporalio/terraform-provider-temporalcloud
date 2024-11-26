@@ -231,7 +231,62 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(configArgs{
 					Email: emailAddr,
 				}),
-				ExpectError: regexp.MustCompile("namespace_accesses list must contain at least 1 elements, got: 0"),
+				ExpectError: regexp.MustCompile("namespace_accesses set must contain at least 1 elements, got: 0"),
+			},
+		},
+	})
+}
+
+func TestAccBasicUserWithDuplicateNamespaceAccesses(t *testing.T) {
+	type configArgs struct {
+		Email string
+	}
+
+	emailAddr := createRandomEmail()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_user" "terraform" {
+  email = "{{ .Email }}"
+  account_access = "read" 
+  namespace_accesses = [
+    {
+       namespace_id = "NS1"
+       permission = "Read"
+    },
+    {
+       namespace_id = "NS1"
+       permission = "Write"
+    }
+  ]
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template:  %v", err)
+			t.FailNow()
+		}
+
+		writer.Flush()
+		return buf.String()
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{
+					Email: emailAddr,
+				}),
+				ExpectError: regexp.MustCompile("namespace_id must be unique across all set entries"),
 			},
 		},
 	})
