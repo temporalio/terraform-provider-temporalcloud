@@ -1,6 +1,6 @@
 # Temporal Cloud Terraform Provider
 
-Interact with [Temporal Cloud](https://temporal.io/cloud) resources.
+Interact with [Temporal Cloud](https://temporal.io/cloud) resources.   
 
 [registry.terraform.io/providers/temporalio/temporalcloud](https://registry.terraform.io/providers/temporalio/temporalcloud/latest)
 
