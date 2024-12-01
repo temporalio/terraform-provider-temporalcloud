@@ -83,7 +83,7 @@ PEM
 				Config: config(name, 7),
 			},
 			{
-				Config: config(name, 14),
+				Config: config(name, 15),
 			},
 			// Delete testing automatically occurs in TestCase
 		},
