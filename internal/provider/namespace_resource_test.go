@@ -187,7 +187,7 @@ PEM
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
-				ResourceName:      "temporalcloud_namespace.terraform",
+				ResourceName:      "temporalcloud_namespace.test",
 			},
 			// Delete testing automatically occurs in TestCase
 		},
