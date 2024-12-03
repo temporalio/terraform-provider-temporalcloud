@@ -54,7 +54,7 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.
+- `account_access` (String) The role on the account. Must be one of owner, admin, developer, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.
 - `email` (String) The email address for the user.
 
 ### Optional
@@ -73,7 +73,7 @@ resource "temporalcloud_user" "namespace_admin" {
 Required:
 
 - `namespace_id` (String) The namespace to assign permissions to.
-- `permission` (String) The permission to assign. Must be one of [admin, write, read] (case-insensitive)
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
 
 
 <a id="nestedblock--timeouts"></a>
