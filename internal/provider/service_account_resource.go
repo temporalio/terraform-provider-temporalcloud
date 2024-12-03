@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -20,6 +21,7 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
 )
@@ -34,7 +36,7 @@ type (
 		State             types.String                             `tfsdk:"state"`
 		Name              types.String                             `tfsdk:"name"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -109,14 +111,14 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive)",
+				Description: "The role on the account. Must be one of [admin, developer, read] (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
 				},
 			},
-			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+			"namespace_accesses": schema.SetNestedAttribute{
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +135,10 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 							},
 						},
 					},
+				},
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
+					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
 		},
@@ -161,7 +167,8 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses := getNamespaceAccessesFromServiceAccountModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -182,7 +189,6 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 			},
 		},
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Service Account", err.Error())
 		return
@@ -236,7 +242,8 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	namespaceAccesses := getNamespaceAccessesFromServiceAccountModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -334,15 +341,16 @@ func (r *serviceAccountResource) ImportState(ctx context.Context, req resource.I
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag.Diagnostics, model *serviceAccountResourceModel) map[string]*identityv1.NamespaceAccess {
+func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *serviceAccountResourceModel) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	if len(elements) == 0 {
-		return nil
+		return nil, diags
 	}
 
 	namespaceAccesses := make(map[string]*identityv1.NamespaceAccess, len(elements))
@@ -350,19 +358,19 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, diags diag
 		var model serviceAccountNamespaceAccessModel
 		diags.Append(access.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil
+			return nil, diags
 		}
-		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		permission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace access permission", err.Error())
-			return nil
+			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: persmission,
+			Permission: permission,
 		}
 	}
 
-	return namespaceAccesses
+	return namespaceAccesses, diags
 }
 
 func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
@@ -376,7 +384,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 		diags.AddError("Failed to convert account access role", err.Error())
 	}
 
-	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	if len(serviceAccount.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range serviceAccount.GetSpec().GetAccess().GetNamespaceAccesses() {
@@ -397,7 +405,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if !diags.HasError() {
 			namespaceAccesses = accesses

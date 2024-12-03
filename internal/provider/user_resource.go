@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -16,7 +18,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -34,7 +35,7 @@ type (
 		State             types.String                             `tfsdk:"state"`
 		Email             types.String                             `tfsdk:"email"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.List                               `tfsdk:"namespace_accesses"`
+		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -109,14 +110,14 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import.",
+				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
 				},
 			},
-			"namespace_accesses": schema.ListNestedAttribute{
-				Description: "The list of namespace accesses.",
+			"namespace_accesses": schema.SetNestedAttribute{
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -133,6 +134,10 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							},
 						},
 					},
+				},
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
+					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
 		},
@@ -161,7 +166,8 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -201,7 +207,11 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &plan, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -220,7 +230,11 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &state, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &state, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
@@ -231,7 +245,8 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	namespaceAccesses := getNamespaceAccessesFromModel(ctx, resp.Diagnostics, &plan)
+	namespaceAccesses, d := getNamespaceAccessesFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -280,7 +295,11 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	updateUserModelFromSpec(ctx, resp.Diagnostics, &plan, user.User)
+	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &plan, user.User)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -326,15 +345,17 @@ func (r *userResource) ImportState(ctx context.Context, req resource.ImportState
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, model *userResourceModel) map[string]*identityv1.NamespaceAccess {
+func getNamespaceAccessesFromModel(ctx context.Context, model *userResourceModel) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
 	elements := make([]types.Object, 0, len(model.NamespaceAccesses.Elements()))
 	diags.Append(model.NamespaceAccesses.ElementsAs(ctx, &elements, false)...)
 	if diags.HasError() {
-		return nil
+		return nil, diags
 	}
 
 	if len(elements) == 0 {
-		return nil
+		return nil, diags
 	}
 
 	namespaceAccesses := make(map[string]*identityv1.NamespaceAccess, len(elements))
@@ -342,45 +363,46 @@ func getNamespaceAccessesFromModel(ctx context.Context, diags diag.Diagnostics, 
 		var model userNamespaceAccessModel
 		diags.Append(access.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil
+			return nil, diags
 		}
-		persmission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
+		permission, err := enums.ToNamespaceAccessPermission(model.Permission.ValueString())
 		if err != nil {
 			diags.AddError("Failed to convert namespace permission", err.Error())
-			return nil
+			return nil, diags
 		}
 		namespaceAccesses[model.NamespaceID.ValueString()] = &identityv1.NamespaceAccess{
-			Permission: persmission,
+			Permission: permission,
 		}
 	}
 
-	return namespaceAccesses
+	return namespaceAccesses, diags
 }
 
-func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state *userResourceModel, user *identityv1.User) {
+func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user *identityv1.User) diag.Diagnostics {
+	var diags diag.Diagnostics
 	state.ID = types.StringValue(user.GetId())
 	stateStr, err := enums.FromResourceState(user.GetState())
 	if err != nil {
 		diags.AddError("Failed to convert resource state", err.Error())
-		return
+		return diags
 	}
 	state.State = types.StringValue(stateStr)
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
 	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
-		return
+		return diags
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 
-	namespaceAccesses := types.ListNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
+	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
 		namespaceAccessObjects := make([]types.Object, 0)
 		for ns, namespaceAccess := range user.GetSpec().GetAccess().GetNamespaceAccesses() {
 			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
 			if err != nil {
 				diags.AddError("Failed to convert namespace access permission", err.Error())
-				return
+				return diags
 			}
 			model := userNamespaceAccessModel{
 				NamespaceID: types.StringValue(ns),
@@ -389,18 +411,20 @@ func updateUserModelFromSpec(ctx context.Context, diags diag.Diagnostics, state 
 			obj, d := types.ObjectValueFrom(ctx, userNamespaceAccessAttrs, model)
 			diags.Append(d...)
 			if diags.HasError() {
-				return
+				return diags
 			}
 			namespaceAccessObjects = append(namespaceAccessObjects, obj)
 		}
 
-		accesses, d := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, namespaceAccessObjects)
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: userNamespaceAccessAttrs}, namespaceAccessObjects)
 		diags.Append(d...)
 		if diags.HasError() {
-			return
+			return diags
 		}
 
 		namespaceAccesses = accesses
 	}
 	state.NamespaceAccesses = namespaceAccesses
+
+	return diags
 }

@@ -8,16 +8,40 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"regexp"
 	"testing"
 	"text/template"
 	"time"
 
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 )
+
+func TestNamespaceSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	// Instantiate the resource.Resource and call its Schema method
+	NewNamespaceResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	// Validate the schema
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
 
 func TestAccBasicNamespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString())
@@ -61,6 +85,11 @@ PEM
 			{
 				Config: config(name, 14),
 			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
+			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
@@ -93,6 +122,11 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 			{
 				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -150,6 +184,11 @@ PEM
 			{
 				Config: config(name, 14),
 			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
+			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
@@ -164,10 +203,11 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 		}
 
 		configArgs struct {
-			Name          string
-			RetentionDays int
-			CodecServer   *codecServer
-			ApiKeyAuth    bool
+			Name                 string
+			RetentionDays        int
+			CodecServer          *codecServer
+			ApiKeyAuth           bool
+			CertFiltersEmptyList bool
 		}
 	)
 
@@ -205,6 +245,10 @@ PEM
 
   retention_days     = {{ .RetentionDays }}
 
+  {{ if .CertFiltersEmptyList }}
+  certificate_filters = []
+  {{ end }}
+
   {{ with .CodecServer }}
   codec_server = {
     endpoint                         = "{{ .Endpoint }}"
@@ -235,6 +279,15 @@ PEM
 					Name:          name,
 					RetentionDays: 7,
 				}),
+			},
+			{
+				// Error on empty cert filers
+				Config: config(configArgs{
+					Name:                 name,
+					RetentionDays:        7,
+					CertFiltersEmptyList: true,
+				}),
+				ExpectError: regexp.MustCompile("certificate_filters list must contain at least 1 elements"),
 			},
 			{
 				Config: config(configArgs{
@@ -268,6 +321,11 @@ PEM
 					}
 					return nil
 				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
 			},
 			{
 				// remove codec server

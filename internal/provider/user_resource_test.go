@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"regexp"
 	"testing"
 	"text/template"
 
@@ -20,6 +22,28 @@ const (
 	emailDomain   = "temporal.io"
 	emailBaseAddr = "saas-cicd-prod"
 )
+
+func TestUserSchema(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	schemaRequest := fwresource.SchemaRequest{}
+	schemaResponse := &fwresource.SchemaResponse{}
+
+	// Instantiate the resource.Resource and call its Schema method
+	NewUserResource().Schema(ctx, schemaRequest, schemaResponse)
+
+	if schemaResponse.Diagnostics.HasError() {
+		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+	}
+
+	// Validate the schema
+	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+	if diagnostics.HasError() {
+		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+	}
+}
 
 func createRandomEmail() string {
 	return fmt.Sprintf("%s+terraformprovider-%s@%s", emailBaseAddr, randomString(), emailDomain)
@@ -46,13 +70,18 @@ resource "temporalcloud_user" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(emailAddr, "Read"),
+				Config: config(emailAddr, "read"),
 			},
 			{
-				Config: config(emailAddr, "Developer"),
+				Config: config(emailAddr, "developer"),
 			},
 			{
-				Config: config(emailAddr, "Admin"),
+				Config: config(emailAddr, "admin"),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
 			},
 		},
 	})
@@ -130,8 +159,8 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(configArgs{
 					Email:         emailAddr,
 					NamespaceName: randomString(),
-					NamespacePerm: "Write",
-					AccountPerm:   "Read",
+					NamespacePerm: "write",
+					AccountPerm:   "read",
 				}),
 				Check: func(state *terraform.State) error {
 					id := state.RootModule().Resources["temporalcloud_user.terraform"].Primary.Attributes["id"]
@@ -162,6 +191,112 @@ resource "temporalcloud_user" "terraform" {
 					}
 					return nil
 				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
+			},
+		},
+	})
+}
+
+func TestAccBasicUserWithEmptyNamespaceAccesses(t *testing.T) {
+	type configArgs struct {
+		Email string
+	}
+
+	emailAddr := createRandomEmail()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_user" "terraform" {
+  email = "{{ .Email }}"
+  account_access = "read" 
+  namespace_accesses = []
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template:  %v", err)
+			t.FailNow()
+		}
+
+		writer.Flush()
+		return buf.String()
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{
+					Email: emailAddr,
+				}),
+				ExpectError: regexp.MustCompile("namespace_accesses set must contain at least 1 elements, got: 0"),
+			},
+		},
+	})
+}
+
+func TestAccBasicUserWithDuplicateNamespaceAccesses(t *testing.T) {
+	type configArgs struct {
+		Email string
+	}
+
+	emailAddr := createRandomEmail()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_user" "terraform" {
+  email = "{{ .Email }}"
+  account_access = "read" 
+  namespace_accesses = [
+    {
+       namespace_id = "NS1"
+       permission = "Read"
+    },
+    {
+       namespace_id = "NS1"
+       permission = "Write"
+    }
+  ]
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template:  %v", err)
+			t.FailNow()
+		}
+
+		writer.Flush()
+		return buf.String()
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{
+					Email: emailAddr,
+				}),
+				ExpectError: regexp.MustCompile("namespace_id must be unique across all set entries"),
 			},
 		},
 	})
