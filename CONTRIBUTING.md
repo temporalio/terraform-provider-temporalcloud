@@ -24,10 +24,14 @@ We welcome all PRs. Before submitting a PR, please ensure that:
 - Your code changes are well-tested.
 - The PR includes a clear description of what you're addressing and why.
 - If the PR introduces new functionality, appropriate tests are added.
+- Run Acceptance Tests locally before submitted a non-Draft PR to ensure they pass.  See the Running Tests section located below for details.
 
 Feel free to submit a draft PR early if you need feedback or assistance during the development process. This can help identify potential improvements or issues early on.
 
 Note: When you submit your first PR, you will be asked to sign the [Temporal Contributor License Agreement (CLA)](https://gist.github.com/samarabbas/7dcd41eb1d847e12263cc961ccfdb197) before we merge your PR.
+
+Note 2: The Temporal Terraform Provider repo uses an automated test suite to run Acceptance Tests using an API Key. For security reasons, PR contributed by non Temporal team members aren't able to run the automated test suite. Before your PR is merged, a Temporal team member will likely run Acceptance Tests locally and may fork your PR in the process and resubmit the PR using the Temporal created fork. 
+
 
 ## Issues and Pull Requests Lifecycle
 
@@ -70,6 +74,8 @@ go install
 This will install the provider binary in your `$GOPATH/bin` directory.
 
 ### Running Tests
+
+The following is guidance for running tests with the TF Provider. 
 
 #### Unit Tests
 
