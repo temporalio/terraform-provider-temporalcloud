@@ -65,13 +65,18 @@ resource "temporalcloud_service_account" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name, "Read"),
+				Config: config(name, "read"),
 			},
 			{
-				Config: config(name, "Developer"),
+				Config: config(name, "developer"),
 			},
 			{
-				Config: config(name, "Admin"),
+				Config: config(name, "admin"),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_service_account.terraform",
 			},
 		},
 	})
@@ -149,8 +154,8 @@ resource "temporalcloud_service_account" "terraform" {
 				Config: config(configArgs{
 					Name:          name,
 					NamespaceName: randomString(),
-					NamespacePerm: "Write",
-					AccountPerm:   "Read",
+					NamespacePerm: "write",
+					AccountPerm:   "read",
 				}),
 				Check: func(state *terraform.State) error {
 					id := state.RootModule().Resources["temporalcloud_service_account.terraform"].Primary.Attributes["id"]
@@ -181,6 +186,11 @@ resource "temporalcloud_service_account" "terraform" {
 					}
 					return nil
 				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_service_account.terraform",
 			},
 		},
 	})

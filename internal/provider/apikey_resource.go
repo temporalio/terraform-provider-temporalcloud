@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -39,9 +38,8 @@ type (
 )
 
 var (
-	_ resource.Resource                = (*apiKeyResource)(nil)
-	_ resource.ResourceWithConfigure   = (*apiKeyResource)(nil)
-	_ resource.ResourceWithImportState = (*apiKeyResource)(nil)
+	_ resource.Resource              = (*apiKeyResource)(nil)
+	_ resource.ResourceWithConfigure = (*apiKeyResource)(nil)
 )
 
 func NewApiKeyResource() resource.Resource {
@@ -357,10 +355,6 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	}
 }
 
-func (r *apiKeyResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
-}
-
 func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.ApiKey) error {
 	state.ID = types.StringValue(apikey.GetId())
 	stateStr, err := enums.FromResourceState(apikey.GetState())
@@ -379,5 +373,6 @@ func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.Ap
 		state.Description = types.StringValue(apikey.GetSpec().GetDescription())
 	}
 	state.ExpiryTime = types.StringValue(apikey.GetSpec().GetExpiryTime().AsTime().Format(time.RFC3339))
+
 	return nil
 }
