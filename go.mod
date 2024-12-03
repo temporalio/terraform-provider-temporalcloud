@@ -15,7 +15,7 @@ require (
 	github.com/hashicorp/terraform-plugin-testing v1.11.0
 	github.com/jpillora/maplock v0.0.0-20160420012925-5c725ac6e22a
 	go.temporal.io/api v1.43.0
-	go.temporal.io/sdk v1.30.0
+	go.temporal.io/sdk v1.30.1
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.2
 )
@@ -71,7 +71,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/nexus-rpc/sdk-go v0.0.11 // indirect
+	github.com/nexus-rpc/sdk-go v0.0.12 // indirect
 	github.com/oklog/run v1.1.0 // indirect
 	github.com/pborman/uuid v1.2.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
