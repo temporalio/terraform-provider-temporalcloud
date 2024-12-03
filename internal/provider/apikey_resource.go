@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -126,6 +127,8 @@ func (r *apiKeyResource) Schema(ctx context.Context, _ resource.SchemaRequest, r
 			"disabled": schema.BoolAttribute{
 				Description: "Whether the API key is disabled.",
 				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -373,6 +376,7 @@ func updateApiKeyModelFromSpec(state *apiKeyResourceModel, apikey *identityv1.Ap
 		state.Description = types.StringValue(apikey.GetSpec().GetDescription())
 	}
 	state.ExpiryTime = types.StringValue(apikey.GetSpec().GetExpiryTime().AsTime().Format(time.RFC3339))
+	state.Disabled = types.BoolValue(apikey.GetSpec().GetDisabled())
 
 	return nil
 }
