@@ -70,13 +70,18 @@ resource "temporalcloud_user" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(emailAddr, "Read"),
+				Config: config(emailAddr, "read"),
 			},
 			{
-				Config: config(emailAddr, "Developer"),
+				Config: config(emailAddr, "developer"),
 			},
 			{
-				Config: config(emailAddr, "Admin"),
+				Config: config(emailAddr, "admin"),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
 			},
 		},
 	})
@@ -154,8 +159,8 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(configArgs{
 					Email:         emailAddr,
 					NamespaceName: randomString(),
-					NamespacePerm: "Write",
-					AccountPerm:   "Read",
+					NamespacePerm: "write",
+					AccountPerm:   "read",
 				}),
 				Check: func(state *terraform.State) error {
 					id := state.RootModule().Resources["temporalcloud_user.terraform"].Primary.Attributes["id"]
@@ -186,6 +191,11 @@ resource "temporalcloud_user" "terraform" {
 					}
 					return nil
 				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
 			},
 		},
 	})

@@ -85,6 +85,11 @@ PEM
 			{
 				Config: config(name, 14),
 			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
+			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
@@ -117,6 +122,11 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 			{
 				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -173,6 +183,11 @@ PEM
 			},
 			{
 				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -306,6 +321,11 @@ PEM
 					}
 					return nil
 				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
 			},
 			{
 				// remove codec server
