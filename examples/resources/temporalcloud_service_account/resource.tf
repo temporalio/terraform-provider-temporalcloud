@@ -19,12 +19,12 @@ resource "temporalcloud_namespace" "namespace" {
 
 resource "temporalcloud_service_account" "global_service_account" {
   name           = "admin"
-  account_access = "Admin"
+  account_access = "admin"
 }
 
 resource "temporalcloud_service_account" "namespace_admin" {
   name           = "developer"
-  account_access = "Developer"
+  account_access = "developer"
   namespace_accesses = [
     {
       namespace_id = temporalcloud_namespace.namespace.id
