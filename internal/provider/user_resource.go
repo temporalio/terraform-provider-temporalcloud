@@ -110,7 +110,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of [owner, admin, developer, read] (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
+				Description: "The role on the account. Must be one of owner, admin, developer, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
@@ -127,7 +127,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 						},
 						"permission": schema.StringAttribute{
 							CustomType:  internaltypes.CaseInsensitiveStringType{},
-							Description: "The permission to assign. Must be one of [admin, write, read] (case-insensitive)",
+							Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
 							Required:    true,
 							Validators: []validator.String{
 								stringvalidator.OneOfCaseInsensitive("admin", "write", "read"),

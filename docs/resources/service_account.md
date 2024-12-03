@@ -54,7 +54,7 @@ resource "temporalcloud_service_account" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of [admin, developer, read] (case-insensitive).
+- `account_access` (String) The role on the account. Must be one of admin, developer, or read (case-insensitive).
 - `name` (String) The name associated with the service account.
 
 ### Optional
@@ -73,7 +73,7 @@ resource "temporalcloud_service_account" "namespace_admin" {
 Required:
 
 - `namespace_id` (String) The namespace to assign permissions to.
-- `permission` (String) The permission to assign. Must be one of [admin, write, read] (case-insensitive)
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
 
 
 <a id="nestedblock--timeouts"></a>
