@@ -44,10 +44,11 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 const (
