@@ -18,8 +18,14 @@ type UnorderedStringListType struct {
 }
 
 func (t UnorderedStringListType) WithElementType(typ attr.Type) attr.TypeWithElementType {
+	elemType, ok := t.ListType.WithElementType(typ).(basetypes.ListType)
+	if !ok {
+		// Shouldn't happen. Here to make linters happy
+		panic("unexpected element type")
+	}
+
 	return UnorderedStringListType{
-		ListType: t.ListType.WithElementType(typ).(basetypes.ListType),
+		ListType: elemType,
 	}
 }
 
@@ -76,8 +82,14 @@ func (t UnorderedStringListType) ValueFromTerraform(ctx context.Context, in tfty
 }
 
 func (t UnorderedStringListType) ValueType(ctx context.Context) attr.Value {
+	listValue, ok := t.ListType.ValueType(ctx).(basetypes.ListValue)
+	if !ok {
+		// Shouldn't happen. Here to make linters happy
+		panic("unexpected value type")
+	}
+
 	return UnorderedStringListValue{
-		ListValue: t.ListType.ValueType(ctx).(basetypes.ListValue),
+		ListValue: listValue,
 	}
 }
 
@@ -95,8 +107,13 @@ func (v UnorderedStringListValue) Equal(o attr.Value) bool {
 }
 
 func (v UnorderedStringListValue) Type(ctx context.Context) attr.Type {
+	listType, ok := basetypes.ListType{}.WithElementType(v.ElementType(ctx)).(basetypes.ListType)
+	if !ok {
+		// Shouldn't happen. Here to make linters happy
+		panic("unexpected list type")
+	}
 	return UnorderedStringListType{
-		ListType: basetypes.ListType{}.WithElementType(v.ElementType(ctx)).(basetypes.ListType),
+		ListType: listType,
 	}
 }
 
