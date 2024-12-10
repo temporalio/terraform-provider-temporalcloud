@@ -67,10 +67,10 @@ func TestUnorderedStringListValue_ListSemanticEquals(t *testing.T) {
 				t.Fatal(listDiags.Errors())
 			}
 
-			listAUnorderd := UnorderedStringListValue{ListValue: listA}
-			listBUnorderd := UnorderedStringListValue{ListValue: listB}
+			listAUnordered := UnorderedStringListValue{ListValue: listA}
+			listBUnordered := UnorderedStringListValue{ListValue: listB}
 
-			equal, diags := listAUnorderd.ListSemanticEquals(context.Background(), listBUnorderd)
+			equal, diags := listAUnordered.ListSemanticEquals(context.Background(), listBUnordered)
 			if diags.HasError() {
 				t.Fatal(diags.Errors())
 			}
