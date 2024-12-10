@@ -127,8 +127,8 @@ func (v UnorderedStringListValue) ListSemanticEquals(ctx context.Context, newVal
 		return false, diags
 	}
 
-	newValueArray := make([]string, 0, len(v.ListValue.Elements()))
-	diags.Append(v.ElementsAs(ctx, &newValueArray, false)...)
+	newValueArray := make([]string, 0, len(newValue.Elements()))
+	diags.Append(newValue.ElementsAs(ctx, &newValueArray, false)...)
 	if diags.HasError() {
 		return false, diags
 	}
