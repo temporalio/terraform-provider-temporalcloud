@@ -62,15 +62,15 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                 types.String                 `tfsdk:"id"`
-		Name               types.String                 `tfsdk:"name"`
-		Regions            types.List                   `tfsdk:"regions"`
-		AcceptedClientCA   internaltypes.EncodedCAValue `tfsdk:"accepted_client_ca"`
-		RetentionDays      types.Int64                  `tfsdk:"retention_days"`
-		CertificateFilters types.List                   `tfsdk:"certificate_filters"`
-		ApiKeyAuth         types.Bool                   `tfsdk:"api_key_auth"`
-		CodecServer        types.Object                 `tfsdk:"codec_server"`
-		Endpoints          types.Object                 `tfsdk:"endpoints"`
+		ID                 types.String                           `tfsdk:"id"`
+		Name               types.String                           `tfsdk:"name"`
+		Regions            internaltypes.UnorderedStringListValue `tfsdk:"regions"`
+		AcceptedClientCA   internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
+		RetentionDays      types.Int64                            `tfsdk:"retention_days"`
+		CertificateFilters types.List                             `tfsdk:"certificate_filters"`
+		ApiKeyAuth         types.Bool                             `tfsdk:"api_key_auth"`
+		CodecServer        types.Object                           `tfsdk:"codec_server"`
+		Endpoints          types.Object                           `tfsdk:"endpoints"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -167,9 +167,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\", which is currently unsupported by the Terraform provider.",
+				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\", which is currently unsupported by the Terraform provider. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
+				CustomType: internaltypes.UnorderedStringListType{
+					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
 				PlanModifiers: []planmodifier.List{
 					listplanmodifier.RequiresReplace(),
 				},
@@ -561,6 +564,9 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	if diags.HasError() {
 		return diags
 	}
+	planRegionsUnordered := internaltypes.UnorderedStringListValue{
+		ListValue: planRegions,
+	}
 
 	certificateFilter := types.ListNull(types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs})
 	if len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()) > 0 {
@@ -634,7 +640,7 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 
 	state.Endpoints = endpointsState
-	state.Regions = planRegions
+	state.Regions = planRegionsUnordered
 	state.CertificateFilters = certificateFilter
 	state.RetentionDays = types.Int64Value(int64(ns.GetSpec().GetRetentionDays()))
 
