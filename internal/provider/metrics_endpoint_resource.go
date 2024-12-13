@@ -58,8 +58,6 @@ func (r *metricsEndpointResource) Configure(_ context.Context, req resource.Conf
 	}
 
 	r.client = cli
-
-	return
 }
 
 // Metadata returns the resource type name.
@@ -67,7 +65,7 @@ func (r *metricsEndpointResource) Metadata(_ context.Context, req resource.Metad
 	resp.TypeName = req.ProviderTypeName + "_metrics_endpoint"
 }
 
-// Schema defines the schema for the resource
+// Schema defines the schema for the resource.
 func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Configures a Temporal Cloud account's metrics",
@@ -118,6 +116,11 @@ func (r *metricsEndpointResource) Create(ctx context.Context, req resource.Creat
 	accResp, err := r.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get account information.", err.Error())
+		return
+	}
+
+	if accResp.GetAccount().GetMetrics().GetUri() != "" {
+		resp.Diagnostics.AddError("Metrics endpoint already configured.", fmt.Sprintf("account metrics endpoint already configured with url %q, remove the existing metrics configuration to manage it with Terraform", accResp.GetAccount().GetMetrics().GetUri()))
 		return
 	}
 
