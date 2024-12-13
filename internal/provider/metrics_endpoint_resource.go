@@ -177,6 +177,11 @@ func (r *metricsEndpointResource) Read(ctx context.Context, req resource.ReadReq
 		return
 	}
 
+	if accResp.GetAccount().GetMetrics().GetUri() == "" {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
 	updateMetricsEndpointModelFromSpec(&state, accResp.GetAccount())
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
