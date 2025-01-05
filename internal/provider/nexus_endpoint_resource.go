@@ -384,19 +384,20 @@ func getTargetSpecFromModel(ctx context.Context, model *nexusEndpointResourceMod
 }
 
 func getPolicySpecsFromModel(_ context.Context, model *nexusEndpointResourceModel) ([]*nexusv1.EndpointPolicySpec, diag.Diagnostics) {
-	var diags diag.Diagnostics
-
 	policySpecs := make([]*nexusv1.EndpointPolicySpec, 0, len(model.AllowedCallerNamespaces.Elements()))
 	for _, namespace := range model.AllowedCallerNamespaces.Elements() {
-		ns := namespace.(types.String).ValueString()
+		ns, ok := namespace.(types.String)
+		if !ok {
+			return nil, diag.Diagnostics{diag.NewErrorDiagnostic("Invalid namespace type", "Expected types.String")}
+		}
 		policySpecs = append(policySpecs, &nexusv1.EndpointPolicySpec{
 			Variant: &nexusv1.EndpointPolicySpec_AllowedCloudNamespacePolicySpec{
 				AllowedCloudNamespacePolicySpec: &nexusv1.AllowedCloudNamespacePolicySpec{
-					NamespaceId: ns,
+					NamespaceId: ns.ValueString(),
 				},
 			},
 		})
 	}
 
-	return policySpecs, diags
+	return policySpecs, nil
 }
