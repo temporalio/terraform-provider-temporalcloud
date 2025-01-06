@@ -11,13 +11,13 @@ import (
 )
 
 func TestAccNexusEndpointResource(t *testing.T) {
-	// Using a counter to ensure unique names across test steps
-	endpointName := fmt.Sprintf("tf-nexus-endpoint-%s-%s", time.Now().Format("2006-01-02-15-04-05"), randomStringWithLength(3))
+	timeSuffix := time.Now().Format("060102150405")
+	endpointName := fmt.Sprintf("tf-nexus-endpoint-%s-%s", timeSuffix, randomStringWithLength(3))
 	description := "test description"
-	targetNamespaceName := fmt.Sprintf("tf-nexus-target-%s-%s", time.Now().Format("060102150405"), randomStringWithLength(4))
+	targetNamespaceName := fmt.Sprintf("tf-nexus-target-%s-%s", timeSuffix, randomStringWithLength(4))
 	taskQueue := "task-queue-1"
-	callerNamespaceName := fmt.Sprintf("tf-nexus-caller-%s-%s", time.Now().Format("060102150405"), randomStringWithLength(4))
-	callerNamespace2Name := fmt.Sprintf("tf-nexus-caller2-%s-%s", time.Now().Format("060102150405"), randomStringWithLength(3))
+	callerNamespaceName := fmt.Sprintf("tf-nexus-caller-%s-%s", timeSuffix, randomStringWithLength(4))
+	callerNamespace2Name := fmt.Sprintf("tf-nexus-caller2-%s-%s", timeSuffix, randomStringWithLength(3))
 
 	updatedDescription := "updated description"
 	updatedTaskQueue := "task-queue-2"
