@@ -119,11 +119,6 @@ func (r *metricsEndpointResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	if accResp.GetAccount().GetMetrics().GetUri() != "" {
-		resp.Diagnostics.AddError("Metrics endpoint already configured.", fmt.Sprintf("account metrics endpoint already configured with url %q, remove the existing metrics configuration to manage it with Terraform", accResp.GetAccount().GetMetrics().GetUri()))
-		return
-	}
-
 	certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
