@@ -73,7 +73,7 @@ in version control. We recommend passing credentials to this provider via enviro
 				Optional:    true,
 			},
 			"allowed_account_id": schema.StringAttribute{
-				Description: "The ID of the account to operate on. Prevents accidental mutation of accounts other than that listed",
+				Description: "The ID of the account to operate on. Prevents accidental mutation of accounts other than that provided.",
 				Optional:    true,
 			},
 		},

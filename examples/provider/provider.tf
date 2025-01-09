@@ -15,4 +15,7 @@ provider "temporalcloud" {
 
   # Also can be set by environment variable `TEMPORAL_CLOUD_ALLOW_INSECURE`
   allow_insecure = false
+
+  # Also can be set by environment variable `TEMPORAL_CLOUD_ALLOWED_ACCOUNT_ID`
+  allowed_account_id = "my-temporalcloud-account-id"
 }
