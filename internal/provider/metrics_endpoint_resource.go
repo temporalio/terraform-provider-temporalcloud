@@ -268,7 +268,7 @@ func (r *metricsEndpointResource) Delete(ctx context.Context, req resource.Delet
 	metricsReq := &cloudservicev1.UpdateAccountRequest{
 		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
 		Spec: &accountv1.AccountSpec{
-			Metrics: &accountv1.MetricsSpec{},
+			Metrics: nil,
 		},
 	}
 
