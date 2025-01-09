@@ -12,7 +12,7 @@ provider "temporalcloud" {
 
 }
 
-resource "temporalcloud_account_metrics" "terraform" {
+resource "temporalcloud_metrics_endpoint" "terraform" {
 	accepted_client_ca  = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByTCCAVCgAwIBAgIRAWHkC+6JUf3s9Tq43mdp2zgwCgYIKoZIzj0EAwMwEzER
