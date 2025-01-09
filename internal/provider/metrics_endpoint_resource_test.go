@@ -8,7 +8,6 @@ import (
 )
 
 func TestAccBasicAccountMetrics(t *testing.T) {
-
 	config := func(cert string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {

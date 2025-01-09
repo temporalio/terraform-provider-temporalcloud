@@ -38,7 +38,7 @@ func generateTestCACertificate(org string) (caPEM []byte, err error) {
 		return nil, fmt.Errorf("unable to generate key: %w", err)
 	}
 
-	cert, err := x509.CreateCertificate(rand.Reader, conf, conf, key.PublicKey, key)
+	cert, err := x509.CreateCertificate(rand.Reader, conf, conf, &key.PublicKey, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate certificate: %w", err)
 	}
