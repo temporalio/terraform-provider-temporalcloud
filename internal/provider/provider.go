@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"go.temporal.io/api/cloud/cloudservice/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -27,9 +29,10 @@ type TerraformCloudProvider struct {
 
 // TerraformCloudProviderModel describes the provider data model.
 type TerraformCloudProviderModel struct {
-	APIKey        types.String `tfsdk:"api_key"`
-	Endpoint      types.String `tfsdk:"endpoint"`
-	AllowInsecure types.Bool   `tfsdk:"allow_insecure"`
+	APIKey           types.String `tfsdk:"api_key"`
+	Endpoint         types.String `tfsdk:"endpoint"`
+	AllowInsecure    types.Bool   `tfsdk:"allow_insecure"`
+	AllowedAccountID types.String `tfsdk:"allowed_account_id"`
 }
 
 func (p *TerraformCloudProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
@@ -69,6 +72,10 @@ in version control. We recommend passing credentials to this provider via enviro
 				Description: "If set to True, it allows for an insecure connection to the Temporal Cloud API. This should never be set to 'true' in production and defaults to false.",
 				Optional:    true,
 			},
+			"allowed_account_id": schema.StringAttribute{
+				Description: "The ID of the account to operate on. Prevents accidental mutation of accounts other than that provided.",
+				Optional:    true,
+			},
 		},
 	}
 }
@@ -105,6 +112,14 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 				" Either apply the source of the value first, or statically set the allow_insecure flag via environment variable or in configuration.")
 	}
 
+	if data.AllowedAccountID.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allowed_account_id"),
+			"Unknown Terraform Cloud Allowed Account ID Value",
+			"The provider cannot create a Terraform Cloud API client as there is an unknown configuration value for `allowed_account_id`."+
+				" Either apply the source of the value first, or statically set the Allowed Account ID value via environment variable or in configuration.")
+	}
+
 	apiKey := os.Getenv("TEMPORAL_CLOUD_API_KEY")
 	if !data.APIKey.IsNull() {
 		apiKey = data.APIKey.ValueString()
@@ -123,14 +138,32 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 		allowInsecure = data.AllowInsecure.ValueBool()
 	}
 
-	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
+	allowedAccountID := os.Getenv("TEMPORAL_CLOUD_ALLOWED_ACCOUNT_ID")
+	if !data.AllowedAccountID.IsNull() {
+		allowedAccountID = data.AllowedAccountID.ValueString()
+	}
+
+	cc, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", err.Error())
 		return
 	}
 
-	resp.DataSourceData = client
-	resp.ResourceData = client
+	if allowedAccountID != "" {
+		accountResp, err := cc.CloudService().GetAccount(ctx, &cloudservice.GetAccountRequest{})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to validate allowed account ID", fmt.Sprintf("failed to get account details: %s", err.Error()))
+			return
+		}
+		currentAccountID := accountResp.GetAccount().GetId()
+		if currentAccountID != allowedAccountID {
+			resp.Diagnostics.AddError("Failed to validate allowed account ID", fmt.Sprintf("current account ID '%s' does not match allowed account ID '%s'", currentAccountID, allowedAccountID))
+			return
+		}
+	}
+
+	resp.DataSourceData = cc
+	resp.ResourceData = cc
 }
 
 func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resource.Resource {
@@ -140,6 +173,7 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 		NewUserResource,
 		NewServiceAccountResource,
 		NewApiKeyResource,
+		NewMetricsEndpointResource,
 	}
 }
 
