@@ -113,7 +113,7 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 				Required: true,
 			},
 			"allowed_caller_namespaces": schema.SetAttribute{
-				Description: "Namespace(s) that are allowed to call this Endpoint.",
+				Description: "Namespace Id(s) that are allowed to call this Endpoint.",
 				ElementType: types.StringType,
 				Required:    true,
 			},
