@@ -51,7 +51,7 @@ resource "temporalcloud_nexus_endpoint" "nexus_endpoint" {
     Input / Output arguments are in the following repository:
     https://github.com/temporalio/samples-go/blob/main/nexus/service/api.go
   EOT
-  worker_target_spec = {
+  worker_target = {
     namespace_id = temporalcloud_namespace.target_namespace.id
     task_queue   = "terraform-task-queue"
   }

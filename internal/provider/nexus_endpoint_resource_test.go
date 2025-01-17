@@ -32,9 +32,9 @@ func TestAccNexusEndpointResource(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "name", endpointName),
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "description", description),
-					resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test", "worker_target_spec.namespace_id"),
-					// resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target_spec.namespace_id", targetNamespaceName + "." + accountID),
-					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target_spec.task_queue", taskQueue),
+					resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test", "worker_target.namespace_id"),
+					// resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target.namespace_id", targetNamespaceName + "." + accountID),
+					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target.task_queue", taskQueue),
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "allowed_caller_namespaces.#", "2"),
 					resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test", "id"),
 				),
@@ -50,7 +50,7 @@ func TestAccNexusEndpointResource(t *testing.T) {
 				Config: testAccNexusEndpointResourceConfig(endpointName, updatedDescription, targetNamespaceName, updatedTaskQueue, []string{callerNamespaceName}),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "description", updatedDescription),
-					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target_spec.task_queue", updatedTaskQueue),
+					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "worker_target.task_queue", updatedTaskQueue),
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "allowed_caller_namespaces.#", "1"),
 				),
 			},
@@ -92,7 +92,7 @@ resource "temporalcloud_nexus_endpoint" "test" {
   name        = %[2]q
   description = %[3]q
   
-  worker_target_spec = {
+  worker_target = {
     namespace_id = temporalcloud_namespace.target_namespace.id
     task_queue   = %[4]q
   }

@@ -29,7 +29,7 @@ type (
 		ID                      types.String `tfsdk:"id"`
 		Name                    types.String `tfsdk:"name"`
 		Description             types.String `tfsdk:"description"`
-		WorkerTargetSpec        types.Object `tfsdk:"worker_target_spec"`
+		WorkerTarget            types.Object `tfsdk:"worker_target"`
 		AllowedCallerNamespaces types.Set    `tfsdk:"allowed_caller_namespaces"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
@@ -46,7 +46,7 @@ var (
 	_ resource.ResourceWithConfigure   = (*nexusEndpointResource)(nil)
 	_ resource.ResourceWithImportState = (*nexusEndpointResource)(nil)
 
-	workerTargetSpecAttrs = map[string]attr.Type{
+	workerTargetAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
 		"task_queue":   types.StringType,
 	}
@@ -98,7 +98,7 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Sensitive:   true,
 			},
-			"worker_target_spec": schema.SingleNestedAttribute{
+			"worker_target": schema.SingleNestedAttribute{
 				Description: "A target spec for routing nexus requests to a specific cloud namespace worker.",
 				Attributes: map[string]schema.Attribute{
 					"namespace_id": schema.StringAttribute{
@@ -337,12 +337,12 @@ func updateNexusEndpointModelFromSpec(ctx context.Context, model *nexusEndpointR
 	}
 
 	nexusEndpointTargetSpec := nexusEndpoint.GetSpec().GetTargetSpec()
-	if workerSpec := nexusEndpointTargetSpec.GetWorkerTargetSpec(); workerSpec != nil {
-		workerTargetSpec := &nexusEndpointWorkerTargetModel{
-			NamespaceID: types.StringValue(workerSpec.GetNamespaceId()),
-			TaskQueue:   types.StringValue(workerSpec.GetTaskQueue()),
+	if workerTargetSpec := nexusEndpointTargetSpec.GetWorkerTargetSpec(); workerTargetSpec != nil {
+		workerTarget := &nexusEndpointWorkerTargetModel{
+			NamespaceID: types.StringValue(workerTargetSpec.GetNamespaceId()),
+			TaskQueue:   types.StringValue(workerTargetSpec.GetTaskQueue()),
 		}
-		model.WorkerTargetSpec, diags = types.ObjectValueFrom(ctx, workerTargetSpecAttrs, workerTargetSpec)
+		model.WorkerTarget, diags = types.ObjectValueFrom(ctx, workerTargetAttrs, workerTarget)
 		if diags.HasError() {
 			return diags
 		}
@@ -366,14 +366,14 @@ func updateNexusEndpointModelFromSpec(ctx context.Context, model *nexusEndpointR
 func getTargetSpecFromModel(ctx context.Context, model *nexusEndpointResourceModel) (*nexusv1.EndpointTargetSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	var workerTargetSpecModel nexusEndpointWorkerTargetModel
-	diags.Append(model.WorkerTargetSpec.As(ctx, &workerTargetSpecModel, basetypes.ObjectAsOptions{})...)
+	var workerTargetModel nexusEndpointWorkerTargetModel
+	diags.Append(model.WorkerTarget.As(ctx, &workerTargetModel, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
 	}
 	workerTargetSpec := &nexusv1.WorkerTargetSpec{
-		NamespaceId: workerTargetSpecModel.NamespaceID.ValueString(),
-		TaskQueue:   workerTargetSpecModel.TaskQueue.ValueString(),
+		NamespaceId: workerTargetModel.NamespaceID.ValueString(),
+		TaskQueue:   workerTargetModel.TaskQueue.ValueString(),
 	}
 
 	return &nexusv1.EndpointTargetSpec{

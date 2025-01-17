@@ -66,7 +66,7 @@ resource "temporalcloud_nexus_endpoint" "nexus_endpoint" {
     Input / Output arguments are in the following repository:
     https://github.com/temporalio/samples-go/blob/main/nexus/service/api.go
   EOT
-  worker_target_spec = {
+  worker_target = {
     namespace_id = temporalcloud_namespace.target_namespace.id
     task_queue   = "terraform-task-queue"
   }
@@ -82,9 +82,9 @@ resource "temporalcloud_nexus_endpoint" "nexus_endpoint" {
 
 ### Required
 
-- `allowed_caller_namespaces` (Set of String) Namespace(s) that are allowed to call this Endpoint.
+- `allowed_caller_namespaces` (Set of String) Namespace Id(s) that are allowed to call this Endpoint.
 - `name` (String) The name of the endpoint. Must be unique within an account and match `^[a-zA-Z][a-zA-Z0-9\-]*[a-zA-Z0-9]$`
-- `worker_target_spec` (Attributes) A target spec for routing nexus requests to a specific cloud namespace worker. (see [below for nested schema](#nestedatt--worker_target_spec))
+- `worker_target` (Attributes) A target spec for routing nexus requests to a specific cloud namespace worker. (see [below for nested schema](#nestedatt--worker_target))
 
 ### Optional
 
@@ -95,8 +95,8 @@ resource "temporalcloud_nexus_endpoint" "nexus_endpoint" {
 
 - `id` (String) The unique identifier of the Nexus endpoint.
 
-<a id="nestedatt--worker_target_spec"></a>
-### Nested Schema for `worker_target_spec`
+<a id="nestedatt--worker_target"></a>
+### Nested Schema for `worker_target`
 
 Required:
 
