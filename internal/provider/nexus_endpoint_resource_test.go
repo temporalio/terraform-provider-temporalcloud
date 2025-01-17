@@ -2,7 +2,6 @@ package provider
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +37,11 @@ func TestAccNexusEndpointResource(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_nexus_endpoint.test", "allowed_caller_namespaces.#", "2"),
 					resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test", "id"),
 				),
+			},
+			{
+				Config:             testAccNexusEndpointResourceConfig(endpointName, description, targetNamespaceName, taskQueue, []string{callerNamespace2Name, callerNamespaceName}),
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: false,
 			},
 			// ImportState testing
 			{
@@ -79,9 +83,9 @@ func testAccNexusEndpointResourceConfig(name, description, targetNamespaceName, 
 	retentionDays := 1
 	allowedNamespaceIDs := []string{}
 	namespacesConfig := testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, region, retentionDays)
-	for i, allowedNamespace := range allowedNamespaces {
-		namespacesConfig += testAccNamespaceResourceConfig("allowed_namespace_"+strconv.Itoa(i), allowedNamespace, region, retentionDays)
-		allowedNamespaceIDs = append(allowedNamespaceIDs, "temporalcloud_namespace.allowed_namespace_"+strconv.Itoa(i)+".id")
+	for _, allowedNamespace := range allowedNamespaces {
+		namespacesConfig += testAccNamespaceResourceConfig("allowed_namespace_"+allowedNamespace, allowedNamespace, region, retentionDays)
+		allowedNamespaceIDs = append(allowedNamespaceIDs, "temporalcloud_namespace.allowed_namespace_"+allowedNamespace+".id")
 	}
 	allowedNamespaceIDsStr := fmt.Sprintf("[%s]", strings.Join(allowedNamespaceIDs, ", "))
 
