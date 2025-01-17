@@ -79,7 +79,7 @@ resource "temporalcloud_namespace" %[1]q {
 }
 
 func testAccNexusEndpointResourceConfig(name, description, targetNamespaceName, taskQueue string, allowedNamespaces []string) string {
-	region := "aws-us-west-2"
+	region := "aws-us-east-1"
 	retentionDays := 1
 	allowedNamespaceIDs := []string{}
 	namespacesConfig := testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, region, retentionDays)
