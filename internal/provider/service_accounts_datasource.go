@@ -112,7 +112,7 @@ func (d *serviceAccountsDataSource) Schema(ctx context.Context, req datasource.S
 							Computed:    true,
 						},
 						"namespace_accesses": schema.SetNestedAttribute{
-							Description: "The set of Namespace permissions for this Service Account. This set includes each namespace with namespace role for every namespcae that the service account has access to.",
+							Description: "The set of namespace permissions for this service account, including each namespace and its role.",
 							Optional:    true,
 							Computed:    true,
 							NestedObject: schema.NestedAttributeObject{
