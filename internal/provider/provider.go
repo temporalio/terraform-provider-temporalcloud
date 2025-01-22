@@ -182,6 +182,7 @@ func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datas
 	return []func() datasource.DataSource{
 		NewRegionsDataSource,
 		NewNamespacesDataSource,
+		NewServiceAccountsDataSource,
 	}
 }
 
