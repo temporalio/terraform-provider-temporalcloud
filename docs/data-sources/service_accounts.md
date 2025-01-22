@@ -25,7 +25,7 @@ Fetches details about all Service Accounts.
 
 Optional:
 
-- `namespace_accesses` (Attributes Set) The set of Namespace permissions for this Service Account. This set includes each namespace with namespace role for every namespcae that the service account has access to. (see [below for nested schema](#nestedatt--service_accounts--namespace_accesses))
+- `namespace_accesses` (Attributes Set) The set of namespace permissions for this service account, including each namespace and its role. (see [below for nested schema](#nestedatt--service_accounts--namespace_accesses))
 
 Read-Only:
 
