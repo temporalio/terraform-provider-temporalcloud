@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -111,7 +112,7 @@ func (d *serviceAccountsDataSource) Schema(ctx context.Context, req datasource.S
 							Computed:    true,
 						},
 						"namespace_accesses": schema.SetNestedAttribute{
-							Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces.",
+							Description: "The set of Namespace permissions for this Service Account. This set includes each namespace with namespace role for every namespcae that the service account has access to.",
 							Optional:    true,
 							Computed:    true,
 							NestedObject: schema.NestedAttributeObject{
@@ -224,6 +225,13 @@ func (d *serviceAccountsDataSource) Read(ctx context.Context, req datasource.Rea
 	}
 
 	state.ID = types.StringValue("terraform")
+	accResp, err := d.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get account information.", err.Error())
+		return
+	}
+
+	state.ID = types.StringValue(fmt.Sprintf("account-%s-service-accounts", accResp.GetAccount().GetId()))
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }
