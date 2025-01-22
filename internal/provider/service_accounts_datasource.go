@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -45,11 +44,6 @@ type (
 var (
 	_ datasource.DataSource              = (*serviceAccountsDataSource)(nil)
 	_ datasource.DataSourceWithConfigure = (*serviceAccountsDataSource)(nil)
-
-	serviceAccountNSAccessAttrs = map[string]attr.Type{
-		"namespace_id": types.StringType,
-		"permission":   types.StringType,
-	}
 )
 
 func NewServiceAccountsDataSource() datasource.DataSource {
