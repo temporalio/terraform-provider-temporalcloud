@@ -218,7 +218,6 @@ func (d *serviceAccountsDataSource) Read(ctx context.Context, req datasource.Rea
 
 	}
 
-	state.ID = types.StringValue("terraform")
 	accResp, err := d.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get account information.", err.Error())
