@@ -46,7 +46,7 @@ func TestUserSchema(t *testing.T) {
 }
 
 func createRandomEmail() string {
-	return fmt.Sprintf("%s+terraformprovider-%s@%s", emailBaseAddr, randomString(), emailDomain)
+	return fmt.Sprintf("%s+terraformprovider-%s@%s", emailBaseAddr, randomString(10), emailDomain)
 }
 
 func TestAccBasicUser(t *testing.T) {
@@ -158,7 +158,7 @@ resource "temporalcloud_user" "terraform" {
 			{
 				Config: config(configArgs{
 					Email:         emailAddr,
-					NamespaceName: randomString(),
+					NamespaceName: randomString(10),
 					NamespacePerm: "write",
 					AccountPerm:   "read",
 				}),
