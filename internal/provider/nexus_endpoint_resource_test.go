@@ -11,12 +11,12 @@ import (
 
 func TestAccNexusEndpointResource(t *testing.T) {
 	timeSuffix := time.Now().Format("060102150405")
-	endpointName := fmt.Sprintf("tf-nexus-endpoint-%s-%s", timeSuffix, randomStringWithLength(3))
+	endpointName := fmt.Sprintf("tf-nexus-endpoint-%s-%s", timeSuffix, randomString(3))
 	description := "test description"
-	targetNamespaceName := fmt.Sprintf("tf-nexus-target-%s-%s", timeSuffix, randomStringWithLength(4))
+	targetNamespaceName := fmt.Sprintf("tf-nexus-target-%s-%s", timeSuffix, randomString(4))
 	taskQueue := "task-queue-1"
-	callerNamespaceName := fmt.Sprintf("tf-nexus-caller-%s-%s", timeSuffix, randomStringWithLength(4))
-	callerNamespace2Name := fmt.Sprintf("tf-nexus-caller2-%s-%s", timeSuffix, randomStringWithLength(3))
+	callerNamespaceName := fmt.Sprintf("tf-nexus-caller-%s-%s", timeSuffix, randomString(4))
+	callerNamespace2Name := fmt.Sprintf("tf-nexus-caller2-%s-%s", timeSuffix, randomString(3))
 
 	updatedDescription := "updated description"
 	updatedTaskQueue := "task-queue-2"

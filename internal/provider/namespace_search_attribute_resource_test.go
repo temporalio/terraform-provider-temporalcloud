@@ -33,7 +33,7 @@ func TestSearchAttrSchema(t *testing.T) {
 }
 
 func TestAccNamespaceWithSearchAttributes(t *testing.T) {
-	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString())
+	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString(10))
 	config := func(name string, saName string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -95,7 +95,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 }
 
 func TestAccNamespaceImportSearchAttribute(t *testing.T) {
-	name := fmt.Sprintf("%s-%s", "tf-search-attribute-import", randomString())
+	name := fmt.Sprintf("%s-%s", "tf-search-attribute-import", randomString(10))
 	config := func(name string, saName string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
@@ -152,7 +152,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
 }
 
 func TestAccNamespaceWithSearchAttributesUpdate(t *testing.T) {
-	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString())
+	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString(10))
 	config := func(name string, retentionDays int) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {

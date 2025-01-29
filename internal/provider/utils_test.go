@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func randomStringWithLength(length int) string {
+func randomString(length int) string {
 	r := rand.New(rand.NewSource(time.Now().UTC().UnixNano()))
 	const charset = "abcdefghijklmnopqrstuvwxyz"
 	b := make([]byte, length)
