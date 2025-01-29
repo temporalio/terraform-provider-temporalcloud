@@ -37,7 +37,7 @@ func TestAPIKeySchema(t *testing.T) {
 }
 
 func createRandomApiKeyName() string {
-	return fmt.Sprintf("key-terraformprovider-%s", randomString())
+	return fmt.Sprintf("key-terraformprovider-%s", randomString(10))
 }
 
 func getExpiryTime() string {
