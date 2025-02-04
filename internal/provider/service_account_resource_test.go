@@ -41,7 +41,7 @@ func TestServiceAccountSchema(t *testing.T) {
 }
 
 func createRandomName() string {
-	return fmt.Sprintf("%s-terraformprovider-name", randomString())
+	return fmt.Sprintf("%s-terraformprovider-name", randomString(10))
 }
 
 func TestAccBasicServiceAccount(t *testing.T) {
@@ -153,7 +153,7 @@ resource "temporalcloud_service_account" "terraform" {
 			{
 				Config: config(configArgs{
 					Name:          name,
-					NamespaceName: randomString(),
+					NamespaceName: randomString(10),
 					NamespacePerm: "write",
 					AccountPerm:   "read",
 				}),
@@ -311,8 +311,8 @@ func TestAccBasicServiceAccountOrderingNamespaceAccesses(t *testing.T) {
 	}
 
 	name := createRandomName()
-	namespaceName := fmt.Sprintf("%s-%s", "tf-sa-namespace", randomString())
-	namespaceName2 := fmt.Sprintf("%s-%s", "tf-sa-namespace", randomString())
+	namespaceName := fmt.Sprintf("%s-%s", "tf-sa-namespace", randomString(10))
+	namespaceName2 := fmt.Sprintf("%s-%s", "tf-sa-namespace", randomString(10))
 
 	tmpl := template.Must(template.New("config").Parse(`
 provider "temporalcloud" {
