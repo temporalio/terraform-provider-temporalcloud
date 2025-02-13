@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -173,6 +174,7 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
+		AsyncOperationId: uuid.New().String(),
 	})
 
 	if err != nil {
@@ -267,7 +269,8 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
-		ResourceVersion: nexusEndpoint.GetEndpoint().GetResourceVersion(),
+		ResourceVersion:  nexusEndpoint.GetEndpoint().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Nexus endpoint", err.Error())
@@ -319,8 +322,9 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 	defer cancel()
 
 	svcResp, err := r.client.CloudService().DeleteNexusEndpoint(ctx, &cloudservicev1.DeleteNexusEndpointRequest{
-		EndpointId:      state.ID.ValueString(),
-		ResourceVersion: nexusEndpoint.GetEndpoint().GetResourceVersion(),
+		EndpointId:       state.ID.ValueString(),
+		ResourceVersion:  nexusEndpoint.GetEndpoint().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete Nexus endpoint", err.Error())
