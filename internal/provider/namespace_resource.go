@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/google/uuid"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
@@ -341,7 +342,8 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
-		Spec: spec,
+		Spec:             spec,
+		AsyncOperationId: uuid.New().String(),
 	})
 
 	if err != nil {
@@ -468,9 +470,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-		Namespace:       plan.ID.ValueString(),
-		Spec:            spec,
-		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
+		Namespace:        plan.ID.ValueString(),
+		Spec:             spec,
+		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
@@ -522,8 +525,9 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 	svcResp, err := r.client.CloudService().DeleteNamespace(ctx, &cloudservicev1.DeleteNamespaceRequest{
-		Namespace:       state.ID.ValueString(),
-		ResourceVersion: currentNs.GetNamespace().GetResourceVersion(),
+		Namespace:        state.ID.ValueString(),
+		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete namespace", err.Error())

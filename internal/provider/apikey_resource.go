@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"time"
 
@@ -191,6 +192,7 @@ func (r *apiKeyResource) Create(ctx context.Context, req resource.CreateRequest,
 			ExpiryTime:  expiryTimestamp,
 			Disabled:    disabled,
 		},
+		AsyncOperationId: uuid.New().String(),
 	})
 
 	if err != nil {
@@ -293,7 +295,8 @@ func (r *apiKeyResource) Update(ctx context.Context, req resource.UpdateRequest,
 			ExpiryTime:  expiryTimestamp,
 			Disabled:    disabled,
 		},
-		ResourceVersion: apiKey.GetApiKey().GetResourceVersion(),
+		ResourceVersion:  apiKey.GetApiKey().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update API key", err.Error())
@@ -345,8 +348,9 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 	defer cancel()
 
 	svcResp, err := r.client.CloudService().DeleteApiKey(ctx, &cloudservicev1.DeleteApiKeyRequest{
-		KeyId:           state.ID.ValueString(),
-		ResourceVersion: apiKey.GetApiKey().GetResourceVersion(),
+		KeyId:            state.ID.ValueString(),
+		ResourceVersion:  apiKey.GetApiKey().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete API key", err.Error())

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -137,9 +138,10 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 
 		spec.GetSearchAttributes()[plan.Name.ValueString()] = saType
 		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-			Namespace:       plan.NamespaceID.ValueString(),
-			Spec:            spec,
-			ResourceVersion: ns.GetNamespace().GetResourceVersion(),
+			Namespace:        plan.NamespaceID.ValueString(),
+			Spec:             spec,
+			ResourceVersion:  ns.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
@@ -244,9 +246,10 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 		// Assumption: a search attribute named plan.Name already exists
 		spec.GetSearchAttributes()[plan.Name.ValueString()] = saType
 		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-			Namespace:       plan.NamespaceID.ValueString(),
-			Spec:            spec,
-			ResourceVersion: ns.GetNamespace().GetResourceVersion(),
+			Namespace:        plan.NamespaceID.ValueString(),
+			Spec:             spec,
+			ResourceVersion:  ns.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
 		})
 		if err != nil {
 			resp.Diagnostics.AddError("Failed to update namespace", err.Error())

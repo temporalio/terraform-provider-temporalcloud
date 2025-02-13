@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/google/uuid"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -138,6 +139,7 @@ func (r *metricsEndpointResource) Create(ctx context.Context, req resource.Creat
 				AcceptedClientCa: certs,
 			},
 		},
+		AsyncOperationId: uuid.New().String(),
 	}
 
 	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
@@ -219,6 +221,7 @@ func (r *metricsEndpointResource) Update(ctx context.Context, req resource.Updat
 				AcceptedClientCa: certs,
 			},
 		},
+		AsyncOperationId: uuid.New().String(),
 	}
 
 	updateCtx, cancel := context.WithTimeout(ctx, updateTimeout)
@@ -270,6 +273,7 @@ func (r *metricsEndpointResource) Delete(ctx context.Context, req resource.Delet
 		Spec: &accountv1.AccountSpec{
 			Metrics: nil,
 		},
+		AsyncOperationId: uuid.New().String(),
 	}
 
 	deleteCtx, cancel := context.WithTimeout(ctx, deleteTimeout)

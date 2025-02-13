@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 
@@ -188,6 +189,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
+		AsyncOperationId: uuid.New().String(),
 	})
 
 	if err != nil {
@@ -275,7 +277,8 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
-		ResourceVersion: currentUser.GetUser().GetResourceVersion(),
+		ResourceVersion:  currentUser.GetUser().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update user", err.Error())
@@ -328,8 +331,9 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	defer cancel()
 
 	svcResp, err := r.client.CloudService().DeleteUser(ctx, &cloudservicev1.DeleteUserRequest{
-		UserId:          state.ID.ValueString(),
-		ResourceVersion: currentUser.GetUser().GetResourceVersion(),
+		UserId:           state.ID.ValueString(),
+		ResourceVersion:  currentUser.GetUser().GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete user", err.Error())
