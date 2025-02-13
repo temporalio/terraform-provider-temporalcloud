@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -188,6 +189,7 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create Service Account", err.Error())
@@ -272,7 +274,8 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
-		ResourceVersion: currentServiceAccount.ServiceAccount.GetResourceVersion(),
+		ResourceVersion:  currentServiceAccount.ServiceAccount.GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update Service Account", err.Error())
@@ -326,6 +329,7 @@ func (r *serviceAccountResource) Delete(ctx context.Context, req resource.Delete
 	svcResp, err := r.client.CloudService().DeleteServiceAccount(ctx, &cloudservicev1.DeleteServiceAccountRequest{
 		ServiceAccountId: state.ID.ValueString(),
 		ResourceVersion:  currentServiceAccount.ServiceAccount.GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to delete Service Account", err.Error())
