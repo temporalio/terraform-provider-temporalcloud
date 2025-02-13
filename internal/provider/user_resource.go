@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -228,6 +231,16 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get user", err.Error())
 		return
 	}
@@ -323,6 +336,15 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get current user status", err.Error())
 		return
 	}
@@ -336,6 +358,15 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to delete user", err.Error())
 		return
 	}
