@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -233,6 +236,16 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get API key", err.Error())
 		return
 	}
@@ -340,6 +353,15 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get current API key status", err.Error())
 		return
 	}
@@ -353,6 +375,15 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to delete API key", err.Error())
 		return
 	}
