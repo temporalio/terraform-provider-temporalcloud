@@ -4,12 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -21,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
@@ -229,7 +227,7 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 		ServiceAccountId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Service Account Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -332,7 +330,7 @@ func (r *serviceAccountResource) Delete(ctx context.Context, req resource.Delete
 		ServiceAccountId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Service Account Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -354,7 +352,7 @@ func (r *serviceAccountResource) Delete(ctx context.Context, req resource.Delete
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Service Account Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

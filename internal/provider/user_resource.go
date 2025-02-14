@@ -4,13 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -22,11 +17,14 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	identityv1 "go.temporal.io/api/cloud/identity/v1"
+	"google.golang.org/grpc/codes"
 )
 
 type (
@@ -231,7 +229,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -336,7 +334,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -358,7 +356,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

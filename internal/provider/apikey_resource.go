@@ -7,7 +7,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -236,7 +235,7 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -353,7 +352,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -375,7 +374,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

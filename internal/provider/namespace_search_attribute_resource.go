@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -189,7 +188,7 @@ func (r *namespaceSearchAttributeResource) Read(ctx context.Context, req resourc
 		Namespace: state.NamespaceID.ValueString(),
 	})
 	if err != nil {
-		switch status.Code(err) {
+		switch client.StatusCode(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Search Attribute Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
