@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/google/uuid"
-
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc/codes"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -213,6 +214,16 @@ func (r *nexusEndpointResource) Read(ctx context.Context, req resource.ReadReque
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch client.StatusCode(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get Nexus endpoint", err.Error())
 		return
 	}
@@ -314,6 +325,15 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
+		switch client.StatusCode(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get current Nexus endpoint status", err.Error())
 		return
 	}
@@ -327,6 +347,15 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
+		switch client.StatusCode(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to delete Nexus endpoint", err.Error())
 		return
 	}
