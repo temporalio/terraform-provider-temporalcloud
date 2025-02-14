@@ -13,7 +13,9 @@ func StatusCode(err error) codes.Code {
 
 	if serviceErr, ok := err.(serviceerror.ServiceError); ok {
 		st := serviceErr.Status()
-		return st.Code()
+		if st != nil {
+			return st.Code()
+		}
 	}
 
 	return status.Code(err)
