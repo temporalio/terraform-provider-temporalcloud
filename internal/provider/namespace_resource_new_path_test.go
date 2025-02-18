@@ -196,7 +196,7 @@ provider "temporalcloud" {
 }
 
 resource "temporalcloud_namespace" "test" {
-  name               = "{{ .Name }}-{{ .ApiKeyAuth }}"
+  name               = "{{ .ApiKeyAuth }}-{{ .Name }}"
   regions            = ["aws-us-east-1"]
 
 	  {{ if .ApiKeyAuth }}
