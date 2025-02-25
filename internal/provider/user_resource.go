@@ -347,6 +347,16 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
+	// API will not allow deletion of account owners. Remove from state, add a warning, but don't attempt the API call.
+	if currentUser.GetUser() != nil && currentUser.GetUser().GetSpec().GetAccess().GetAccountAccess().GetRole() == identityv1.AccountAccess_ROLE_OWNER {
+		resp.Diagnostics.AddWarning(
+			"Delete Ignored",
+			"The Temporal Cloud API does not support deleting an account owner. Terraform will silently drop this resource but will not delete the Temporal Cloud User.",
+		)
+
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 
