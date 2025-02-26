@@ -301,3 +301,76 @@ resource "temporalcloud_user" "terraform" {
 		},
 	})
 }
+
+func TestAccBasicUserWithMultipleNamespaceAccesses(t *testing.T) {
+	type configArgs struct {
+		Email         string
+		NamespaceName string
+	}
+
+	emailAddr := createRandomEmail()
+	nsName := randomString(10)
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "test" {
+  name               = "{{ .NamespaceName }}"
+  regions            = ["aws-us-east-1"]
+  api_key_auth       = true
+
+  retention_days = 7
+}
+
+resource "temporalcloud_namespace" "test2" {
+  name               = "{{ .NamespaceName }}2"
+  regions            = ["aws-us-east-1"]
+  api_key_auth       = true
+
+  retention_days = 7
+}
+
+resource "temporalcloud_user" "terraform" {
+  email = "{{ .Email }}"
+  account_access = "read" 
+  namespace_accesses = [
+    {
+      namespace_id = temporalcloud_namespace.test.id
+      permission = "Read"
+    },
+    {
+      namespace_id = temporalcloud_namespace.test2.id
+      permission = "Write"
+    },
+  ]
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template:  %v", err)
+			t.FailNow()
+		}
+
+		writer.Flush()
+		return buf.String()
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{
+					Email:         emailAddr,
+					NamespaceName: nsName,
+				}),
+			},
+		},
+	})
+}
