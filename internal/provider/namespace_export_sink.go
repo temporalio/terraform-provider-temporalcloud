@@ -163,6 +163,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					"enabled": schema.BoolAttribute{
 						Description: "A flag indicating whether the export sink is enabled or not.",
 						Required:    false,
+						Computed:    true,
 						Default:     booldefault.StaticBool(true),
 					},
 					"s3": schema.SingleNestedAttribute{
@@ -372,6 +373,16 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 	var s3Spec internaltypes.S3SpecModel
 	var gcsSpec internaltypes.GCSSpecModel
 	diags.Append(plan.Spec.As(ctx, &spec, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	diags.Append(spec.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	diags.Append(spec.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
 	}
