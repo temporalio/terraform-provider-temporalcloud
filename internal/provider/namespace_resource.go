@@ -47,8 +47,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
