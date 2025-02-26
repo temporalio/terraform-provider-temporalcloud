@@ -168,7 +168,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					},
 					"s3": schema.SingleNestedAttribute{
 						Description: "The S3 configuration details when destination_type is S3.",
-						Required:    true,
+						Optional:    true,
 						Attributes: map[string]schema.Attribute{
 							"role_name": schema.StringAttribute{
 								Description: "The IAM role that Temporal Cloud assumes for writing records to the customer's S3 bucket.",
@@ -194,7 +194,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					},
 					"gcs": schema.SingleNestedAttribute{
 						Description: " The GCS configuration details when destination_type is GCS.",
-						Required:    true,
+						Optional:    true,
 						Attributes: map[string]schema.Attribute{
 							"sa_id": schema.StringAttribute{
 								Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.",
