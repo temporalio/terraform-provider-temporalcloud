@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"go.temporal.io/api/cloud/region/v1"
+	"go.temporal.io/cloud-sdk/api/region/v1"
 )
 
 var (

@@ -24,8 +24,8 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	identityv1 "go.temporal.io/api/cloud/identity/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 )
 
 type (

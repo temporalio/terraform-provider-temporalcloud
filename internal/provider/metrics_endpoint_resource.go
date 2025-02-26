@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+
 	"github.com/google/uuid"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -14,8 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	accountv1 "go.temporal.io/api/cloud/account/v1"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	accountv1 "go.temporal.io/cloud-sdk/api/account/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -151,7 +152,7 @@ func (r *metricsEndpointResource) Create(ctx context.Context, req resource.Creat
 		return
 	}
 
-	if err := client.AwaitAsyncOperation(createCtx, r.client.CloudOperationsClient, metricsResp.GetAsyncOperation()); err != nil {
+	if err := client.AwaitAsyncOperation(createCtx, r.client, metricsResp.GetAsyncOperation()); err != nil {
 		resp.Diagnostics.AddError("Failed to create metrics endpoint resource.", err.Error())
 		return
 	}
@@ -233,7 +234,7 @@ func (r *metricsEndpointResource) Update(ctx context.Context, req resource.Updat
 		return
 	}
 
-	if err := client.AwaitAsyncOperation(updateCtx, r.client.CloudOperationsClient, metricsResp.GetAsyncOperation()); err != nil {
+	if err := client.AwaitAsyncOperation(updateCtx, r.client, metricsResp.GetAsyncOperation()); err != nil {
 		resp.Diagnostics.AddError("Failed to update metrics endpoint resource.", err.Error())
 		return
 	}
@@ -285,7 +286,7 @@ func (r *metricsEndpointResource) Delete(ctx context.Context, req resource.Delet
 		return
 	}
 
-	if err := client.AwaitAsyncOperation(deleteCtx, r.client.CloudOperationsClient, metricsResp.GetAsyncOperation()); err != nil {
+	if err := client.AwaitAsyncOperation(deleteCtx, r.client, metricsResp.GetAsyncOperation()); err != nil {
 		resp.Diagnostics.AddError("Failed to delete metrics endpoint resource", err.Error())
 		return
 	}

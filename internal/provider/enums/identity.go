@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.temporal.io/api/cloud/identity/v1"
+	"go.temporal.io/cloud-sdk/api/identity/v1"
 )
 
 var (
@@ -17,19 +17,19 @@ var (
 func ToOwnerType(s string) (identity.OwnerType, error) {
 	switch strings.ToLower(s) {
 	case "user":
-		return identity.OWNER_TYPE_USER, nil
+		return identity.OwnerType_OWNER_TYPE_USER, nil
 	case "service-account":
-		return identity.OWNER_TYPE_SERVICE_ACCOUNT, nil
+		return identity.OwnerType_OWNER_TYPE_SERVICE_ACCOUNT, nil
 	default:
-		return identity.OWNER_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidOwnerType, s)
+		return identity.OwnerType_OWNER_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidOwnerType, s)
 	}
 }
 
 func FromOwnerType(t identity.OwnerType) (string, error) {
 	switch t {
-	case identity.OWNER_TYPE_USER:
+	case identity.OwnerType_OWNER_TYPE_USER:
 		return "user", nil
-	case identity.OWNER_TYPE_SERVICE_ACCOUNT:
+	case identity.OwnerType_OWNER_TYPE_SERVICE_ACCOUNT:
 		return "service-account", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidOwnerType, t)
