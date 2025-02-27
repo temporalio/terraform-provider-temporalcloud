@@ -25,6 +25,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -38,7 +39,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"google.golang.org/grpc/codes"
 
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
@@ -52,8 +55,9 @@ type (
 	}
 
 	namespaceExportSinkResourceModel struct {
+		ID        types.String   `tfsdk:"id"`
 		Namespace types.String   `tfsdk:"namespace"`
-		Spec      types.Object   `tfsdk:"sink_spec"`
+		Spec      types.Object   `tfsdk:"spec"`
 		Timeouts  timeouts.Value `tfsdk:"timeouts"`
 	}
 
@@ -127,7 +131,6 @@ func (r *namespaceExportSinkResource) Configure(ctx context.Context, req resourc
 			"Unexpected Data Source Configure Type",
 			fmt.Sprintf("Expected *client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
-
 		return
 	}
 
@@ -143,8 +146,12 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 		Description: "Provisions a namespace export sink.",
 		Attributes: map[string]schema.Attribute{
 			"namespace": schema.StringAttribute{
-				Description: "The namespace under which the sink is configured.",
+				Description: "The namespace under which the sink is configured. It's needed to be in the format of <namespace>.<account_id>",
 				Required:    true,
+			},
+			"id": schema.StringAttribute{
+				Description: "The unique identifier of the namespace export sink.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -162,9 +169,9 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					},
 					"enabled": schema.BoolAttribute{
 						Description: "A flag indicating whether the export sink is enabled or not.",
-						Required:    false,
 						Computed:    true,
 						Default:     booldefault.StaticBool(true),
+						Optional:    true,
 					},
 					"s3": schema.SingleNestedAttribute{
 						Description: "The S3 configuration details when destination_type is S3.",
@@ -217,6 +224,12 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				},
 			},
 		},
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Delete: true,
+			}),
+		},
 	}
 }
 
@@ -254,7 +267,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to create namespace export sink", err.Error())
+		resp.Diagnostics.AddError("Failed to get namespace export sink creation status", err.Error())
 		return
 	}
 
@@ -268,7 +281,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink())...)
+	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink(), plan.Namespace.ValueString())...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -276,7 +289,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func updateSinkModelFromSpec(ctx context.Context, plan *namespaceExportSinkResourceModel, sink *namespacev1.ExportSink) diag.Diagnostics {
+func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkResourceModel, sink *namespacev1.ExportSink, namespace string) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	s3Obj := types.ObjectNull(s3SpecModelAttrTypes)
@@ -310,16 +323,15 @@ func updateSinkModelFromSpec(ctx context.Context, plan *namespaceExportSinkResou
 		}
 	}
 
-	plan.Spec, diags = types.ObjectValueFrom(ctx, namespaceExportSinkSpecModelAttrTypes, namespaceExportSinkSpecModel{
+	state.Spec, diags = types.ObjectValueFrom(ctx, namespaceExportSinkSpecModelAttrTypes, namespaceExportSinkSpecModel{
 		Name:    types.StringValue(sink.GetName()),
 		Enabled: types.BoolValue(sink.GetSpec().GetEnabled()),
 		S3:      s3Obj,
 		Gcs:     gcsObj,
 	})
 
-	if diags.HasError() {
-		return diags
-	}
+	state.Namespace = types.StringValue(namespace)
+	state.ID = types.StringValue(fmt.Sprintf("%s,%s", namespace, sink.GetName()))
 
 	return diags
 }
@@ -331,15 +343,30 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 		return
 	}
 
-	sinkSpec, diags := getSinkSpecFromModel(ctx, &plan)
+	deleteTimeout, diags := plan.Timeouts.Delete(ctx, defaultDeleteTimeout)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	deleteTimeout, diags := plan.Timeouts.Delete(ctx, defaultDeleteTimeout)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
+	namespace, sinkName := getNamespaceAndSinkNameFromID(plan.ID.ValueString())
+	currentSink, err := r.client.CloudService().GetNamespaceExportSink(ctx, &cloudservicev1.GetNamespaceExportSinkRequest{
+		Namespace: namespace,
+		Name:      sinkName,
+	})
+
+	if err != nil {
+		switch client.StatusCode(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
+				"id": plan.ID.ValueString(),
+			})
+
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
+		resp.Diagnostics.AddError("Failed to get namespace export sink", err.Error())
 		return
 	}
 
@@ -347,8 +374,9 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 	defer cancel()
 
 	svcResp, err := r.client.CloudService().DeleteNamespaceExportSink(ctx, &cloudservicev1.DeleteNamespaceExportSinkRequest{
-		Namespace:        plan.Namespace.ValueString(),
-		Name:             sinkSpec.GetName(),
+		Namespace:        namespace,
+		Name:             sinkName,
+		ResourceVersion:  currentSink.GetSink().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
 
@@ -358,7 +386,7 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to delete namespace export sink", err.Error())
+		resp.Diagnostics.AddError("Failed to get namespace export sink deletion status", err.Error())
 		return
 	}
 }
@@ -370,19 +398,7 @@ func (r *namespaceExportSinkResource) ImportState(ctx context.Context, req resou
 func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	var spec internaltypes.ExportSinkSpecModel
-	var s3Spec internaltypes.S3SpecModel
-	var gcsSpec internaltypes.GCSSpecModel
 	diags.Append(plan.Spec.As(ctx, &spec, basetypes.ObjectAsOptions{})...)
-	if diags.HasError() {
-		return nil, diags
-	}
-
-	diags.Append(spec.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
-	if diags.HasError() {
-		return nil, diags
-	}
-
-	diags.Append(spec.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
 	}
@@ -394,6 +410,12 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 	}
 
 	if !spec.S3.IsNull() {
+		var s3Spec internaltypes.S3SpecModel
+		diags.Append(spec.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
 		return &namespacev1.ExportSinkSpec{
 			Name:    spec.Name,
 			Enabled: spec.Enabled,
@@ -406,6 +428,12 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 			},
 		}, nil
 	} else if !spec.Gcs.IsNull() {
+		var gcsSpec internaltypes.GCSSpecModel
+		diags.Append(spec.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
 		return &namespacev1.ExportSinkSpec{
 			Name:    spec.Name,
 			Enabled: spec.Enabled,
@@ -422,31 +450,39 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 }
 
 func (r *namespaceExportSinkResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	var plan namespaceExportSinkResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &plan)...)
+	var state namespaceExportSinkResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	spec, diags := getSinkSpecFromModel(ctx, &plan)
-	if diags.HasError() {
-		return
-	}
+	namespace, sinkName := getNamespaceAndSinkNameFromID(state.ID.ValueString())
 
 	sink, err := r.client.CloudService().GetNamespaceExportSink(ctx, &cloudservicev1.GetNamespaceExportSinkRequest{
-		Namespace: plan.Namespace.ValueString(),
-		Name:      spec.GetName(),
+		Namespace: namespace,
+		Name:      sinkName,
 	})
 	if err != nil {
+		switch client.StatusCode(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			resp.State.RemoveResource(ctx)
+			return
+		}
+
 		resp.Diagnostics.AddError("Failed to get namespace export sink", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink())...)
+	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &state, sink.GetSink(), namespace)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
 func (r *namespaceExportSinkResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -462,9 +498,22 @@ func (r *namespaceExportSinkResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
+	namespace, sinkName := getNamespaceAndSinkNameFromID(plan.ID.ValueString())
+
+	currentSink, err := r.client.CloudService().GetNamespaceExportSink(ctx, &cloudservicev1.GetNamespaceExportSinkRequest{
+		Namespace: namespace,
+		Name:      sinkName,
+	})
+
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get namespace export sink", err.Error())
+		return
+	}
+
 	svcResp, err := r.client.CloudService().UpdateNamespaceExportSink(ctx, &cloudservicev1.UpdateNamespaceExportSinkRequest{
-		Namespace:        plan.Namespace.ValueString(),
+		Namespace:        namespace,
 		Spec:             sinkSpec,
+		ResourceVersion:  currentSink.GetSink().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -473,23 +522,31 @@ func (r *namespaceExportSinkResource) Update(ctx context.Context, req resource.U
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace export sink", err.Error())
+		resp.Diagnostics.AddError("Failed to get namespace export sink update status", err.Error())
 		return
 	}
 
 	sink, err := r.client.CloudService().GetNamespaceExportSink(ctx, &cloudservicev1.GetNamespaceExportSinkRequest{
-		Namespace: plan.Namespace.ValueString(),
-		Name:      sinkSpec.GetName(),
+		Namespace: namespace,
+		Name:      sinkName,
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace export sink", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink())...)
+	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink(), namespace)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+func getNamespaceAndSinkNameFromID(id string) (string, string) {
+	splits := strings.Split(id, ",")
+	if len(splits) != 2 {
+		return "", ""
+	}
+	return splits[0], splits[1]
 }

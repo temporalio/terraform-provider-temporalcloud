@@ -31,40 +31,22 @@ func TestNamespaceExportSinkResource_Schema(t *testing.T) {
 
 func TestAccNamespaceExportSink_S3(t *testing.T) {
 	namespaceName := fmt.Sprintf("tf-test-ns-export-aws-%s", randomString(8))
-	region := "us-east-1"
-	fullRegion := fmt.Sprintf("aws-%s", region)
-	ns_config := func(name string, region string) string {
-		return fmt.Sprintf(`
-provider "temporalcloud" {
-
-}
-
-resource "temporalcloud_namespace" "terraform" {
-  name               = "%s"
-  regions            = ["%s"]
-  api_key_auth 	 	 = true
-  retention_days     = 1
-}`, name, region)
-	}
-
+	sinkRegion := "us-east-1"
+	namespaceRegion := fmt.Sprintf("aws-%s", sinkRegion)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			{
-				Config: ns_config(namespaceName, fullRegion),
-			},
 			// Create and Read testing
 			{
-				Config: testAccNamespaceExportSinkS3Config(namespaceName, sinkName, region),
+				Config: testAccNamespaceExportSinkS3Config(namespaceName, sinkName, namespaceRegion, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "namespace", namespaceName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "true"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.region", region),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.region", sinkRegion),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.role_name", "test-role"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.aws_account_id", "123456789012"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.kms_arn", "arn:aws:kms:us-east-1:123456789012:key/test-key"),
@@ -78,10 +60,14 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 			// Update testing
 			{
-				Config: testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, sinkName, region),
+				Config: testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "false"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.bucket_name", "updated-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.role_name", "test-updated-role"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.aws_account_id", "123456789013"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.kms_arn", "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"),
 				),
 			},
 			// Delete testing
@@ -98,41 +84,23 @@ resource "temporalcloud_namespace" "terraform" {
 func TestAccNamespaceExportSink_GCS(t *testing.T) {
 	namespaceName := fmt.Sprintf("tf-test-ns-export-gcp-%s", randomString(8))
 
-	region := "us-west1"
-	fullRegion := fmt.Sprintf("gcp-%s", region)
-
-	ns_config := func(name string, region string) string {
-		return fmt.Sprintf(`
-provider "temporalcloud" {
-
-}
-
-resource "temporalcloud_namespace" "terraform" {
-    name           = "%s"
-    regions        = ["%s"]
-    api_key_auth   = true
-    retention_days = 1
-}`, name, region)
-	}
+	sinkRegion := "us-central1"
+	namespaceRegion := fmt.Sprintf("gcp-%s", sinkRegion)
 
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
-
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
-			{
-				Config: ns_config(namespaceName, fullRegion),
-			},
 			// Create and Read testing
 			{
-				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, sinkName, region),
+				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "namespace", namespaceName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "true"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.region", region),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.region", sinkRegion),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.sa_id", "test-sa"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.gcp_project_id", "test-project"),
 				),
@@ -145,10 +113,13 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 			// Update testing
 			{
-				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, sinkName, region),
+				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "false"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.bucket_name", "updated-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.sa_id", "test-updated-sa"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.gcp_project_id", "test-updated-project"),
 				),
 			},
 			// Delete testing
@@ -162,76 +133,109 @@ resource "temporalcloud_namespace" "terraform" {
 	})
 }
 
-func testAccNamespaceExportSinkS3Config(namespaceName, region, sinkName string) string {
+func testAccNamespaceExportSinkS3Config(namespaceName, sinkName, namespaceRegion, sinkregion string) string {
 	return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = %[1]q
+  regions            = [%[2]q]
+  api_key_auth 	 	 = true
+  retention_days     = 1
+}
+
 resource "temporalcloud_namespace_export_sink" "test" {
-  namespace = %[1]q
+  namespace = temporalcloud_namespace.terraform.id
   spec = {
-    name    = %[2]q
-    enabled = true
+    name    = %[3]q
     s3 = {
       bucket_name    = "test-bucket"
-      region         = %[3]q
+      region         = %[4]q
       role_name      = "test-role"
       aws_account_id = "123456789012"
       kms_arn        = "arn:aws:kms:us-east-1:123456789012:key/test-key"
     }
   }
 }
-`, namespaceName, sinkName, region)
+`, namespaceName, namespaceRegion, sinkName, sinkregion)
 }
 
-func testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, sinkName, region string) string {
+func testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion string) string {
 	return fmt.Sprintf(`
+resource "temporalcloud_namespace" "terraform" {
+  name               = %[1]q
+  regions            = [%[2]q]
+  api_key_auth       = true
+  retention_days     = 1
+}
+
 resource "temporalcloud_namespace_export_sink" "test" {
-  namespace = %[1]q
+  namespace = temporalcloud_namespace.terraform.id
   spec = {
-    name    = %[2]q
+    name    = %[3]q
     enabled = false
     s3 = {
       bucket_name    = "updated-bucket"
-      region         = %[3]q
-      role_name      = "test-role"
-      aws_account_id = "123456789012"
-      kms_arn        = "arn:aws:kms:us-east-1:123456789012:key/test-key"
+      region         = %[4]q
+      role_name      = "test-updated-role"
+      aws_account_id = "123456789013"
+      kms_arn        = "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"
     }
   }
 }
-`, namespaceName, sinkName, region)
+`, namespaceName, namespaceRegion, sinkName, sinkRegion)
 }
 
-func testAccNamespaceExportSinkGCSConfig(namespaceName, sinkName, region string) string {
+func testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion string) string {
 	return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+    name           = %[1]q
+    regions        = [%[2]q]
+    api_key_auth   = true
+    retention_days = 1
+}
+
 resource "temporalcloud_namespace_export_sink" "test" {
-  namespace = %[1]q
+  namespace = temporalcloud_namespace.terraform.id
   spec = {
-    name    = %[2]q
+    name    = %[3]q
     enabled = true
     gcs = {
       bucket_name     = "test-bucket"
-      region          = %[3]q
+      region          = %[4]q
       sa_id           = "test-sa"
       gcp_project_id  = "test-project"
     }
   }
 }
-`, namespaceName, sinkName, region)
+`, namespaceName, namespaceRegion, sinkName, sinkRegion)
 }
 
-func testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, sinkName, region string) string {
+func testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion string) string {
 	return fmt.Sprintf(`
+resource "temporalcloud_namespace" "terraform" {
+    name           = %[1]q
+    regions        = [%[2]q]
+    api_key_auth   = true
+    retention_days = 1
+}
 resource "temporalcloud_namespace_export_sink" "test" {
-  namespace = %[1]q
+  namespace = temporalcloud_namespace.terraform.id
   spec = {
-    name    = %[2]q
+    name    = %[3]q
     enabled = false
 	gcs = {
 		bucket_name     = "updated-bucket"
-		region          = %[3]q
-		sa_id           = "test-sa"
-		gcp_project_id  = "test-project"
+		region          = %[4]q
+		sa_id           = "test-updated-sa"
+		gcp_project_id  = "test-updated-project"
 	}
   }
 }
-`, namespaceName, sinkName, region)
+`, namespaceName, namespaceRegion, sinkName, sinkRegion)
 }
