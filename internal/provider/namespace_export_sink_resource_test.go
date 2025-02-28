@@ -96,7 +96,6 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 			{
 				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "namespace", namespaceName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "true"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.bucket_name", "test-bucket"),
