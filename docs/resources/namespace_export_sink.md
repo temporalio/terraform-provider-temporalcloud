@@ -18,42 +18,32 @@ Provisions a namespace export sink.
 ### Required
 
 - `namespace` (String) The namespace under which the sink is configured. It's needed to be in the format of <namespace>.<account_id>
-- `spec` (Attributes) The specification for the export sink. (see [below for nested schema](#nestedatt--spec))
+- `sink_name` (String) The unique name of the export sink, it can't be changed once set.
 
 ### Optional
 
+- `enabled` (Boolean) A flag indicating whether the export sink is enabled or not.
+- `gcs` (Attributes) The GCS configuration details when destination_type is GCS. (see [below for nested schema](#nestedatt--gcs))
+- `s3` (Attributes) The S3 configuration details when destination_type is S3. (see [below for nested schema](#nestedatt--s3))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
 - `id` (String) The unique identifier of the namespace export sink.
 
-<a id="nestedatt--spec"></a>
-### Nested Schema for `spec`
-
-Required:
-
-- `name` (String) The unique name of the export sink, it can't be changed once set.
-
-Optional:
-
-- `enabled` (Boolean) A flag indicating whether the export sink is enabled or not.
-- `gcs` (Attributes) The GCS configuration details when destination_type is GCS. (see [below for nested schema](#nestedatt--spec--gcs))
-- `s3` (Attributes) The S3 configuration details when destination_type is S3. (see [below for nested schema](#nestedatt--spec--s3))
-
-<a id="nestedatt--spec--gcs"></a>
-### Nested Schema for `spec.gcs`
+<a id="nestedatt--gcs"></a>
+### Nested Schema for `gcs`
 
 Required:
 
 - `bucket_name` (String) The name of the destination GCS bucket where Temporal will send data.
 - `gcp_project_id` (String) The GCP project ID associated with the GCS bucket and service account.
 - `region` (String) The region of the gcs bucket
-- `sa_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.
+- `service_account_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.
 
 
-<a id="nestedatt--spec--s3"></a>
-### Nested Schema for `spec.s3`
+<a id="nestedatt--s3"></a>
+### Nested Schema for `s3`
 
 Required:
 
@@ -62,7 +52,6 @@ Required:
 - `kms_arn` (String) The AWS Key Management Service (KMS) ARN used for encryption.
 - `region` (String) The region where the S3 bucket is located.
 - `role_name` (String) The IAM role that Temporal Cloud assumes for writing records to the customer's S3 bucket.
-
 
 
 <a id="nestedblock--timeouts"></a>

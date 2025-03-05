@@ -43,13 +43,13 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 			{
 				Config: testAccNamespaceExportSinkS3Config(namespaceName, sinkName, namespaceRegion, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.name", sinkName),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.role_name", "test-role"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.aws_account_id", "123456789012"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.kms_arn", "arn:aws:kms:us-east-1:123456789012:key/test-key"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "test-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-role"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789012"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", "arn:aws:kms:us-east-1:123456789012:key/test-key"),
 				),
 			},
 			// ImportState testing
@@ -62,12 +62,12 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 			{
 				Config: testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "false"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.bucket_name", "updated-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.role_name", "test-updated-role"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.aws_account_id", "123456789013"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.s3.kms_arn", "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "updated-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-updated-role"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789013"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"),
 				),
 			},
 			// Delete testing
@@ -96,12 +96,12 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 			{
 				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.name", sinkName),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.sa_id", "test-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.gcp_project_id", "test-project"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "test-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-sa"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-project"),
 				),
 			},
 			// ImportState testing
@@ -114,11 +114,11 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 			{
 				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.enabled", "false"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.bucket_name", "updated-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.sa_id", "test-updated-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "spec.gcs.gcp_project_id", "test-updated-project"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "updated-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-updated-sa"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-updated-project"),
 				),
 			},
 			// Delete testing
@@ -146,16 +146,16 @@ resource "temporalcloud_namespace" "terraform" {
 
 resource "temporalcloud_namespace_export_sink" "test" {
   namespace = temporalcloud_namespace.terraform.id
-  spec = {
-    name    = %[3]q
-    s3 = {
-      bucket_name    = "test-bucket"
-      region         = %[4]q
-      role_name      = "test-role"
-      aws_account_id = "123456789012"
-      kms_arn        = "arn:aws:kms:us-east-1:123456789012:key/test-key"
-    }
+  sink_name    = %[3]q
+  enabled = true
+  s3 = {
+    bucket_name    = "test-bucket"
+    region         = %[4]q
+    role_name      = "test-role"
+    aws_account_id = "123456789012"
+    kms_arn        = "arn:aws:kms:us-east-1:123456789012:key/test-key"
   }
+
 }
 `, namespaceName, namespaceRegion, sinkName, sinkregion)
 }
@@ -171,16 +171,14 @@ resource "temporalcloud_namespace" "terraform" {
 
 resource "temporalcloud_namespace_export_sink" "test" {
   namespace = temporalcloud_namespace.terraform.id
-  spec = {
-    name    = %[3]q
-    enabled = false
-    s3 = {
-      bucket_name    = "updated-bucket"
-      region         = %[4]q
-      role_name      = "test-updated-role"
-      aws_account_id = "123456789013"
-      kms_arn        = "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"
-    }
+  sink_name    = %[3]q
+  enabled = false
+  s3 = {
+    bucket_name    = "updated-bucket"
+    region         = %[4]q
+    role_name      = "test-updated-role"
+    aws_account_id = "123456789013"
+    kms_arn        = "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"
   }
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)
@@ -201,16 +199,14 @@ resource "temporalcloud_namespace" "terraform" {
 
 resource "temporalcloud_namespace_export_sink" "test" {
   namespace = temporalcloud_namespace.terraform.id
-  spec = {
-    name    = %[3]q
-    enabled = true
-    gcs = {
-      bucket_name     = "test-bucket"
-      region          = %[4]q
-      sa_id           = "test-sa"
-      gcp_project_id  = "test-project"
-    }
-  }
+  sink_name    = %[3]q
+  enabled = true
+  gcs = {
+    bucket_name     = "test-bucket"
+    region          = %[4]q
+    service_account_id           = "test-sa"
+    gcp_project_id  = "test-project"
+  }	
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)
 }
@@ -225,15 +221,13 @@ resource "temporalcloud_namespace" "terraform" {
 }
 resource "temporalcloud_namespace_export_sink" "test" {
   namespace = temporalcloud_namespace.terraform.id
-  spec = {
-    name    = %[3]q
-    enabled = false
-	gcs = {
-		bucket_name     = "updated-bucket"
-		region          = %[4]q
-		sa_id           = "test-updated-sa"
-		gcp_project_id  = "test-updated-project"
-	}
+  sink_name    = %[3]q
+  enabled = false
+  gcs = {
+    bucket_name     = "updated-bucket"
+    region          = %[4]q
+    service_account_id           = "test-updated-sa"
+    gcp_project_id  = "test-updated-project"
   }
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)

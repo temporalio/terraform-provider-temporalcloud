@@ -29,7 +29,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -37,6 +37,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -57,30 +58,11 @@ type (
 	namespaceExportSinkResourceModel struct {
 		ID        types.String   `tfsdk:"id"`
 		Namespace types.String   `tfsdk:"namespace"`
-		Spec      types.Object   `tfsdk:"spec"`
+		SinkName  types.String   `tfsdk:"sink_name"`
+		Enabled   types.Bool     `tfsdk:"enabled"`
+		S3        types.Object   `tfsdk:"s3"`
+		Gcs       types.Object   `tfsdk:"gcs"`
 		Timeouts  timeouts.Value `tfsdk:"timeouts"`
-	}
-
-	namespaceExportSinkSpecModel struct {
-		Name    types.String `tfsdk:"name"`
-		Enabled types.Bool   `tfsdk:"enabled"`
-		S3      types.Object `tfsdk:"s3"`
-		Gcs     types.Object `tfsdk:"gcs"`
-	}
-
-	s3SpecModel struct {
-		RoleName     types.String `tfsdk:"role_name"`
-		BucketName   types.String `tfsdk:"bucket_name"`
-		Region       types.String `tfsdk:"region"`
-		KmsArn       types.String `tfsdk:"kms_arn"`
-		AwsAccountId types.String `tfsdk:"aws_account_id"`
-	}
-
-	gcsSpecModel struct {
-		SaId         types.String `tfsdk:"sa_id"`
-		BucketName   types.String `tfsdk:"bucket_name"`
-		GcpProjectId types.String `tfsdk:"gcp_project_id"`
-		Region       types.String `tfsdk:"region"`
 	}
 )
 
@@ -92,32 +74,6 @@ var (
 	_ resource.Resource                = (*namespaceExportSinkResource)(nil)
 	_ resource.ResourceWithConfigure   = (*namespaceExportSinkResource)(nil)
 	_ resource.ResourceWithImportState = (*namespaceExportSinkResource)(nil)
-
-	namespaceExportSinkSpecModelAttrTypes = map[string]attr.Type{
-		"name":    types.StringType,
-		"enabled": types.BoolType,
-		"s3": types.ObjectType{
-			AttrTypes: s3SpecModelAttrTypes,
-		},
-		"gcs": types.ObjectType{
-			AttrTypes: gcsSpecModelAttrTypes,
-		},
-	}
-
-	s3SpecModelAttrTypes = map[string]attr.Type{
-		"role_name":      types.StringType,
-		"bucket_name":    types.StringType,
-		"region":         types.StringType,
-		"kms_arn":        types.StringType,
-		"aws_account_id": types.StringType,
-	}
-
-	gcsSpecModelAttrTypes = map[string]attr.Type{
-		"sa_id":          types.StringType,
-		"bucket_name":    types.StringType,
-		"gcp_project_id": types.StringType,
-		"region":         types.StringType,
-	}
 )
 
 func (r *namespaceExportSinkResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -156,71 +112,75 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
-			"spec": schema.SingleNestedAttribute{
-				Description: "The specification for the export sink.",
+			"sink_name": schema.StringAttribute{
+				Description: "The unique name of the export sink, it can't be changed once set.",
 				Required:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
+			"enabled": schema.BoolAttribute{
+				Description: "A flag indicating whether the export sink is enabled or not.",
+				Computed:    true,
+				Default:     booldefault.StaticBool(true),
+				Optional:    true,
+			},
+			"s3": schema.SingleNestedAttribute{
+				Description: "The S3 configuration details when destination_type is S3.",
+				Optional:    true,
 				Attributes: map[string]schema.Attribute{
-					"name": schema.StringAttribute{
-						Description: "The unique name of the export sink, it can't be changed once set.",
+					"role_name": schema.StringAttribute{
+						Description: "The IAM role that Temporal Cloud assumes for writing records to the customer's S3 bucket.",
 						Required:    true,
-						PlanModifiers: []planmodifier.String{
-							stringplanmodifier.RequiresReplace(),
-						},
 					},
-					"enabled": schema.BoolAttribute{
-						Description: "A flag indicating whether the export sink is enabled or not.",
-						Computed:    true,
-						Default:     booldefault.StaticBool(true),
-						Optional:    true,
+					"bucket_name": schema.StringAttribute{
+						Description: "The name of the destination S3 bucket where Temporal will send data.",
+						Required:    true,
 					},
-					"s3": schema.SingleNestedAttribute{
-						Description: "The S3 configuration details when destination_type is S3.",
-						Optional:    true,
-						Attributes: map[string]schema.Attribute{
-							"role_name": schema.StringAttribute{
-								Description: "The IAM role that Temporal Cloud assumes for writing records to the customer's S3 bucket.",
-								Required:    true,
-							},
-							"bucket_name": schema.StringAttribute{
-								Description: "The name of the destination S3 bucket where Temporal will send data.",
-								Required:    true,
-							},
-							"region": schema.StringAttribute{
-								Description: "The region where the S3 bucket is located.",
-								Required:    true,
-							},
-							"kms_arn": schema.StringAttribute{
-								Description: "The AWS Key Management Service (KMS) ARN used for encryption.",
-								Required:    true,
-							},
-							"aws_account_id": schema.StringAttribute{
-								Description: "The AWS account ID associated with the S3 bucket and the assumed role.",
-								Required:    true,
-							},
-						},
+					"region": schema.StringAttribute{
+						Description: "The region where the S3 bucket is located.",
+						Required:    true,
 					},
-					"gcs": schema.SingleNestedAttribute{
-						Description: " The GCS configuration details when destination_type is GCS.",
-						Optional:    true,
-						Attributes: map[string]schema.Attribute{
-							"sa_id": schema.StringAttribute{
-								Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.",
-								Required:    true,
-							},
-							"bucket_name": schema.StringAttribute{
-								Description: "The name of the destination GCS bucket where Temporal will send data.",
-								Required:    true,
-							},
-							"gcp_project_id": schema.StringAttribute{
-								Description: "The GCP project ID associated with the GCS bucket and service account.",
-								Required:    true,
-							},
-							"region": schema.StringAttribute{
-								Description: "The region of the gcs bucket",
-								Required:    true,
-							},
-						},
+					"kms_arn": schema.StringAttribute{
+						Description: "The AWS Key Management Service (KMS) ARN used for encryption.",
+						Required:    true,
 					},
+					"aws_account_id": schema.StringAttribute{
+						Description: "The AWS account ID associated with the S3 bucket and the assumed role.",
+						Required:    true,
+					},
+				},
+				Validators: []validator.Object{
+					objectvalidator.ExactlyOneOf(path.Expressions{
+						path.MatchRoot("gcs"),
+					}...),
+				},
+			},
+			"gcs": schema.SingleNestedAttribute{
+				Description: "The GCS configuration details when destination_type is GCS.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"service_account_id": schema.StringAttribute{
+						Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.",
+						Required:    true,
+					},
+					"bucket_name": schema.StringAttribute{
+						Description: "The name of the destination GCS bucket where Temporal will send data.",
+						Required:    true,
+					},
+					"gcp_project_id": schema.StringAttribute{
+						Description: "The GCP project ID associated with the GCS bucket and service account.",
+						Required:    true,
+					},
+					"region": schema.StringAttribute{
+						Description: "The region of the gcs bucket",
+						Required:    true,
+					},
+				},
+				Validators: []validator.Object{
+					objectvalidator.ExactlyOneOf(path.Expressions{
+						path.MatchRoot("s3"),
+					}...),
 				},
 			},
 		},
@@ -292,44 +252,41 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkResourceModel, sink *namespacev1.ExportSink, namespace string) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	s3Obj := types.ObjectNull(s3SpecModelAttrTypes)
+	s3Obj := types.ObjectNull(internaltypes.S3SpecModelAttrTypes)
 	if sink.GetSpec().GetS3() != nil {
-		s3Spec := s3SpecModel{
+		s3Spec := internaltypes.S3SpecModel{
 			RoleName:     types.StringValue(sink.GetSpec().GetS3().GetRoleName()),
 			BucketName:   types.StringValue(sink.GetSpec().GetS3().GetBucketName()),
 			Region:       types.StringValue(sink.GetSpec().GetS3().GetRegion()),
 			KmsArn:       types.StringValue(sink.GetSpec().GetS3().GetKmsArn()),
 			AwsAccountId: types.StringValue(sink.GetSpec().GetS3().GetAwsAccountId()),
 		}
-		s3Obj, diags = types.ObjectValueFrom(ctx, s3SpecModelAttrTypes, s3Spec)
+		s3Obj, diags = types.ObjectValueFrom(ctx, internaltypes.S3SpecModelAttrTypes, s3Spec)
 		diags.Append(diags...)
 		if diags.HasError() {
 			return diags
 		}
 	}
 
-	gcsObj := types.ObjectNull(gcsSpecModelAttrTypes)
+	gcsObj := types.ObjectNull(internaltypes.GcsSpecModelAttrTypes)
 	if sink.GetSpec().GetGcs() != nil {
-		gcsSpec := gcsSpecModel{
+		gcsSpec := internaltypes.GCSSpecModel{
 			SaId:         types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
 			BucketName:   types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
 			GcpProjectId: types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
 			Region:       types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
 		}
-		gcsObj, diags = types.ObjectValueFrom(ctx, gcsSpecModelAttrTypes, gcsSpec)
+		gcsObj, diags = types.ObjectValueFrom(ctx, internaltypes.GcsSpecModelAttrTypes, gcsSpec)
 		diags.Append(diags...)
 		if diags.HasError() {
 			return diags
 		}
 	}
 
-	state.Spec, diags = types.ObjectValueFrom(ctx, namespaceExportSinkSpecModelAttrTypes, namespaceExportSinkSpecModel{
-		Name:    types.StringValue(sink.GetName()),
-		Enabled: types.BoolValue(sink.GetSpec().GetEnabled()),
-		S3:      s3Obj,
-		Gcs:     gcsObj,
-	})
-
+	state.SinkName = types.StringValue(sink.GetName())
+	state.Enabled = types.BoolValue(sink.GetSpec().GetEnabled())
+	state.S3 = s3Obj
+	state.Gcs = gcsObj
 	state.Namespace = types.StringValue(namespace)
 	state.ID = types.StringValue(fmt.Sprintf("%s,%s", namespace, sink.GetName()))
 
@@ -397,51 +354,46 @@ func (r *namespaceExportSinkResource) ImportState(ctx context.Context, req resou
 
 func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
-	var spec internaltypes.ExportSinkSpecModel
-	diags.Append(plan.Spec.As(ctx, &spec, basetypes.ObjectAsOptions{})...)
-	if diags.HasError() {
-		return nil, diags
-	}
 
 	// Check that only one of S3 or GCS is set
-	if !spec.S3.IsNull() && !spec.Gcs.IsNull() {
+	if !plan.S3.IsNull() && !plan.Gcs.IsNull() {
 		diags.AddError("Invalid sink configuration", "Only one of S3 or GCS can be configured")
 		return nil, diags
 	}
 
-	if !spec.S3.IsNull() {
+	if !plan.S3.IsNull() {
 		var s3Spec internaltypes.S3SpecModel
-		diags.Append(spec.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
+		diags.Append(plan.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
 			return nil, diags
 		}
 
 		return &namespacev1.ExportSinkSpec{
-			Name:    spec.Name,
-			Enabled: spec.Enabled,
+			Name:    plan.SinkName.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
 			S3: &sink.S3Spec{
-				RoleName:     s3Spec.RoleName,
-				BucketName:   s3Spec.BucketName,
-				Region:       s3Spec.Region,
-				KmsArn:       s3Spec.KmsArn,
-				AwsAccountId: s3Spec.AwsAccountId,
+				RoleName:     s3Spec.RoleName.ValueString(),
+				BucketName:   s3Spec.BucketName.ValueString(),
+				Region:       s3Spec.Region.ValueString(),
+				KmsArn:       s3Spec.KmsArn.ValueString(),
+				AwsAccountId: s3Spec.AwsAccountId.ValueString(),
 			},
 		}, nil
-	} else if !spec.Gcs.IsNull() {
+	} else if !plan.Gcs.IsNull() {
 		var gcsSpec internaltypes.GCSSpecModel
-		diags.Append(spec.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
+		diags.Append(plan.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
 			return nil, diags
 		}
 
 		return &namespacev1.ExportSinkSpec{
-			Name:    spec.Name,
-			Enabled: spec.Enabled,
+			Name:    plan.SinkName.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
 			Gcs: &sink.GCSSpec{
-				SaId:         gcsSpec.SaId,
-				BucketName:   gcsSpec.BucketName,
-				GcpProjectId: gcsSpec.GcpProjectId,
-				Region:       gcsSpec.Region,
+				SaId:         gcsSpec.SaId.ValueString(),
+				BucketName:   gcsSpec.BucketName.ValueString(),
+				GcpProjectId: gcsSpec.GcpProjectId.ValueString(),
+				Region:       gcsSpec.Region.ValueString(),
 			},
 		}, nil
 	}
