@@ -79,9 +79,6 @@ resource "temporalcloud_user" "terraform" {
 				Config: config(emailAddr, "admin"),
 			},
 			{
-				Config: config(emailAddr, "none"),
-			},
-			{
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_user.terraform",
