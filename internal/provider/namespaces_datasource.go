@@ -4,19 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"time"
-
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
-
 	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
 	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
+	"time"
 )
 
 var (
@@ -305,173 +303,190 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	}
 
 	for _, ns := range namespaces {
-		stateStr, err := enums.FromResourceState(ns.State)
-		if err != nil {
-			resp.Diagnostics.AddError("Unable to convert namespace state", err.Error())
-			return
-		}
-		namespaceModel := namespaceDataModel{
-			ID:               types.StringValue(ns.Namespace),
-			Name:             types.StringValue(ns.GetSpec().GetName()),
-			State:            types.StringValue(stateStr),
-			ActiveRegion:     types.StringValue(ns.ActiveRegion),
-			AcceptedClientCA: types.StringValue(base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())),
-			RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
-			CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
-		}
-
-		if ns.GetSpec().GetApiKeyAuth().GetEnabled() {
-			namespaceModel.ApiKeyAuth = types.BoolValue(true)
-		}
-
-		if ns.GetLastModifiedTime().String() != "" {
-			namespaceModel.LastModifiedTime = types.StringValue(ns.GetLastModifiedTime().AsTime().Format(time.RFC3339))
-		} else {
-			namespaceModel.LastModifiedTime = types.StringNull()
-		}
-
-		var regionStrs []attr.Value
-		for _, region := range ns.GetSpec().GetRegions() {
-			regionStrs = append(regionStrs, types.StringValue(region))
-		}
-		regions, listDiags := types.ListValue(types.StringType, regionStrs)
-		resp.Diagnostics.Append(listDiags...)
+		namespaceModel, diags := namespaceToNamespaceDataModel(ctx, ns)
+		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		namespaceModel.Regions = regions
 
-		certificateFilters := types.ListNull(types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs})
-		if len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()) > 0 {
-			certificateFilterObjects := make([]types.Object, len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()))
-			for i, certFilter := range ns.GetSpec().GetMtlsAuth().GetCertificateFilters() {
-				model := namespaceCertificateFilterModel{
-					CommonName:             stringOrNull(certFilter.GetCommonName()),
-					Organization:           stringOrNull(certFilter.GetOrganization()),
-					OrganizationalUnit:     stringOrNull(certFilter.GetOrganizationalUnit()),
-					SubjectAlternativeName: stringOrNull(certFilter.GetSubjectAlternativeName()),
-				}
-				obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
-				resp.Diagnostics.Append(diag...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				certificateFilterObjects[i] = obj
-			}
-			filters, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
-			resp.Diagnostics.Append(diag...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-
-			certificateFilters = filters
-		}
-		namespaceModel.CertificateFilters = certificateFilters
-
-		var codecServer basetypes.ObjectValue
-		if ns.GetSpec().GetCodecServer().GetEndpoint() != "" {
-			csModel := &codecServerModel{
-				Endpoint:                      stringOrNull(ns.GetSpec().GetCodecServer().GetEndpoint()),
-				PassAccessToken:               types.BoolValue(ns.GetSpec().GetCodecServer().GetPassAccessToken()),
-				IncludeCrossOriginCredentials: types.BoolValue(ns.GetSpec().GetCodecServer().GetIncludeCrossOriginCredentials()),
-			}
-			s, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, csModel)
-			resp.Diagnostics.Append(objectDiags...)
-			codecServer = s
-		} else {
-			codecServer = types.ObjectNull(codecServerAttrs)
-		}
-
-		namespaceModel.CodecServer = codecServer
-
-		endpointModel := &endpointsDataModel{
-			GrpcAddress: types.StringValue(ns.GetEndpoints().GetGrpcAddress()),
-			WebAddress:  types.StringValue(ns.GetEndpoints().GetWebAddress()),
-		}
-		endpointState, endpointDiags := types.ObjectValueFrom(ctx, endpointDataModelAttrs, endpointModel)
-		resp.Diagnostics.Append(endpointDiags...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		namespaceModel.Endpoints = endpointState
-
-		privateConnectivites := types.ListNull(types.ObjectType{AttrTypes: privateConnectivityDataModelAttrs})
-		if len(ns.GetPrivateConnectivities()) > 0 {
-			privateConnectivityObjects := make([]types.Object, len(ns.GetPrivateConnectivities()))
-			for i, privateConn := range ns.GetPrivateConnectivities() {
-				var awsPrivLinkModel awsPrivateLinkInfoDataModel
-				principals, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetAllowedPrincipalArns())
-				resp.Diagnostics.Append(listDiags...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				awsPrivLinkModel.AllowedPrincipalArns = principals
-
-				serviceNames, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetAllowedPrincipalArns())
-				resp.Diagnostics.Append(listDiags...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				awsPrivLinkModel.VpcEndpointServiceNames = serviceNames
-				privLinkObj, diag := types.ObjectValueFrom(ctx, awsPrivateLinkAttrs, awsPrivLinkModel)
-				resp.Diagnostics.Append(diag...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				model := privateConnectivityDataModel{
-					Region:             types.StringValue(privateConn.GetRegion()),
-					AwsPrivateLinkInfo: privLinkObj,
-				}
-				obj, diag := types.ObjectValueFrom(ctx, privateConnectivityDataModelAttrs, model)
-				resp.Diagnostics.Append(diag...)
-				if resp.Diagnostics.HasError() {
-					return
-				}
-				privateConnectivityObjects[i] = obj
-			}
-			privateConns, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: privateConnectivityDataModelAttrs}, privateConnectivityObjects)
-			resp.Diagnostics.Append(diag...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			privateConnectivites = privateConns
-		}
-		namespaceModel.PrivateConnectivities = privateConnectivites
-
-		searchAttributes := types.MapNull(types.StringType)
-		if len(ns.GetSpec().GetSearchAttributes()) > 0 {
-			sas := make(map[string]attr.Value)
-			for k, v := range ns.GetSpec().GetSearchAttributes() {
-				sa, err := enums.FromNamespaceSearchAttribute(v)
-				if err != nil {
-					resp.Diagnostics.AddError("Unable to convert namespace search attribute", err.Error())
-					return
-				}
-				sas[k] = types.StringValue(sa)
-			}
-			sa, diag := types.MapValue(types.StringType, sas)
-			resp.Diagnostics.Append(diag...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			searchAttributes = sa
-		}
-		namespaceModel.CustomSearchAttributes = searchAttributes
-
-		limitModel := &limitsDataModel{
-			ActionsPerSecondLimit: types.Int64Value(int64(ns.GetLimits().GetActionsPerSecondLimit())),
-		}
-		limits, diag := types.ObjectValueFrom(ctx, limitsAttrs, limitModel)
-		resp.Diagnostics.Append(diag...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		namespaceModel.Limits = limits
-
-		state.Namespaces = append(state.Namespaces, namespaceModel)
+		state.Namespaces = append(state.Namespaces, *namespaceModel)
 	}
 
 	state.ID = types.StringValue("terraform")
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
+}
+
+func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespace) (*namespaceDataModel, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	stateStr, err := enums.FromResourceState(ns.State)
+	if err != nil {
+		diags.AddError("Unable to convert namespace state", err.Error())
+		return nil, diags
+	}
+	namespaceModel := &namespaceDataModel{
+		ID:               types.StringValue(ns.Namespace),
+		Name:             types.StringValue(ns.GetSpec().GetName()),
+		State:            types.StringValue(stateStr),
+		ActiveRegion:     types.StringValue(ns.ActiveRegion),
+		AcceptedClientCA: types.StringValue(base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())),
+		RetentionDays:    types.Int64Value(int64(ns.GetSpec().GetRetentionDays())),
+		CreatedTime:      types.StringValue(ns.GetCreatedTime().AsTime().Format(time.RFC3339)),
+	}
+
+	if ns.GetSpec().GetApiKeyAuth().GetEnabled() {
+		namespaceModel.ApiKeyAuth = types.BoolValue(true)
+	}
+
+	if ns.GetLastModifiedTime().String() != "" {
+		namespaceModel.LastModifiedTime = types.StringValue(ns.GetLastModifiedTime().AsTime().Format(time.RFC3339))
+	} else {
+		namespaceModel.LastModifiedTime = types.StringNull()
+	}
+
+	var regionStrs []attr.Value
+	for _, region := range ns.GetSpec().GetRegions() {
+		regionStrs = append(regionStrs, types.StringValue(region))
+	}
+	regions, listDiags := types.ListValue(types.StringType, regionStrs)
+	diags.Append(listDiags...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.Regions = regions
+
+	certificateFilters := types.ListNull(types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs})
+	if len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()) > 0 {
+		certificateFilterObjects := make([]types.Object, len(ns.GetSpec().GetMtlsAuth().GetCertificateFilters()))
+		for i, certFilter := range ns.GetSpec().GetMtlsAuth().GetCertificateFilters() {
+			model := namespaceCertificateFilterModel{
+				CommonName:             stringOrNull(certFilter.GetCommonName()),
+				Organization:           stringOrNull(certFilter.GetOrganization()),
+				OrganizationalUnit:     stringOrNull(certFilter.GetOrganizationalUnit()),
+				SubjectAlternativeName: stringOrNull(certFilter.GetSubjectAlternativeName()),
+			}
+			obj, diag := types.ObjectValueFrom(ctx, namespaceCertificateFilterAttrs, model)
+			diags.Append(diag...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			certificateFilterObjects[i] = obj
+		}
+		filters, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: namespaceCertificateFilterAttrs}, certificateFilterObjects)
+		diags.Append(diag...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		certificateFilters = filters
+	}
+	namespaceModel.CertificateFilters = certificateFilters
+
+	var codecServer basetypes.ObjectValue
+	if ns.GetSpec().GetCodecServer().GetEndpoint() != "" {
+		csModel := &codecServerModel{
+			Endpoint:                      stringOrNull(ns.GetSpec().GetCodecServer().GetEndpoint()),
+			PassAccessToken:               types.BoolValue(ns.GetSpec().GetCodecServer().GetPassAccessToken()),
+			IncludeCrossOriginCredentials: types.BoolValue(ns.GetSpec().GetCodecServer().GetIncludeCrossOriginCredentials()),
+		}
+		s, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, csModel)
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		codecServer = s
+	} else {
+		codecServer = types.ObjectNull(codecServerAttrs)
+	}
+
+	namespaceModel.CodecServer = codecServer
+
+	endpointModel := &endpointsDataModel{
+		GrpcAddress: types.StringValue(ns.GetEndpoints().GetGrpcAddress()),
+		WebAddress:  types.StringValue(ns.GetEndpoints().GetWebAddress()),
+	}
+	endpointState, endpointDiags := types.ObjectValueFrom(ctx, endpointDataModelAttrs, endpointModel)
+	diags.Append(endpointDiags...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.Endpoints = endpointState
+
+	privateConnectivites := types.ListNull(types.ObjectType{AttrTypes: privateConnectivityDataModelAttrs})
+	if len(ns.GetPrivateConnectivities()) > 0 {
+		privateConnectivityObjects := make([]types.Object, len(ns.GetPrivateConnectivities()))
+		for i, privateConn := range ns.GetPrivateConnectivities() {
+			var awsPrivLinkModel awsPrivateLinkInfoDataModel
+			principals, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetAllowedPrincipalArns())
+			diags.Append(listDiags...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			awsPrivLinkModel.AllowedPrincipalArns = principals
+
+			serviceNames, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetAllowedPrincipalArns())
+			diags.Append(listDiags...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			awsPrivLinkModel.VpcEndpointServiceNames = serviceNames
+			privLinkObj, diag := types.ObjectValueFrom(ctx, awsPrivateLinkAttrs, awsPrivLinkModel)
+			diags.Append(diag...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			model := privateConnectivityDataModel{
+				Region:             types.StringValue(privateConn.GetRegion()),
+				AwsPrivateLinkInfo: privLinkObj,
+			}
+			obj, diag := types.ObjectValueFrom(ctx, privateConnectivityDataModelAttrs, model)
+			diags.Append(diag...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			privateConnectivityObjects[i] = obj
+		}
+		privateConns, diag := types.ListValueFrom(ctx, types.ObjectType{AttrTypes: privateConnectivityDataModelAttrs}, privateConnectivityObjects)
+		diags.Append(diag...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		privateConnectivites = privateConns
+	}
+	namespaceModel.PrivateConnectivities = privateConnectivites
+
+	searchAttributes := types.MapNull(types.StringType)
+	if len(ns.GetSpec().GetSearchAttributes()) > 0 {
+		sas := make(map[string]attr.Value)
+		for k, v := range ns.GetSpec().GetSearchAttributes() {
+			sa, err := enums.FromNamespaceSearchAttribute(v)
+			if err != nil {
+				diags.AddError("Unable to convert namespace search attribute", err.Error())
+				return nil, diags
+			}
+			sas[k] = types.StringValue(sa)
+		}
+		sa, diag := types.MapValue(types.StringType, sas)
+		diags.Append(diag...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		searchAttributes = sa
+	}
+	namespaceModel.CustomSearchAttributes = searchAttributes
+
+	limitModel := &limitsDataModel{
+		ActionsPerSecondLimit: types.Int64Value(int64(ns.GetLimits().GetActionsPerSecondLimit())),
+	}
+
+	limits, diag := types.ObjectValueFrom(ctx, limitsAttrs, limitModel)
+	diags.Append(diag...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.Limits = limits
+
+	return namespaceModel, nil
 }
