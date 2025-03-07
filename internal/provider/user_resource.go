@@ -114,7 +114,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
+				Description: "The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships.",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read", "none"),
