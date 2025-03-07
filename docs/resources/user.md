@@ -54,7 +54,7 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for import and users created via SCIM.
+- `account_access` (String) The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.
 - `email` (String) The email address for the user.
 
 ### Optional
