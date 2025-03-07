@@ -56,7 +56,7 @@ output "namespace" {
 						return fmt.Errorf("expected value to be a string")
 					}
 					if outputName != name {
-						return fmt.Errorf("expected namespace name to be: %s, got: %s", name, output.Value.(map[string]interface{})["name"])
+						return fmt.Errorf("expected namespace name to be: %s, got: %s", name, outputName)
 					}
 
 					outputAPIKey, ok := outputValue["api_key_auth"].(bool)
