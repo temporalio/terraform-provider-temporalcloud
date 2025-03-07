@@ -3,12 +3,12 @@
 page_title: "temporalcloud_namespace Data Source - terraform-provider-temporalcloud"
 subcategory: ""
 description: |-
-  
+  Fetches details about a Namespace.
 ---
 
 # temporalcloud_namespace (Data Source)
 
-
+Fetches details about a Namespace.
 
 ## Example Usage
 

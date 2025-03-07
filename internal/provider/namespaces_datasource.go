@@ -120,6 +120,7 @@ func (d *namespacesDataSource) Metadata(_ context.Context, req datasource.Metada
 
 func (d *namespacesDataSource) Schema(_ context.Context, _ datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		Description: "Fetches details about all Namespaces.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed: true,
