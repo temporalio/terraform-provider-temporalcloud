@@ -133,7 +133,7 @@ resource "temporalcloud_user" "terraform" {
       permission = "{{ .NamespacePerm }}"
     }
   ]
-  
+
   depends_on = [temporalcloud_namespace.test]
 }`))
 
@@ -215,7 +215,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_user" "terraform" {
   email = "{{ .Email }}"
-  account_access = "read" 
+  account_access = "read"
   namespace_accesses = []
 }`))
 
@@ -261,7 +261,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_user" "terraform" {
   email = "{{ .Email }}"
-  account_access = "read" 
+  account_access = "read"
   namespace_accesses = [
     {
        namespace_id = "NS1"
@@ -334,7 +334,7 @@ resource "temporalcloud_namespace" "test2" {
 
 resource "temporalcloud_user" "terraform" {
   email = "{{ .Email }}"
-  account_access = "read" 
+  account_access = "read"
   namespace_accesses = [
     {
       namespace_id = temporalcloud_namespace.test.id

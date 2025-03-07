@@ -48,6 +48,8 @@ func ToAccountAccessRole(s string) (identity.AccountAccess_Role, error) {
 		return identity.AccountAccess_ROLE_READ, nil
 	case "financeadmin":
 		return identity.AccountAccess_ROLE_FINANCE_ADMIN, nil
+	case "none":
+		return identity.AccountAccess_ROLE_UNSPECIFIED, nil
 	default:
 		return identity.AccountAccess_ROLE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidAccountAccessRole, s)
 	}
@@ -65,6 +67,8 @@ func FromAccountAccessRole(r identity.AccountAccess_Role) (string, error) {
 		return "read", nil
 	case identity.AccountAccess_ROLE_FINANCE_ADMIN:
 		return "financeadmin", nil
+	case identity.AccountAccess_ROLE_UNSPECIFIED:
+		return "none", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidAccountAccessRole, r)
 	}
