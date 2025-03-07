@@ -47,14 +47,31 @@ output "namespace" {
 						return fmt.Errorf("missing expected output")
 					}
 
-					outputValue := output.Value.(map[string]interface{})
-					if outputValue["name"].(string) != name {
+					outputValue, ok := output.Value.(map[string]interface{})
+					if !ok {
+						return fmt.Errorf("expected value to be map")
+					}
+					outputName, ok := outputValue["name"].(string)
+					if !ok {
+						return fmt.Errorf("expected value to be a string")
+					}
+					if outputName != name {
 						return fmt.Errorf("expected namespace name to be: %s, got: %s", name, output.Value.(map[string]interface{})["name"])
 					}
-					if !outputValue["api_key_auth"].(bool) {
+
+					outputAPIKey, ok := outputValue["api_key_auth"].(bool)
+					if !ok {
+						return fmt.Errorf("expected api_key_auth to be a boolean")
+					}
+					if !outputAPIKey {
 						return fmt.Errorf("expected api_key_auth to be true")
 					}
-					if outputValue["active_region"].(string) != "aws-us-east-1" {
+
+					outputRegion, ok := outputValue["active_region"].(string)
+					if !ok {
+						return fmt.Errorf("expected active_region to be a string")
+					}
+					if outputRegion != "aws-us-east-1" {
 						return fmt.Errorf("exptect active regon to match provided region")
 					}
 
