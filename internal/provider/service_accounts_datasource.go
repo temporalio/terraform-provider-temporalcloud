@@ -73,18 +73,15 @@ func (d *serviceAccountsDataSource) Configure(ctx context.Context, req datasourc
 }
 
 func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
-	var idAttribute schema.StringAttribute
+	idAttribute := schema.StringAttribute{
+		Description: "The unique identifier of the Service Account.",
+	}
+
 	switch idRequired {
 	case true:
-		idAttribute = schema.StringAttribute{
-			Description: "The unique identifier of the Service Account.",
-			Required:    true,
-		}
+		idAttribute.Required = true
 	case false:
-		idAttribute = schema.StringAttribute{
-			Description: "The unique identifier of the Service Account.",
-			Computed:    true,
-		}
+		idAttribute.Computed = true
 	}
 
 	return map[string]schema.Attribute{
