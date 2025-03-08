@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -71,6 +72,69 @@ func (d *serviceAccountsDataSource) Configure(ctx context.Context, req datasourc
 	d.client = client
 }
 
+func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
+	var idAttribute schema.StringAttribute
+	switch idRequired {
+	case true:
+		idAttribute = schema.StringAttribute{
+			Description: "The unique identifier of the Service Account.",
+			Required:    true,
+		}
+	case false:
+		idAttribute = schema.StringAttribute{
+			Description: "The unique identifier of the Service Account.",
+			Computed:    true,
+		}
+	}
+
+	return map[string]schema.Attribute{
+		"id": idAttribute,
+		"description": schema.StringAttribute{
+			Description: "The description of the Service Account.",
+			Computed:    true,
+		},
+		"state": schema.StringAttribute{
+			Description: "The current state of the Service Account.",
+			Computed:    true,
+		},
+		"name": schema.StringAttribute{
+			Description: "The name associated with the service account.",
+			Computed:    true,
+		},
+		"account_access": schema.StringAttribute{
+			CustomType:  internaltypes.CaseInsensitiveStringType{},
+			Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
+			Computed:    true,
+		},
+		"namespace_accesses": schema.SetNestedAttribute{
+			Description: "The set of namespace permissions for this service account, including each namespace and its role.",
+			Optional:    true,
+			Computed:    true,
+			NestedObject: schema.NestedAttributeObject{
+				Attributes: map[string]schema.Attribute{
+					"namespace_id": schema.StringAttribute{
+						Description: "The namespace to assign permissions to.",
+						Computed:    true,
+					},
+					"permission": schema.StringAttribute{
+						CustomType:  types.StringType,
+						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
+						Computed:    true,
+					},
+				},
+			},
+		},
+		"created_at": schema.StringAttribute{
+			Description: "The creation time of the Service Account.",
+			Computed:    true,
+		},
+		"updated_at": schema.StringAttribute{
+			Description: "The last update time of the Service Account.",
+			Computed:    true,
+		},
+	}
+}
+
 func (d *serviceAccountsDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Fetches details about all Service Accounts.",
@@ -83,55 +147,7 @@ func (d *serviceAccountsDataSource) Schema(ctx context.Context, req datasource.S
 				Description: "The list of Service Accounts.",
 				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"id": schema.StringAttribute{
-							Description: "The unique identifier of the Service Account.",
-							Computed:    true,
-						},
-						"description": schema.StringAttribute{
-							Description: "The description of the Service Account.",
-							Computed:    true,
-						},
-						"state": schema.StringAttribute{
-							Description: "The current state of the Service Account.",
-							Computed:    true,
-						},
-						"name": schema.StringAttribute{
-							Description: "The name associated with the service account.",
-							Computed:    true,
-						},
-						"account_access": schema.StringAttribute{
-							CustomType:  internaltypes.CaseInsensitiveStringType{},
-							Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
-							Computed:    true,
-						},
-						"namespace_accesses": schema.SetNestedAttribute{
-							Description: "The set of namespace permissions for this service account, including each namespace and its role.",
-							Optional:    true,
-							Computed:    true,
-							NestedObject: schema.NestedAttributeObject{
-								Attributes: map[string]schema.Attribute{
-									"namespace_id": schema.StringAttribute{
-										Description: "The namespace to assign permissions to.",
-										Computed:    true,
-									},
-									"permission": schema.StringAttribute{
-										CustomType:  types.StringType,
-										Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
-										Computed:    true,
-									},
-								},
-							},
-						},
-						"created_at": schema.StringAttribute{
-							Description: "The creation time of the Service Account.",
-							Computed:    true,
-						},
-						"updated_at": schema.StringAttribute{
-							Description: "The last update time of the Service Account.",
-							Computed:    true,
-						},
-					},
+					Attributes: serviceAccountSchema(false),
 				},
 			},
 		},
@@ -160,62 +176,13 @@ func (d *serviceAccountsDataSource) Read(ctx context.Context, req datasource.Rea
 	}
 
 	for _, sa := range serviceAccounts {
-		stateStr, err := enums.FromResourceState(sa.State)
-		if err != nil {
-			resp.Diagnostics.AddError("Unable to convert service account state", err.Error())
+		serviceAccountModel, diags := serviceAccountToServiceAccountDataModel(ctx, sa)
+		resp.Diagnostics.Append(diags...)
+		if resp.Diagnostics.HasError() {
 			return
 		}
 
-		serviceAccountModel := serviceAccountDataModel{
-			ID:          types.StringValue(sa.Id),
-			Name:        types.StringValue(sa.GetSpec().GetName()),
-			Description: types.StringValue(sa.GetSpec().GetDescription()),
-			State:       types.StringValue(stateStr),
-			CreatedAt:   types.StringValue(sa.GetCreatedTime().AsTime().GoString()),
-			UpdatedAt:   types.StringValue(sa.GetLastModifiedTime().AsTime().GoString()),
-		}
-
-		role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
-			return
-		}
-
-		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
-
-		namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
-
-		if len(sa.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
-			namespaceAccessObjects := make([]types.Object, 0)
-			for ns, namespaceAccess := range sa.GetSpec().GetAccess().GetNamespaceAccesses() {
-				permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
-				if err != nil {
-					resp.Diagnostics.AddError("Failed to convert namespace access permission", err.Error())
-					continue
-				}
-				model := serviceAccountNSAccessModel{
-					NamespaceID: types.StringValue(ns),
-					Permission:  types.StringValue(permission),
-				}
-				obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
-				resp.Diagnostics.Append(d...)
-				if d.HasError() {
-					continue
-				}
-				namespaceAccessObjects = append(namespaceAccessObjects, obj)
-			}
-
-			accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
-			resp.Diagnostics.Append(d...)
-			if resp.Diagnostics.HasError() {
-				return
-			}
-			namespaceAccesses = accesses
-		}
-		serviceAccountModel.NamespaceAccesses = namespaceAccesses
-
-		state.ServiceAccounts = append(state.ServiceAccounts, serviceAccountModel)
-
+		state.ServiceAccounts = append(state.ServiceAccounts, *serviceAccountModel)
 	}
 
 	accResp, err := d.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
@@ -227,4 +194,65 @@ func (d *serviceAccountsDataSource) Read(ctx context.Context, req datasource.Rea
 	state.ID = types.StringValue(fmt.Sprintf("account-%s-service-accounts", accResp.GetAccount().GetId()))
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
+}
+
+func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1.ServiceAccount) (*serviceAccountDataModel, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	stateStr, err := enums.FromResourceState(sa.State)
+	if err != nil {
+		diags.AddError("Unable to convert service account state", err.Error())
+		return nil, diags
+	}
+
+	serviceAccountModel := &serviceAccountDataModel{
+		ID:          types.StringValue(sa.Id),
+		Name:        types.StringValue(sa.GetSpec().GetName()),
+		Description: types.StringValue(sa.GetSpec().GetDescription()),
+		State:       types.StringValue(stateStr),
+		CreatedAt:   types.StringValue(sa.GetCreatedTime().AsTime().GoString()),
+		UpdatedAt:   types.StringValue(sa.GetLastModifiedTime().AsTime().GoString()),
+	}
+
+	role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil {
+		diags.AddError("Failed to convert account access role", err.Error())
+		return nil, diags
+	}
+
+	serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
+
+	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+
+	if len(sa.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
+		namespaceAccessObjects := make([]types.Object, 0)
+		for ns, namespaceAccess := range sa.GetSpec().GetAccess().GetNamespaceAccesses() {
+			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
+			if err != nil {
+				diags.AddError("Failed to convert namespace access permission", err.Error())
+				return nil, diags
+			}
+
+			model := serviceAccountNSAccessModel{
+				NamespaceID: types.StringValue(ns),
+				Permission:  types.StringValue(permission),
+			}
+			obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
+			diags.Append(d...)
+			if diags.HasError() {
+				return nil, diags
+			}
+
+			namespaceAccessObjects = append(namespaceAccessObjects, obj)
+		}
+
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		namespaceAccesses = accesses
+	}
+	serviceAccountModel.NamespaceAccesses = namespaceAccesses
+
+	return serviceAccountModel, diags
 }
