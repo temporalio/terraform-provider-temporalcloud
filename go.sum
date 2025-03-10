@@ -137,8 +137,6 @@ github.com/hashicorp/terraform-json v0.23.0 h1:sniCkExU4iKtTADReHzACkk8fnpQXrdD2
 github.com/hashicorp/terraform-json v0.23.0/go.mod h1:MHdXbBAbSg0GvzuWazEGKAn/cyNfIB7mN6y7KJN6y2c=
 github.com/hashicorp/terraform-plugin-docs v0.20.1 h1:Fq7E/HrU8kuZu3hNliZGwloFWSYfWEOWnylFhYQIoys=
 github.com/hashicorp/terraform-plugin-docs v0.20.1/go.mod h1:Yz6HoK7/EgzSrHPB9J/lWFzwl9/xep2OPnc5jaJDV90=
-github.com/hashicorp/terraform-plugin-framework v1.13.0 h1:8OTG4+oZUfKgnfTdPTJwZ532Bh2BobF4H+yBiYJ/scw=
-github.com/hashicorp/terraform-plugin-framework v1.13.0/go.mod h1:j64rwMGpgM3NYXTKuxrCnyubQb/4VKldEKlcG8cvmjU=
 github.com/hashicorp/terraform-plugin-framework v1.14.0 h1:lsmTJqBlZ4GUabnDxj8Lsa5bmbuUKiUO3Zm9iIKSDf0=
 github.com/hashicorp/terraform-plugin-framework v1.14.0/go.mod h1:xNUKmvTs6ldbwTuId5euAtg37dTxuyj3LHS3uj7BHQ4=
 github.com/hashicorp/terraform-plugin-framework-timeouts v0.5.0 h1:I/N0g/eLZ1ZkLZXUQ0oRSXa8YG/EF0CEuQP1wXdrzKw=
@@ -205,8 +203,8 @@ github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RR
 github.com/mitchellh/reflectwalk v1.0.0/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
 github.com/mitchellh/reflectwalk v1.0.2 h1:G2LzWKi524PWgd3mLHV8Y5k7s6XUvT0Gef6zxSIeXaQ=
 github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
-github.com/nexus-rpc/sdk-go v0.1.0 h1:PUL/0vEY1//WnqyEHT5ao4LBRQ6MeNUihmnNGn0xMWY=
-github.com/nexus-rpc/sdk-go v0.1.0/go.mod h1:TpfkM2Cw0Rlk9drGkoiSMpFqflKTiQLWUNyKJjF8mKQ=
+github.com/nexus-rpc/sdk-go v0.3.0 h1:Y3B0kLYbMhd4C2u00kcYajvmOrfozEtTV/nHSnV57jA=
+github.com/nexus-rpc/sdk-go v0.3.0/go.mod h1:TpfkM2Cw0Rlk9drGkoiSMpFqflKTiQLWUNyKJjF8mKQ=
 github.com/oklog/run v1.1.0 h1:GEenZ1cK0+q0+wsJew9qUg/DyD8k3JzYsZAi5gYi2mA=
 github.com/oklog/run v1.1.0/go.mod h1:sVPdnTZT1zYwAJeCMu2Th4T21pA3FPOQRfWjQlk7DVU=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
@@ -282,8 +280,8 @@ go.opentelemetry.io/otel/trace v1.32.0 h1:WIC9mYrXf8TmY/EXuULKc8hR17vE+Hjv2cssQD
 go.opentelemetry.io/otel/trace v1.32.0/go.mod h1:+i4rkvCraA+tG6AzwloGaCtkx53Fa+L+V8e9a7YvhT8=
 go.temporal.io/api v1.44.1 h1:sb5Hq08AB0WtYvfLJMiWmHzxjqs2b+6Jmzg4c8IOeng=
 go.temporal.io/api v1.44.1/go.mod h1:1WwYUMo6lao8yl0371xWUm13paHExN5ATYT/B7QtFis=
-go.temporal.io/sdk v1.32.1 h1:slA8prhdFr4lxpsTcRusWVitD/cGjELfKUh0mBj73SU=
-go.temporal.io/sdk v1.32.1/go.mod h1:8U8H7rF9u4Hyb4Ry9yiEls5716DHPNvVITPNkgWUwE8=
+go.temporal.io/sdk v1.33.0 h1:T91UzeRdlHTiMGgpygsItOH9+VSkg+M/mG85PqNjdog=
+go.temporal.io/sdk v1.33.0/go.mod h1:WwCmJZLy7zabz3ar5NRAQEygsdP8tgR9sDjISSHuWZw=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.1.10/go.mod h1:8a7PlsEVH3e/a/GLqe5IIrQx6GzcnRmZEufDUTk4A7A=
 go.uber.org/multierr v1.6.0/go.mod h1:cdWPpRnG4AhwMwsgIHip0KRBQjJy5kYEpYjJxpXp9iU=
