@@ -21,6 +21,7 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	nexusv1 "go.temporal.io/cloud-sdk/api/nexus/v1"
+	"go.temporal.io/sdk/converter"
 )
 
 type (
@@ -150,11 +151,11 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 	if !plan.Description.IsNull() {
 		description = plan.Description.ValueString()
 	}
-	// descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
-	// 	return
-	// }
+	descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
+		return
+	}
 
 	targetSpec, diags := getTargetSpecFromModel(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -171,7 +172,7 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 	svcResp, err := r.client.CloudService().CreateNexusEndpoint(ctx, &cloudservicev1.CreateNexusEndpointRequest{
 		Spec: &nexusv1.EndpointSpec{
 			Name:        plan.Name.ValueString(),
-			Description: description,
+			Description: descriptionPayload,
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
@@ -254,11 +255,11 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 	if !plan.Description.IsNull() {
 		description = plan.Description.ValueString()
 	}
-	// descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
-	// if err != nil {
-	// 	resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
-	// 	return
-	// }
+	descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
+		return
+	}
 
 	targetSpec, diags := getTargetSpecFromModel(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
@@ -276,7 +277,7 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		EndpointId: plan.ID.ValueString(),
 		Spec: &nexusv1.EndpointSpec{
 			Name:        plan.Name.ValueString(),
-			Description: description,
+			Description: descriptionPayload,
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
@@ -376,15 +377,14 @@ func updateNexusEndpointModelFromSpec(ctx context.Context, model *nexusEndpointR
 
 	model.Name = types.StringValue(nexusEndpoint.GetSpec().GetName())
 
-	if nexusEndpoint.GetSpec().GetDescription() != "" {
-		// var description string
-		// err := converter.GetDefaultDataConverter().FromPayload(nexusEndpoint.GetSpec().GetDescription(), &description)
-		// if err != nil {
-		// 	diags.AddError("Failed to convert Nexus endpoint description", err.Error())
-		// 	return diags
-		// }
-		// model.Description = types.StringValue(description)
-		model.Description = types.StringValue(nexusEndpoint.GetSpec().GetDescription())
+	if nexusEndpoint.GetSpec().GetDescription() != nil {
+		var description string
+		err := converter.GetDefaultDataConverter().FromPayload(nexusEndpoint.GetSpec().GetDescription(), &description)
+		if err != nil {
+			diags.AddError("Failed to convert Nexus endpoint description", err.Error())
+			return diags
+		}
+		model.Description = types.StringValue(description)
 	}
 
 	nexusEndpointTargetSpec := nexusEndpoint.GetSpec().GetTargetSpec()
