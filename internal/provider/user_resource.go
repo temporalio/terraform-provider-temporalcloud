@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -112,10 +113,10 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of owner, admin, developer, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support.",
+				Description: "The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships.",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read"),
+					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read", "none"),
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
@@ -277,16 +278,22 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
 		return
 	}
+	access := &identityv1.Access{
+		AccountAccess: &identityv1.AccountAccess{
+			Role: role,
+		},
+		NamespaceAccesses: namespaceAccesses,
+	}
+	// If the role is unspecified (i.e. none), remove the account access from the spec.
+	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
+		access.AccountAccess = nil
+	}
+
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
 		Spec: &identityv1.UserSpec{
-			Email: plan.Email.ValueString(),
-			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
-				NamespaceAccesses: namespaceAccesses,
-			},
+			Email:  plan.Email.ValueString(),
+			Access: access,
 		},
 		ResourceVersion:  currentUser.GetUser().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
