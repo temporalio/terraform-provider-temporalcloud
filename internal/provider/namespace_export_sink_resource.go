@@ -43,11 +43,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
-	"go.temporal.io/api/cloud/sink/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
+	sinkv1 "go.temporal.io/cloud-sdk/api/sink/v1"
 )
 
 type (
@@ -313,7 +314,7 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 	})
 
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": plan.ID.ValueString(),
@@ -337,7 +338,7 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 	})
 
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": plan.ID.ValueString(),
@@ -379,7 +380,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
 			Enabled: plan.Enabled.ValueBool(),
-			S3: &sink.S3Spec{
+			S3: &sinkv1.S3Spec{
 				RoleName:     s3Spec.RoleName.ValueString(),
 				BucketName:   s3Spec.BucketName.ValueString(),
 				Region:       s3Spec.Region.ValueString(),
@@ -397,7 +398,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
 			Enabled: plan.Enabled.ValueBool(),
-			Gcs: &sink.GCSSpec{
+			Gcs: &sinkv1.GCSSpec{
 				SaId:         gcsSpec.SaId.ValueString(),
 				BucketName:   gcsSpec.BucketName.ValueString(),
 				GcpProjectId: gcsSpec.GcpProjectId.ValueString(),
@@ -423,7 +424,7 @@ func (r *namespaceExportSinkResource) Read(ctx context.Context, req resource.Rea
 		Name:      sinkName,
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

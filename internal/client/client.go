@@ -28,60 +28,35 @@ import (
 	"fmt"
 	"time"
 
-	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/retry"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"google.golang.org/grpc"
 
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	operationv1 "go.temporal.io/api/cloud/operation/v1"
-	"go.temporal.io/sdk/client"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
+	"go.temporal.io/cloud-sdk/cloudclient"
 )
 
-var TemporalCloudAPIVersion = "2025-01-01-00"
-
-// Client is a client for the Temporal Cloud API.
+// Client is a cloudclient for the Temporal Cloud API.
 type Client struct {
-	client.CloudOperationsClient
+	*cloudclient.Client
 }
-
-var (
-	_ client.CloudOperationsClient = &Client{}
-)
 
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {
 
-	var cClient client.CloudOperationsClient
+	var cClient *cloudclient.Client
 	var err error
-	cClient, err = client.DialCloudOperationsClient(context.Background(), client.CloudOperationsClientOptions{
-		Version:     TemporalCloudAPIVersion,
-		Credentials: client.NewAPIKeyStaticCredentials(apiKey),
-		DisableTLS:  allowInsecure,
-		HostPort:    addrStr,
-		ConnectionOptions: client.ConnectionOptions{
-			DialOptions: []grpc.DialOption{
-				// Make sure to keep this a chain interceptor and make this a inner interceptor.
-				// This will make sure to exercise this retry before the retry interceptor in the SDK.
-				// TODO (abhinav): Move this retry interceptor to the SDK.
-				grpc.WithChainUnaryInterceptor(
-					grpcretry.UnaryClientInterceptor(
-						// max backoff = 64s (+/- 32s jitter)
-						grpcretry.WithBackoff(
-							grpcretry.BackoffExponentialWithJitter(500*time.Millisecond, 0.5),
-						),
-						grpcretry.WithMax(7),
-					),
-				),
-			},
-		},
+	cClient, err = cloudclient.New(cloudclient.Options{
+		HostPort:      addrStr,
+		APIKey:        apiKey,
+		AllowInsecure: allowInsecure,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect `%s`: %v", client.DefaultHostPort, err)
+		return nil, fmt.Errorf("failed to connect: %v", err)
 	}
 
 	return &Client{cClient}, nil
 }
 
-func AwaitAsyncOperation(ctx context.Context, client client.CloudOperationsClient, op *operationv1.AsyncOperation) error {
+func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operationv1.AsyncOperation) error {
 	if op == nil {
 		return fmt.Errorf("failed to await response: nil operation")
 	}
@@ -92,7 +67,7 @@ func AwaitAsyncOperation(ctx context.Context, client client.CloudOperationsClien
 	for {
 		select {
 		case <-ticker.C:
-			status, err := client.CloudService().GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
+			status, err := cloudclient.CloudService().GetAsyncOperation(ctx, &cloudservicev1.GetAsyncOperationRequest{
 				AsyncOperationId: op.Id,
 			})
 			if err != nil {

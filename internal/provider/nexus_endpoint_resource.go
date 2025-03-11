@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -18,8 +20,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	nexusv1 "go.temporal.io/api/cloud/nexus/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	nexusv1 "go.temporal.io/cloud-sdk/api/nexus/v1"
 	"go.temporal.io/sdk/converter"
 )
 
@@ -214,7 +216,7 @@ func (r *nexusEndpointResource) Read(ctx context.Context, req resource.ReadReque
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -325,7 +327,7 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -347,7 +349,7 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

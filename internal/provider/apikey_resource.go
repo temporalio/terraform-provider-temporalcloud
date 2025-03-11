@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
-	"time"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -17,8 +19,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	identityv1 "go.temporal.io/api/cloud/identity/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -235,7 +237,7 @@ func (r *apiKeyResource) Read(ctx context.Context, req resource.ReadRequest, res
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -352,7 +354,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		KeyId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -374,7 +376,7 @@ func (r *apiKeyResource) Delete(ctx context.Context, req resource.DeleteRequest,
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "API Key Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
