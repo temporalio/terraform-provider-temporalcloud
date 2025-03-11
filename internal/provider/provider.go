@@ -11,7 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"go.temporal.io/api/cloud/cloudservice/v1"
+	"go.temporal.io/cloud-sdk/api/cloudservice/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -175,6 +175,7 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 		NewApiKeyResource,
 		NewMetricsEndpointResource,
 		NewNexusEndpointResource,
+		NewNamespaceExportSinkResource,
 	}
 }
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"go.temporal.io/api/cloud/namespace/v1"
+	"go.temporal.io/cloud-sdk/api/namespace/v1"
 )
 
 var (

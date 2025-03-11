@@ -16,7 +16,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 )
 
 func TestNamespaceSchema(t *testing.T) {
@@ -574,5 +574,5 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	return client.CloudOperationsClient.CloudService()
+	return client.CloudService()
 }
