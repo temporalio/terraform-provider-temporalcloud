@@ -3,10 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
-	"strings"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -19,8 +21,8 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
-	namespacev1 "go.temporal.io/api/cloud/namespace/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 )
 
 type (
@@ -188,7 +190,7 @@ func (r *namespaceSearchAttributeResource) Read(ctx context.Context, req resourc
 		Namespace: state.NamespaceID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Search Attribute Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
