@@ -26,10 +26,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
-	"time"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -386,7 +388,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -531,7 +533,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -551,7 +553,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

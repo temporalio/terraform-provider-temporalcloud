@@ -26,6 +26,7 @@ import (
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type (
@@ -230,7 +231,7 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -341,7 +342,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		UserId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -373,7 +374,7 @@ func (r *userResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "User Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

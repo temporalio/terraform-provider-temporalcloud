@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -215,7 +216,7 @@ func (r *nexusEndpointResource) Read(ctx context.Context, req resource.ReadReque
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -326,7 +327,7 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		EndpointId: state.ID.ValueString(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
@@ -348,7 +349,7 @@ func (r *nexusEndpointResource) Delete(ctx context.Context, req resource.DeleteR
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		switch client.StatusCode(err) {
+		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Nexus Endpoint Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),

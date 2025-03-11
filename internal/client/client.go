@@ -45,6 +45,7 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) 
 	var cClient *cloudclient.Client
 	var err error
 	cClient, err = cloudclient.New(cloudclient.Options{
+		HostPort:      addrStr,
 		APIKey:        apiKey,
 		AllowInsecure: allowInsecure,
 	})
