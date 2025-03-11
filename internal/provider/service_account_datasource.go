@@ -5,7 +5,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	cloudservicev1 "go.temporal.io/api/cloud/cloudservice/v1"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 )
 
 type (
