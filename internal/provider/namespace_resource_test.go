@@ -15,8 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
 
 func TestNamespaceSchema(t *testing.T) {
@@ -129,7 +130,43 @@ resource "temporalcloud_namespace" "terraform" {
 			// Delete testing automatically occurs in TestCase
 		},
 	})
+}
 
+func TestAccBasicNamespaceWithApiKeyAuth_GCP(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["gcp-us-east-1"]
+  api_key_auth 	 = true
+  retention_days     = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// New namespace with retention of 7
+				Config: config(name, 7),
+			},
+			{
+				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
 }
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
