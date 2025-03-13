@@ -15,8 +15,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
 
 func TestNamespaceSchema(t *testing.T) {
@@ -129,7 +130,6 @@ resource "temporalcloud_namespace" "terraform" {
 			// Delete testing automatically occurs in TestCase
 		},
 	})
-
 }
 
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
