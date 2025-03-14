@@ -143,7 +143,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 		allowedAccountID = data.AllowedAccountID.ValueString()
 	}
 
-	cc, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
+	cc, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey, p.version)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to connect to Temporal Cloud API", err.Error())
 		return
