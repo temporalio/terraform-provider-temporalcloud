@@ -14,7 +14,7 @@ require (
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.11.0
 	github.com/jpillora/maplock v0.0.0-20160420012925-5c725ac6e22a
-	go.temporal.io/cloud-sdk v0.2.0
+	go.temporal.io/cloud-sdk v0.2.1
 	go.temporal.io/sdk v1.32.1
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5

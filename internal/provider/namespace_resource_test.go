@@ -569,7 +569,7 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 		endpoint = "saas-api.tmprl.cloud:443"
 	}
 	allowInsecure := os.Getenv("TEMPORAL_CLOUD_ALLOW_INSECURE") == "true"
-	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey)
+	client, err := client.NewConnectionWithAPIKey(endpoint, allowInsecure, apiKey, "test")
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
