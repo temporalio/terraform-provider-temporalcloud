@@ -40,7 +40,11 @@ type Client struct {
 	*cloudclient.Client
 }
 
-func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) (*Client, error) {
+func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, version string) (*Client, error) {
+	userAgentProject := "terraform-provider-temporalcloud"
+	if version != "" {
+		userAgentProject = fmt.Sprintf("%s/%s", userAgentProject, version)
+	}
 
 	var cClient *cloudclient.Client
 	var err error
@@ -48,6 +52,7 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string) 
 		HostPort:      addrStr,
 		APIKey:        apiKey,
 		AllowInsecure: allowInsecure,
+		UserAgent:     userAgentProject,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %v", err)
