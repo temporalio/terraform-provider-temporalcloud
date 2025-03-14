@@ -439,7 +439,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 			}
 			awsPrivLinkModel.AllowedPrincipalArns = principals
 
-			serviceNames, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetAllowedPrincipalArns())
+			serviceNames, listDiags := types.ListValueFrom(ctx, types.StringType, privateConn.GetAwsPrivateLink().GetVpcEndpointServiceNames())
 			diags.Append(listDiags...)
 			if diags.HasError() {
 				return nil, diags
