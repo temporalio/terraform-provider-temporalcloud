@@ -43,7 +43,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -178,9 +177,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
-				},
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
@@ -418,11 +414,6 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	regions, d := getRegionsFromModel(ctx, &plan)
-	resp.Diagnostics.Append(d...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 	certFilters, d := getCertFiltersFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -449,7 +440,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 
 	var spec = &namespacev1.NamespaceSpec{
 		Name:             plan.Name.ValueString(),
-		Regions:          regions,
+		Regions:          currentNs.GetNamespace().GetSpec().GetRegions(),
 		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
 		CodecServer:      codecServer,
 		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
@@ -489,14 +480,17 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
-	if err != nil {
+	switch {
+	// continue if nothing to change
+	case status.Code(err) == codes.InvalidArgument && status.Convert(err).Message() == "nothing to change":
+	case err != nil:
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 		return
-	}
-
-	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
+	default:
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
 	}
 
 	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
@@ -504,6 +498,12 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace after update", err.Error())
+		return
+	}
+
+	ns, d = r.handleRegionUpdate(ctx, ns, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -573,6 +573,100 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 
 func (r *namespaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func (r *namespaceResource) handleRegionUpdate(ctx context.Context, ns *cloudservicev1.GetNamespaceResponse, plan *namespaceResourceModel) (*cloudservicev1.GetNamespaceResponse, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// Get the current regions
+	currentRegions := ns.GetNamespace().GetSpec().GetRegions()
+
+	// Get the regions from the plan
+	requestRegions, d := getRegionsFromModel(ctx, plan)
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	added, removed := internaltypes.ListDiff(currentRegions, requestRegions)
+	if len(added)+len(removed) > 1 {
+		diags.AddError("Cannot add or remove multiple regions at once", "Please update the resource to add or remove one region at a time.")
+		return nil, diags
+	}
+	// Nothing to do, return the existing response
+	if len(added)+len(removed) == 0 {
+		return ns, diags
+	}
+
+	switch {
+	case len(added) > 0:
+		diags.Append(r.addRegion(ctx, ns.GetNamespace(), added[0])...)
+		if diags.HasError() {
+			return nil, diags
+		}
+	case len(removed) > 0:
+		diags.Append(r.deleteRegion(ctx, ns.GetNamespace(), removed[0])...)
+		if diags.HasError() {
+			return nil, diags
+		}
+	}
+
+	// Get the updated namespace
+	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: ns.GetNamespace().Namespace,
+	})
+	if err != nil {
+		diags.AddError("Failed to get updated namespace", err.Error())
+		return nil, diags
+	}
+
+	return ns, diags
+}
+
+func (r *namespaceResource) addRegion(ctx context.Context, ns *namespacev1.Namespace, region string) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	// Add the region to the namespace
+	resp, err := r.client.CloudService().AddNamespaceRegion(ctx, &cloudservicev1.AddNamespaceRegionRequest{
+		Namespace:        ns.GetNamespace(),
+		Region:           region,
+		ResourceVersion:  ns.GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
+	})
+	if err != nil {
+		diags.AddError("Failed to add region to namespace", err.Error())
+		return diags
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, resp.AsyncOperation); err != nil {
+		diags.AddError("Failed to add region to namespace", err.Error())
+		return diags
+	}
+
+	return diags
+}
+
+func (r *namespaceResource) deleteRegion(ctx context.Context, ns *namespacev1.Namespace, region string) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	// Remove the region from the namespace
+	resp, err := r.client.CloudService().DeleteNamespaceRegion(ctx, &cloudservicev1.DeleteNamespaceRegionRequest{
+		Namespace:        ns.GetNamespace(),
+		Region:           region,
+		ResourceVersion:  ns.GetResourceVersion(),
+		AsyncOperationId: uuid.New().String(),
+	})
+	if err != nil {
+		diags.AddError("Failed to remove region from namespace", err.Error())
+		return diags
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, resp.AsyncOperation); err != nil {
+		diags.AddError("Failed to remove region from namespace", err.Error())
+		return diags
+	}
+
+	return diags
 }
 
 func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
