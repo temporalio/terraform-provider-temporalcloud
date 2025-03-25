@@ -1,6 +1,6 @@
 package types
 
-func ListDiff[T comparable](old, new []T) (added, removed []T) {
+func ListDiff[T comparable](old, planned []T) (added, removed []T) {
 	oldMap := make(map[T]struct{})
 	newMap := make(map[T]struct{})
 
@@ -8,7 +8,7 @@ func ListDiff[T comparable](old, new []T) (added, removed []T) {
 	for _, v := range old {
 		oldMap[v] = struct{}{}
 	}
-	for _, v := range new {
+	for _, v := range planned {
 		newMap[v] = struct{}{}
 	}
 
