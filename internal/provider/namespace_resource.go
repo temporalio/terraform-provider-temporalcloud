@@ -220,7 +220,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"api_key_auth": schema.BoolAttribute{
-				Description: "If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.",
+				Description: "If true, Temporal Cloud will enable API key authentication for this namespace.",
 				Optional:    true,
 				Computed:    true,
 			},
@@ -318,18 +318,16 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		CodecServer:   codecServer,
 	}
 
-	if plan.ApiKeyAuth.ValueBool() {
-		if !plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
-			return
-		}
-		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
+		resp.Diagnostics.AddError("Namespace not configured with authentication", "accepted_client_ca or api_key_auth must be set")
+		return
+	}
 
-	} else {
-		if plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
-			return
-		}
+	if plan.ApiKeyAuth.ValueBool() {
+		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+	}
+
+	if !plan.AcceptedClientCA.IsNull() {
 		mtls := &namespacev1.MtlsAuthSpec{}
 		if plan.AcceptedClientCA.ValueString() != "" {
 			certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
@@ -455,18 +453,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
 	}
 
-	if plan.ApiKeyAuth.ValueBool() {
-		if !plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("accepted_client_ca is not allowed when API key authentication is enabled (api_key_auth is set to true).", "")
-			return
-		}
-		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
-	} else {
-		if plan.AcceptedClientCA.IsNull() {
-			resp.Diagnostics.AddError("Namespace not configured with authentication. accepted_client_ca is required when API key authentication is not enabled (api_key_auth is not set to true).", "")
-			return
-		}
+	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
+		resp.Diagnostics.AddError("Namespace not configured with authentication", "accepted_client_ca or api_key_auth must be set")
+		return
+	}
 
+	if plan.ApiKeyAuth.ValueBool() {
+		spec.ApiKeyAuth = &namespacev1.ApiKeyAuthSpec{Enabled: true}
+	}
+
+	if !plan.AcceptedClientCA.IsNull() {
 		mtls := &namespacev1.MtlsAuthSpec{}
 
 		if plan.AcceptedClientCA.ValueString() != "" {
