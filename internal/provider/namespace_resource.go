@@ -220,7 +220,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"api_key_auth": schema.BoolAttribute{
-				Description: "If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.",
+				Description: "If true, Temporal Cloud will use API key authentication for this namespace.",
 				Optional:    true,
 				Computed:    true,
 			},
