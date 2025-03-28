@@ -205,6 +205,7 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 			RetentionDays        int
 			CodecServer          *codecServer
 			ApiKeyAuth           bool
+			TLSAuth              bool
 			CertFiltersEmptyList bool
 		}
 	)
@@ -223,7 +224,7 @@ resource "temporalcloud_namespace" "test" {
 	  api_key_auth = true
 	  {{ end }}
 
-	{{ if not .ApiKeyAuth }}
+	{{ if .TLSAuth }}
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIBxjCCAU2gAwIBAgIRAlyZ5KUmunPLeFAupDwGL8AwCgYIKoZIzj0EAwMwEjEQ
@@ -277,12 +278,14 @@ PEM
 					Name:          name,
 					RetentionDays: 7,
 				}),
+				ExpectError: regexp.MustCompile("Namespace not configured with authentication"),
 			},
 			{
 				// Error on empty cert filers
 				Config: config(configArgs{
 					Name:                 name,
 					RetentionDays:        7,
+					TLSAuth:              true,
 					CertFiltersEmptyList: true,
 				}),
 				ExpectError: regexp.MustCompile("certificate_filters list must contain at least 1 elements"),
@@ -291,6 +294,7 @@ PEM
 				Config: config(configArgs{
 					Name:          name,
 					RetentionDays: 7,
+					TLSAuth:       true,
 					CodecServer: &codecServer{
 						Endpoint:                      "https://example.com",
 						PassAccessToken:               true,
@@ -330,6 +334,7 @@ PEM
 				Config: config(configArgs{
 					Name:          name,
 					RetentionDays: 7,
+					TLSAuth:       true,
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
@@ -389,6 +394,31 @@ PEM
 					Name:          name,
 					RetentionDays: 7,
 					ApiKeyAuth:    true,
+				}),
+				Check: func(s *terraform.State) error {
+					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					if spec.GetCodecServer().GetEndpoint() != "" {
+						return fmt.Errorf("unexpected endpoint: %s", spec.GetCodecServer().GetEndpoint())
+					}
+					return nil
+				},
+			},
+			{
+				// both auth methods
+				Config: config(configArgs{
+					Name:          name,
+					RetentionDays: 7,
+					ApiKeyAuth:    true,
+					TLSAuth:       true,
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
