@@ -278,14 +278,14 @@ PEM
 					Name:          name,
 					RetentionDays: 7,
 				}),
-				ExpectError: regexp.MustCompile("Namespace not configured with authentication")
+				ExpectError: regexp.MustCompile("Namespace not configured with authentication"),
 			},
 			{
 				// Error on empty cert filers
 				Config: config(configArgs{
 					Name:                 name,
 					RetentionDays:        7,
-					TLSAuth: true,
+					TLSAuth:              true,
 					CertFiltersEmptyList: true,
 				}),
 				ExpectError: regexp.MustCompile("certificate_filters list must contain at least 1 elements"),
@@ -294,7 +294,7 @@ PEM
 				Config: config(configArgs{
 					Name:          name,
 					RetentionDays: 7,
-					TLSAuth: true,
+					TLSAuth:       true,
 					CodecServer: &codecServer{
 						Endpoint:                      "https://example.com",
 						PassAccessToken:               true,
@@ -334,7 +334,7 @@ PEM
 				Config: config(configArgs{
 					Name:          name,
 					RetentionDays: 7,
-					TLSAuth: true,
+					TLSAuth:       true,
 				}),
 				Check: func(s *terraform.State) error {
 					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
