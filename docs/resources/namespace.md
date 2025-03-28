@@ -138,7 +138,7 @@ resource "temporalcloud_namespace" "terraform3" {
 ### Optional
 
 - `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud. This is a required field when a Namespace uses mTLS authentication.
-- `api_key_auth` (Boolean) If true, Temporal Cloud will use API key authentication for this namespace.
+- `api_key_auth` (Boolean) If true, Temporal Cloud will enable API key authentication for this namespace.
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
