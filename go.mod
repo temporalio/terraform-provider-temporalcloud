@@ -16,7 +16,7 @@ require (
 	github.com/jpillora/maplock v0.0.0-20160420012925-5c725ac6e22a
 	go.temporal.io/cloud-sdk v0.2.1
 	go.temporal.io/sdk v1.33.0
-	google.golang.org/grpc v1.71.0
+	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.6
 )
 
