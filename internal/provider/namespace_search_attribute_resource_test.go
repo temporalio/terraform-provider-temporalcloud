@@ -3,8 +3,11 @@ package provider
 import (
 	"context"
 	"fmt"
-	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"regexp"
 	"testing"
+
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -34,7 +37,7 @@ func TestSearchAttrSchema(t *testing.T) {
 
 func TestAccNamespaceWithSearchAttributes(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-search-attributes", randomString(10))
-	config := func(name string, saName string) string {
+	config := func(name string, saName string, saType string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -64,7 +67,7 @@ PEM
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "%s"
-  type         = "text"
+  type         = "%s"
 }
 
 resource "temporalcloud_namespace_search_attribute" "custom_search_attribute2" {
@@ -77,7 +80,7 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
   namespace_id = temporalcloud_namespace.terraform.id
   name         = "CustomSearchAttribute3"
   type         = "text"
-}`, name, saName)
+}`, name, saName, saType)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -85,10 +88,14 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name, "CustomSearchAttribute"),
+				Config:      config(name, "CustomSearchAttribute", "KeywordList"),
+				ExpectError: regexp.MustCompile(enums.ErrInvalidNamespaceSearchAttribute.Error()),
 			},
 			{
-				Config: config(name, "CustomSearchAttribute9"),
+				Config: config(name, "CustomSearchAttribute", "text"),
+			},
+			{
+				Config: config(name, "CustomSearchAttribute9", "text"),
 			},
 		},
 	})

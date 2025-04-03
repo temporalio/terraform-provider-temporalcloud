@@ -134,7 +134,7 @@ func (r *namespaceSearchAttributeResource) Create(ctx context.Context, req resou
 			return
 		}
 
-		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString())
+		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString(), true)
 		if err != nil {
 			resp.Diagnostics.AddError("Invalid search attribute type", err.Error())
 			return
@@ -252,7 +252,7 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 		}
 
 		spec := ns.GetNamespace().GetSpec()
-		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString())
+		saType, err := enums.ToNamespaceSearchAttribute(plan.Type.ValueString(), false)
 		if err != nil {
 			resp.Diagnostics.AddError("Invalid search attribute type", err.Error())
 			return
@@ -369,7 +369,11 @@ func (m searchAttrTypePlanModifier) MarkdownDescription(ctx context.Context) str
 // PlanModifyString implements the plan modification logic.
 func (m searchAttrTypePlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
 	if req.State.Raw.IsNull() {
-		// Its a create operation, no need to update the plan.
+		// Its a create operation, validate search attribute type.
+		_, err := enums.ToNamespaceSearchAttribute(req.PlanValue.ValueString(), true)
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid search attribute type", err.Error())
+		}
 		return
 	}
 	if req.Plan.Raw.IsNull() {
@@ -377,12 +381,12 @@ func (m searchAttrTypePlanModifier) PlanModifyString(ctx context.Context, req pl
 		return
 	}
 
-	saTypePlan, err := enums.ToNamespaceSearchAttribute(req.PlanValue.ValueString())
+	saTypePlan, err := enums.ToNamespaceSearchAttribute(req.PlanValue.ValueString(), false)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to parse search attribute type in plan", err.Error())
 		return
 	}
-	saTypeState, err := enums.ToNamespaceSearchAttribute(req.StateValue.ValueString())
+	saTypeState, err := enums.ToNamespaceSearchAttribute(req.StateValue.ValueString(), false)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to parse search attribute type in state", err.Error())
 		return

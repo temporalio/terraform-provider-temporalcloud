@@ -12,7 +12,7 @@ var (
 	ErrInvalidNamespaceSearchAttribute = errors.New("invalid namespace search attribute")
 )
 
-func ToNamespaceSearchAttribute(s string) (namespace.NamespaceSpec_SearchAttributeType, error) {
+func ToNamespaceSearchAttribute(s string, strict bool) (namespace.NamespaceSpec_SearchAttributeType, error) {
 	switch strings.ToLower(s) {
 	case "text":
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_TEXT, nil
@@ -26,10 +26,15 @@ func ToNamespaceSearchAttribute(s string) (namespace.NamespaceSpec_SearchAttribu
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_BOOL, nil
 	case "datetime":
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_DATETIME, nil
-	case "keyword_list", "keywordlist", "keyword-list":
+	case "keyword_list":
 		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_KEYWORD_LIST, nil
+	case "keywordlist", "keyword-list":
+		if !strict {
+			return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_KEYWORD_LIST, nil
+		}
+		fallthrough
 	default:
-		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidNamespaceSearchAttribute, s)
+		return namespace.NamespaceSpec_SEARCH_ATTRIBUTE_TYPE_UNSPECIFIED, fmt.Errorf("%w: '%s', must be one of: text, keyword, int, double, bool, datetime, keyword_list", ErrInvalidNamespaceSearchAttribute, s)
 	}
 }
 
