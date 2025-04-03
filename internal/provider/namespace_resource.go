@@ -173,7 +173,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\", which is currently unsupported by the Terraform provider. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.",
+				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\". Please note that changing, adding, or removing regions is not supported and the provider will attempt to re-create the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
