@@ -22,7 +22,7 @@ import (
 
 func TestNamespaceSchema(t *testing.T) {
 	t.Parallel()
-
+	// Trigger a test run
 	ctx := context.Background()
 	schemaRequest := fwresource.SchemaRequest{}
 	schemaResponse := &fwresource.SchemaResponse{}
