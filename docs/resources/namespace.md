@@ -132,7 +132,7 @@ resource "temporalcloud_namespace" "terraform3" {
 ### Required
 
 - `name` (String) The name of the namespace.
-- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a "Multi-region Namespace", which is currently unsupported by the Terraform provider. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.
+- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a "Multi-region Namespace". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 
 ### Optional
