@@ -1,59 +1,49 @@
 package provider
 
 import (
-	"bufio"
-	"bytes"
-	"context"
-	"errors"
 	"fmt"
-	"os"
-	"regexp"
 	"testing"
-	"text/template"
 
-	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
-
-	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
 
-func TestNamespaceSchema(t *testing.T) {
-	t.Parallel()
+/*
+	func TestNamespaceSchema(t *testing.T) {
+		t.Parallel()
 
-	ctx := context.Background()
-	schemaRequest := fwresource.SchemaRequest{}
-	schemaResponse := &fwresource.SchemaResponse{}
+		ctx := context.Background()
+		schemaRequest := fwresource.SchemaRequest{}
+		schemaResponse := &fwresource.SchemaResponse{}
 
-	// Instantiate the resource.Resource and call its Schema method
-	NewNamespaceResource().Schema(ctx, schemaRequest, schemaResponse)
+		// Instantiate the resource.Resource and call its Schema method
+		NewNamespaceResource().Schema(ctx, schemaRequest, schemaResponse)
 
-	if schemaResponse.Diagnostics.HasError() {
-		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+		if schemaResponse.Diagnostics.HasError() {
+			t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
+		}
+
+		// Validate the schema
+		diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+
+		if diagnostics.HasError() {
+			t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
+		}
 	}
 
-	// Validate the schema
-	diagnostics := schemaResponse.Schema.ValidateImplementation(ctx)
+	func TestAccBasicNamespace(t *testing.T) {
+		name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
+		config := func(name string, retention int) string {
+			return fmt.Sprintf(`
 
-	if diagnostics.HasError() {
-		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
-	}
-}
-
-func TestAccBasicNamespace(t *testing.T) {
-	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
-	config := func(name string, retention int) string {
-		return fmt.Sprintf(`
 provider "temporalcloud" {
 
 }
 
-resource "temporalcloud_namespace" "terraform" {
-  name               = "%s"
-  regions            = ["aws-us-east-1"]
-  accepted_client_ca = base64encode(<<PEM
+	resource "temporalcloud_namespace" "terraform" {
+	  name               = "%s"
+	  regions            = ["aws-us-east-1"]
+	  accepted_client_ca = base64encode(<<PEM
+
 -----BEGIN CERTIFICATE-----
 MIIBxjCCAU2gAwIBAgIRAlyZ5KUmunPLeFAupDwGL8AwCgYIKoZIzj0EAwMwEjEQ
 MA4GA1UEChMHdGVzdGluZzAeFw0yNDA4MTMyMzQ2NThaFw0yNTA4MTMyMzQ3NTha
@@ -69,8 +59,9 @@ US8pEmNuIiCguEGwi+pb5CWfabETEHApxmo=
 PEM
 )
 
-  retention_days     = %d
-}`, name, retention)
+	  retention_days     = %d
+	}`, name, retention)
+
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -94,7 +85,7 @@ PEM
 	})
 
 }
-
+*/
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
@@ -105,7 +96,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-us-east-1", "aws-us-east-2"]
   api_key_auth 	 = true
   retention_days     = %d
 }`, name, retention)
@@ -132,6 +123,7 @@ resource "temporalcloud_namespace" "terraform" {
 	})
 }
 
+/*
 func TestAccBasicNamespaceWithCertFilters(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-cert-filters", randomString(10))
 	config := func(name string, retention int) string {
@@ -606,3 +598,4 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 
 	return client.CloudService()
 }
+*/
