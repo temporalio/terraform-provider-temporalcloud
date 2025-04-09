@@ -33,7 +33,6 @@ type (
 		ID                types.String                             `tfsdk:"id"`
 		State             types.String                             `tfsdk:"state"`
 		Name              types.String                             `tfsdk:"name"`
-		ScimIdpId         types.String                             `tfsdk:"scim_idp_id"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
@@ -94,13 +93,6 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Description: "The name of the group",
 				Required:    true,
-			},
-			"scim_idp_id": schema.StringAttribute{
-				Description: "The Group ID from the SCIM Identity Provider. Required if the group is a SCIM group.",
-				Optional:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.RequiresReplace(),
-				},
 			},
 		},
 		Blocks: map[string]schema.Block{

@@ -60,7 +60,6 @@ resource "temporalcloud_group" "namespace_admin_group" {
 ### Optional
 
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
-- `scim_idp_id` (String) The Group ID from the SCIM Identity Provider. Required if the group is a SCIM group.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
