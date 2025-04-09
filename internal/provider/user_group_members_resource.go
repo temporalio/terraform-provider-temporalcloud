@@ -42,6 +42,8 @@ var (
 	_ resource.ResourceWithImportState = (*userGroupMembersResource)(nil)
 )
 
+var idFmt = "group/%s/members"
+
 func NewUserGroupMembersResource() resource.Resource {
 	return &userGroupMembersResource{}
 }
@@ -237,7 +239,7 @@ func (r *userGroupMembersResource) Delete(ctx context.Context, req resource.Dele
 }
 
 func (r *userGroupMembersResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("group_id"), req, resp)
 }
 
 func (r *userGroupMembersResource) setUserGroupMembers(ctx context.Context, groupID string, existing, planned []string) error {
@@ -283,7 +285,7 @@ func (r *userGroupMembersResource) setUserGroupMembers(ctx context.Context, grou
 
 func updateGroupMembersModelFromSpec(ctx context.Context, state *userGroupMembersResourceModel, groupId string, users []string) diag.Diagnostics {
 	var diags diag.Diagnostics
-	state.ID = types.StringValue(fmt.Sprintf("group-members-%s", groupId))
+	state.ID = types.StringValue(fmt.Sprintf(idFmt, groupId))
 	state.GroupID = types.StringValue(groupId)
 	userSet := types.SetNull(types.ObjectType{AttrTypes: namespaceAccessAttrs})
 	if len(users) > 0 {

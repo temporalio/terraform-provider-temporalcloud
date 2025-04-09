@@ -41,7 +41,7 @@ func TestGroupSchema(t *testing.T) {
 	}
 }
 
-func TestAccBasicGroup(t *testing.T) {
+func TestAccGroup_Basic(t *testing.T) {
 	name := createRandomName()
 	nameUpdate := createRandomName()
 	config := func(name string, role string) string {
@@ -83,7 +83,7 @@ resource "temporalcloud_group" "terraform" {
 	})
 }
 
-func TestAccBasicGroupWithNamespaceAccesses(t *testing.T) {
+func TestAccGroup_WithNamespaceAccesses(t *testing.T) {
 	type configArgs struct {
 		Name          string
 		NamespaceName string
@@ -178,7 +178,7 @@ resource "temporalcloud_group" "terraform" {
 	})
 }
 
-func TestAccBasicGroupWithEmptyNamespaceAccesses(t *testing.T) {
+func TestAccGroup_WithEmptyNamespaceAccesses(t *testing.T) {
 	type configArgs struct {
 		Name        string
 		AccountPerm string
@@ -226,7 +226,7 @@ resource "temporalcloud_group" "terraform" {
 	})
 }
 
-func TestAccBasicGroupWithDuplicateNamespaceAccesses(t *testing.T) {
+func TestAccGroup_WithDuplicateNamespaceAccesses(t *testing.T) {
 	type configArgs struct {
 		Name        string
 		AccountPerm string

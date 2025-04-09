@@ -2,16 +2,18 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 )
 
-func TestGroupMembersSchema(t *testing.T) {
+func TestGroupMembers_Schema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -33,7 +35,7 @@ func TestGroupMembersSchema(t *testing.T) {
 	}
 }
 
-func TestAccBasicGroupMembers(t *testing.T) {
+func TestAccGroupMembers_Basic(t *testing.T) {
 	name := createRandomName()
 	emailAddr := createRandomEmail()
 	emailAddr2 := createRandomEmail()
@@ -60,7 +62,7 @@ resource "temporalcloud_group" "terraform" {
 
 resource "temporalcloud_group_members" "terraform" {
   group_id = temporalcloud_group.terraform.id
-  user_ids = %s
+  users = %s
 }
 `, email, email2, name, users)
 	}
@@ -80,14 +82,54 @@ resource "temporalcloud_group_members" "terraform" {
 			},
 			{
 				Config: config(emailAddr, emailAddr2, name, fmt.Sprintf("[%s]", user1TFID)),
+				Check: func(state *terraform.State) error {
+					id := state.RootModule().Resources["temporalcloud_group_members.terraform"].Primary.Attributes["group_id"]
+					conn := newConnection(t)
+					members, err := conn.GetUserGroupMembers(context.Background(), &cloudservicev1.GetUserGroupMembersRequest{
+						GroupId: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get group: %v", err)
+					}
+
+					if len(members.GetMembers()) != 1 {
+						return errors.New("expected 1 member")
+					}
+
+					userId := state.RootModule().Resources["temporalcloud_user.user1"].Primary.Attributes["id"]
+					if members.GetMembers()[0].GetMemberId().GetUserId() != userId {
+						return errors.New("expected user1 to be a member")
+					}
+
+					return nil
+				},
 			},
 			{
 				Config: config(emailAddr, emailAddr2, name, fmt.Sprintf("[%s, %s]", user1TFID, user2TFID)),
+				Check: func(state *terraform.State) error {
+					id := state.RootModule().Resources["temporalcloud_group_members.terraform"].Primary.Attributes["group_id"]
+					conn := newConnection(t)
+					members, err := conn.GetUserGroupMembers(context.Background(), &cloudservicev1.GetUserGroupMembersRequest{
+						GroupId: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get group: %v", err)
+					}
+
+					if len(members.GetMembers()) != 2 {
+						return errors.New("expected 2 members")
+					}
+
+					return nil
+				},
 			},
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_group_members.terraform",
+				ImportStateIdFunc: func(state *terraform.State) (string, error) {
+					return state.RootModule().Resources["temporalcloud_group_members.terraform"].Primary.Attributes["group_id"], nil
+				},
 			},
 			{
 				Config: config(emailAddr, emailAddr2, name, fmt.Sprintf("[%s]", user1TFID)),
@@ -96,6 +138,9 @@ resource "temporalcloud_group_members" "terraform" {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_group_members.terraform",
+				ImportStateIdFunc: func(state *terraform.State) (string, error) {
+					return state.RootModule().Resources["temporalcloud_group_members.terraform"].Primary.Attributes["group_id"], nil
+				},
 			},
 		},
 	})
