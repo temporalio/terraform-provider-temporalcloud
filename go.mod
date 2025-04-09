@@ -4,6 +4,10 @@ go 1.23.0
 
 toolchain go1.24.1
 
+replace (
+	go.temporal.io/cloud-sdk => ../cloud-sdk-go
+)
+
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/terraform-plugin-docs v0.21.0
