@@ -16,7 +16,7 @@ description: |-
 # temporalcloud Provider
 
 Use the `temporalcloud` provider to interact with resources supported by [Temporal Cloud](https://temporal.io/cloud).
-		
+
 Use the navigation to the left to learn about the available resources supported by this provider.
 
 ~> This provider is in Public Preview, is under active development, and is subject to change. We reserve the right to make breaking changes during this pre-GA period, though we will do our best to maintain compatibility wherever possible.
