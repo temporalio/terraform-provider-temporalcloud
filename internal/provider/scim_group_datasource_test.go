@@ -11,7 +11,7 @@ import (
 func TestAccDataSource_SCIM_Group(t *testing.T) {
 	name := "scim_test"
 	idpID := "tf-basic-scim-group"
-	config := func(name string) string {
+	config := func(idpID string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 }
@@ -32,7 +32,7 @@ output "scim_group" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name),
+				Config: config(idpID),
 				Check: func(s *terraform.State) error {
 
 					output, ok := s.RootModule().Outputs["scim_group"]
