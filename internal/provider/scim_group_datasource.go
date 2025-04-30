@@ -76,7 +76,6 @@ func (d *scimGroupDataSource) Read(ctx context.Context, req datasource.ReadReque
 		},
 	})
 	if err != nil {
-
 		resp.Diagnostics.AddError(
 			"Unable to read SCIM group",
 			fmt.Sprintf("Unable to read SCIM group %s: %s", input.IdpId.ValueString(), err),
