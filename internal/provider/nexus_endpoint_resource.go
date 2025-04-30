@@ -20,6 +20,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"go.temporal.io/api/common/v1"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	nexusv1 "go.temporal.io/cloud-sdk/api/nexus/v1"
 	"go.temporal.io/sdk/converter"
@@ -148,14 +149,14 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	description := ""
+	var descriptionPayload *common.Payload
+	var err error
 	if !plan.Description.IsNull() {
-		description = plan.Description.ValueString()
-	}
-	descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
-		return
+		descriptionPayload, err = converter.GetDefaultDataConverter().ToPayload(plan.Description.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
+			return
+		}
 	}
 
 	targetSpec, diags := getTargetSpecFromModel(ctx, &plan)
@@ -252,14 +253,13 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	description := ""
+	var descriptionPayload *common.Payload
 	if !plan.Description.IsNull() {
-		description = plan.Description.ValueString()
-	}
-	descriptionPayload, err := converter.GetDefaultDataConverter().ToPayload(description)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
-		return
+		descriptionPayload, err = converter.GetDefaultDataConverter().ToPayload(plan.Description.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to convert Nexus endpoint description", err.Error())
+			return
+		}
 	}
 
 	targetSpec, diags := getTargetSpecFromModel(ctx, &plan)
