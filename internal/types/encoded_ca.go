@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
@@ -158,4 +159,54 @@ func (v EncodedCAValue) StringSemanticEquals(ctx context.Context, newValuable ba
 	}
 
 	return normalizedV == normalizedNewValue, diags
+}
+
+func NewEncodedCATypePlanModifier() planmodifier.String {
+	return &encodedCATypePlanModifier{}
+}
+
+type encodedCATypePlanModifier struct {
+}
+
+// Description returns a human-readable description of the plan modifier.
+func (m encodedCATypePlanModifier) Description(_ context.Context) string {
+	return "Ensures that the encoded CA type remains unchanged during plan modifications."
+}
+
+// MarkdownDescription returns a markdown description of the plan modifier.
+func (m encodedCATypePlanModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+// PlanModifyString implements the plan modification logic.
+func (m encodedCATypePlanModifier) PlanModifyString(ctx context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if req.State.Raw.IsNull() {
+		// Its a create operation, no need to update the plan.
+		return
+	}
+	if req.Plan.Raw.IsNull() {
+		// Its a delete operation, no need to update the plan.
+		return
+	}
+
+	plannedCA := EncodedCA(req.PlanValue.ValueString())
+	stateCA := EncodedCA(req.StateValue.ValueString())
+
+	if plannedCA.Equal(stateCA) {
+		// The plan and the state values are equal. No need to perform semantic equality checks.
+		return
+	}
+
+	// Perform semantic equality checks to see if the values are equal.
+	semanticEquals, diags := plannedCA.StringSemanticEquals(ctx, stateCA)
+	if diags.HasError() {
+		resp.Diagnostics.Append(diags...)
+		return
+	}
+
+	if semanticEquals {
+		// The values are semantically equal, no need to update the plan.
+		resp.PlanValue = req.StateValue
+		return
+	}
 }
