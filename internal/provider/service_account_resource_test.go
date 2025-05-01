@@ -6,10 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"regexp"
 	"testing"
 	"text/template"
+
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -72,6 +73,48 @@ resource "temporalcloud_service_account" "terraform" {
 			},
 			{
 				Config: config(name, "admin"),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_service_account.terraform",
+			},
+		},
+	})
+}
+
+func TestAccBasicServiceAccount_Description(t *testing.T) {
+	name := createRandomName()
+	config := func(name string, descriptionStr string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_service_account" "terraform" {
+  name = "%s"
+  account_access = "read"
+  %s
+}`, name, descriptionStr)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(name, ""),
+			},
+			{
+				Config: config(name, "description = \"\""),
+			},
+			{
+				Config: config(name, "description = \"This is a test description\""),
+			},
+			{
+				Config: config(name, ""),
 			},
 			{
 				ImportState:       true,
