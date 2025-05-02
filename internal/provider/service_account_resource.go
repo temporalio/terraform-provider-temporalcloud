@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -22,12 +23,13 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
+
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
-	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 )
 
 type (
@@ -39,6 +41,7 @@ type (
 		ID                types.String                             `tfsdk:"id"`
 		State             types.String                             `tfsdk:"state"`
 		Name              types.String                             `tfsdk:"name"`
+		Description       types.String                             `tfsdk:"description"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
@@ -113,6 +116,12 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
+			"description": schema.StringAttribute{
+				Description: "The description for the service account.",
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
+			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
@@ -177,6 +186,11 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
+	description := ""
+	if !plan.Description.IsNull() {
+		description = plan.Description.ValueString()
+	}
+
 	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
@@ -191,6 +205,7 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
+			Description: description,
 		},
 		AsyncOperationId: uuid.New().String(),
 	})
@@ -271,6 +286,11 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
+	description := ""
+	if !plan.Description.IsNull() {
+		description = plan.Description.ValueString()
+	}
+
 	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
@@ -286,6 +306,7 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 				},
 				NamespaceAccesses: namespaceAccesses,
 			},
+			Description: description,
 		},
 		ResourceVersion:  currentServiceAccount.ServiceAccount.GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
@@ -454,6 +475,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 	state.ID = types.StringValue(serviceAccount.GetId())
 	state.State = types.StringValue(stateStr)
 	state.Name = types.StringValue(serviceAccount.GetSpec().GetName())
+	state.Description = types.StringValue(serviceAccount.GetSpec().GetDescription())
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 	state.NamespaceAccesses = namespaceAccesses
 
