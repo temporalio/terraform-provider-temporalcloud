@@ -1,0 +1,12 @@
+rules:
+  - id: diagnostics-as-arg 
+    languages:
+      - go
+    message: Do not pass diagnostics as function args 
+    pattern: |
+      func $F(..., $DIAG diag.Diagnostics, ...) {
+        ...
+        $DIAG.Append(...)
+        ...
+      }
+    severity: ERROR
