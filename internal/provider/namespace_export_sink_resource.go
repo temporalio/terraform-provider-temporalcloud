@@ -282,12 +282,14 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 	}
 
 	gcsObj := types.ObjectNull(internaltypes.GcsSpecModelAttrTypes)
+	serviceAccountEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sink.GetSpec().GetGcs().GetSaId(), sink.GetSpec().GetGcs().GetGcpProjectId())
 	if sink.GetSpec().GetGcs() != nil {
 		gcsSpec := internaltypes.GCSSpecModel{
-			SaId:         types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
-			BucketName:   types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
-			GcpProjectId: types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
-			Region:       types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
+			SaId:                types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
+			BucketName:          types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
+			GcpProjectId:        types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
+			Region:              types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
+			ServiceAccountEmail: types.StringValue(serviceAccountEmail),
 		}
 		gcsObj, diags = types.ObjectValueFrom(ctx, internaltypes.GcsSpecModelAttrTypes, gcsSpec)
 		diags.Append(diags...)
