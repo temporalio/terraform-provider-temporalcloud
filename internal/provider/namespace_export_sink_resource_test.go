@@ -226,8 +226,7 @@ resource "temporalcloud_namespace_export_sink" "test" {
   gcs = {
     bucket_name     = "updated-bucket"
     region          = %[4]q
-    service_account_id           = "test-updated-sa"
-    gcp_project_id  = "test-updated-project"
+    service_account_email = "test-updated-sa@test-updated-project.iam.gserviceaccount.com"
   }
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)

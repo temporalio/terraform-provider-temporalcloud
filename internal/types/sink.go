@@ -51,4 +51,7 @@ type GCSSpecModel struct {
 
 	// The region of the gcs bucket
 	Region types.String `tfsdk:"region"`
+
+	// The service account email associated with the GCS bucket and service account
+	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
 }

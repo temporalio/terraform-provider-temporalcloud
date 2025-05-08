@@ -25,11 +25,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -162,20 +164,30 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"service_account_id": schema.StringAttribute{
-						Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.",
-						Required:    true,
+						Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket. If not provided, the service_account_email must be provided.",
+						Optional:    true,
 					},
 					"bucket_name": schema.StringAttribute{
 						Description: "The name of the destination GCS bucket where Temporal will send data.",
 						Required:    true,
 					},
 					"gcp_project_id": schema.StringAttribute{
-						Description: "The GCP project ID associated with the GCS bucket and service account.",
-						Required:    true,
+						Description: "The GCP project ID associated with the GCS bucket and service account. If not provided, the service_account_email must be provided.",
+						Optional:    true,
 					},
 					"region": schema.StringAttribute{
 						Description: "The region of the gcs bucket",
 						Required:    true,
+					},
+					"service_account_email": schema.StringAttribute{
+						Description: "The service account email associated with the GCS bucket and service account. If not provided, the service_account_id and gcp_project_id must be provided.",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(
+								regexp.MustCompile(`^(\S+)@(\S+).iam.gserviceaccount.com$`),
+								"Service account email must be in the format of '<sa>@<gcp_project>.iam.gserviceaccount.com' where <sa> is the service account ID and <gcp_project> is a valid GCP project ID",
+							),
+						},
 					},
 				},
 				Validators: []validator.Object{
@@ -361,6 +373,22 @@ func (r *namespaceExportSinkResource) ImportState(ctx context.Context, req resou
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
+func parseSAPrincipal(saPrincipal string) (string, string) {
+	var gcpProjectId, saId string
+	saPrincipalPattern := regexp.MustCompile(`^(\S+)@(\S+).iam.gserviceaccount.com$`)
+
+	submatch := saPrincipalPattern.FindStringSubmatch(saPrincipal)
+
+	if len(submatch) != 3 {
+		return "", ""
+	}
+
+	saId = submatch[1]
+	gcpProjectId = submatch[2]
+
+	return saId, gcpProjectId
+}
+
 func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
@@ -395,13 +423,27 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 			return nil, diags
 		}
 
+		saId := gcsSpec.SaId.ValueString()
+		gcpProjectId := gcsSpec.GcpProjectId.ValueString()
+		if saId == "" && gcpProjectId == "" && gcsSpec.ServiceAccountEmail.ValueString() != "" {
+			saId, gcpProjectId = parseSAPrincipal(gcsSpec.ServiceAccountEmail.ValueString())
+		}
+
+		if saId == "" && gcpProjectId == "" {
+			diags.AddError(
+				"Missing Service Account Configuration",
+				"Either provide both service_account_id and gcp_project_id, or provide a valid service_account_email",
+			)
+			return nil, diags
+		}
+
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
 			Enabled: plan.Enabled.ValueBool(),
 			Gcs: &sinkv1.GCSSpec{
-				SaId:         gcsSpec.SaId.ValueString(),
+				SaId:         saId,
 				BucketName:   gcsSpec.BucketName.ValueString(),
-				GcpProjectId: gcsSpec.GcpProjectId.ValueString(),
+				GcpProjectId: gcpProjectId,
 				Region:       gcsSpec.Region.ValueString(),
 			},
 		}, nil
