@@ -166,6 +166,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					"service_account_id": schema.StringAttribute{
 						Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket. If not provided, the service_account_email must be provided.",
 						Optional:    true,
+						Computed:    true,
 					},
 					"bucket_name": schema.StringAttribute{
 						Description: "The name of the destination GCS bucket where Temporal will send data.",
@@ -174,6 +175,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					"gcp_project_id": schema.StringAttribute{
 						Description: "The GCP project ID associated with the GCS bucket and service account. If not provided, the service_account_email must be provided.",
 						Optional:    true,
+						Computed:    true,
 					},
 					"region": schema.StringAttribute{
 						Description: "The region of the gcs bucket",
@@ -188,6 +190,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 								"Service account email must be in the format of '<sa>@<gcp_project>.iam.gserviceaccount.com' where <sa> is the service account ID and <gcp_project> is a valid GCP project ID",
 							),
 						},
+						Computed: true,
 					},
 				},
 				Validators: []validator.Object{
@@ -283,11 +286,13 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 
 	gcsObj := types.ObjectNull(internaltypes.GcsSpecModelAttrTypes)
 	if sink.GetSpec().GetGcs() != nil {
+		saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sink.GetSpec().GetGcs().GetSaId(), sink.GetSpec().GetGcs().GetGcpProjectId())
 		gcsSpec := internaltypes.GCSSpecModel{
-			SaId:         types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
-			BucketName:   types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
-			GcpProjectId: types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
-			Region:       types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
+			SaId:                types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
+			BucketName:          types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
+			GcpProjectId:        types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
+			Region:              types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
+			ServiceAccountEmail: types.StringValue(saEmail),
 		}
 
 		gcsObj, diags = types.ObjectValueFrom(ctx, internaltypes.GcsSpecModelAttrTypes, gcsSpec)
@@ -431,7 +436,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 
 		}
 
-		if saId == "" && gcpProjectId == "" {
+		if saId == "" || gcpProjectId == "" {
 			diags.AddError(
 				"Missing Service Account Configuration",
 				"Either provide both service_account_id and gcp_project_id, or provide a valid service_account_email",
