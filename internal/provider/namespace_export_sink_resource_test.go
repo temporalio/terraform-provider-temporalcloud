@@ -30,6 +30,7 @@ func TestNamespaceExportSinkResource_Schema(t *testing.T) {
 }
 
 func TestAccNamespaceExportSink_S3(t *testing.T) {
+
 	namespaceName := fmt.Sprintf("tf-test-ns-export-aws-%s", randomString(8))
 	sinkRegion := "us-east-1"
 	namespaceRegion := fmt.Sprintf("aws-%s", sinkRegion)
@@ -81,106 +82,59 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 	})
 }
 
-func TestAccNamespaceExportSink_GCS_SAEmail(t *testing.T) {
-	namespaceName := fmt.Sprintf("tf-test-ns-export-gcp-%s", randomString(8))
-
-	sinkRegion := "us-central1"
-	namespaceRegion := fmt.Sprintf("gcp-%s", sinkRegion)
-
-	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			// Create and Read testing
-			{
-				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion, true),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_email", "test-sa@test-project.iam.gserviceaccount.com"),
-				),
-			},
-			// ImportState testing
-			{
-				ResourceName:      "temporalcloud_namespace_export_sink.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-			},
-			// Update testing
-			{
-				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, true),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "updated-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_email", "test-updated-sa@test-updated-project.iam.gserviceaccount.com"),
-				),
-			},
-			// Delete testing
-			{
-				ResourceName:      "temporalcloud_namespace_export_sink.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-				Destroy:           true,
-			},
-		},
-	})
-}
-
 func TestAccNamespaceExportSink_GCS(t *testing.T) {
-	namespaceName := fmt.Sprintf("tf-test-ns-export-gcp-%s", randomString(8))
+	isSAEmailScenarios := []bool{false, true}
 
-	sinkRegion := "us-central1"
-	namespaceRegion := fmt.Sprintf("gcp-%s", sinkRegion)
+	for _, isSAEmail := range isSAEmailScenarios {
+		namespaceName := fmt.Sprintf("tf-test-ns-export-gcp-%s", randomString(8))
 
-	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			// Create and Read testing
-			{
-				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion, false),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "test-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-project"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_email", "test-sa@test-project.iam.gserviceaccount.com"),
-				),
+		sinkRegion := "us-central1"
+		namespaceRegion := fmt.Sprintf("gcp-%s", sinkRegion)
+
+		sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
+		resource.ParallelTest(t, resource.TestCase{
+			PreCheck:                 func() { testAccPreCheck(t) },
+			ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+			Steps: []resource.TestStep{
+				// Create and Read testing
+				{
+					Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion, isSAEmail),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "test-bucket"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-sa"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-project"),
+					),
+				},
+				// ImportState testing
+				{
+					ResourceName:      "temporalcloud_namespace_export_sink.test",
+					ImportState:       true,
+					ImportStateVerify: true,
+				},
+				// Update testing
+				{
+					Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, isSAEmail),
+					Check: resource.ComposeAggregateTestCheckFunc(
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "updated-bucket"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-updated-sa"),
+						resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-updated-project"),
+					),
+				},
+				// Delete testing
+				{
+					ResourceName:      "temporalcloud_namespace_export_sink.test",
+					ImportState:       true,
+					ImportStateVerify: true,
+					Destroy:           true,
+				},
 			},
-			// ImportState testing
-			{
-				ResourceName:      "temporalcloud_namespace_export_sink.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-			},
-			// Update testing
-			{
-				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, false),
-				Check: resource.ComposeAggregateTestCheckFunc(
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "updated-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-updated-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-updated-project"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_email", "test-updated-sa@test-updated-project.iam.gserviceaccount.com"),
-				),
-			},
-			// Delete testing
-			{
-				ResourceName:      "temporalcloud_namespace_export_sink.test",
-				ImportState:       true,
-				ImportStateVerify: true,
-				Destroy:           true,
-			},
-		},
-	})
+		})
+	}
 }
 
 func testAccNamespaceExportSinkS3Config(namespaceName, sinkName, namespaceRegion, sinkregion string) string {

@@ -222,7 +222,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	sinkSpec, d, isGCPSAEmail := getSinkSpecFromModel(ctx, &plan)
+	sinkSpec, d := getSinkSpecFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() || sinkSpec == nil {
 		return
@@ -254,7 +254,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 		return
 	}
 
-	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink(), plan.Namespace.ValueString(), isGCPSAEmail)...)
+	resp.Diagnostics.Append(updateSinkModelFromSpec(ctx, &plan, sink.GetSink(), plan.Namespace.ValueString())...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -262,7 +262,7 @@ func (r *namespaceExportSinkResource) Create(ctx context.Context, req resource.C
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
-func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkResourceModel, sink *namespacev1.ExportSink, namespace string, isGCPSAEmail bool) diag.Diagnostics {
+func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkResourceModel, sink *namespacev1.ExportSink, namespace string) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	s3Obj := types.ObjectNull(internaltypes.S3SpecModelAttrTypes)
@@ -282,22 +282,12 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 	}
 
 	gcsObj := types.ObjectNull(internaltypes.GcsSpecModelAttrTypes)
-	var gcsSpec internaltypes.GCSSpecModel
 	if sink.GetSpec().GetGcs() != nil {
-		if isGCPSAEmail {
-			serviceAccountEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sink.GetSpec().GetGcs().GetSaId(), sink.GetSpec().GetGcs().GetGcpProjectId())
-			gcsSpec = internaltypes.GCSSpecModel{
-				BucketName:          types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
-				GcpProjectId:        types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
-				ServiceAccountEmail: types.StringValue(serviceAccountEmail),
-			}
-		} else {
-			gcsSpec = internaltypes.GCSSpecModel{
-				SaId:         types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
-				BucketName:   types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
-				GcpProjectId: types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
-				Region:       types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
-			}
+		gcsSpec := internaltypes.GCSSpecModel{
+			SaId:         types.StringValue(sink.GetSpec().GetGcs().GetSaId()),
+			BucketName:   types.StringValue(sink.GetSpec().GetGcs().GetBucketName()),
+			GcpProjectId: types.StringValue(sink.GetSpec().GetGcs().GetGcpProjectId()),
+			Region:       types.StringValue(sink.GetSpec().GetGcs().GetRegion()),
 		}
 
 		gcsObj, diags = types.ObjectValueFrom(ctx, internaltypes.GcsSpecModelAttrTypes, gcsSpec)
@@ -400,20 +390,20 @@ func parseSAPrincipal(saPrincipal string) (string, string) {
 	return saId, gcpProjectId
 }
 
-func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics, isGCPSAEmail) {
+func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	// Check that only one of S3 or GCS is set
 	if !plan.S3.IsNull() && !plan.Gcs.IsNull() {
 		diags.AddError("Invalid sink configuration", "Only one of S3 or GCS can be configured")
-		return nil, diags, false
+		return nil, diags
 	}
 
 	if !plan.S3.IsNull() {
 		var s3Spec internaltypes.S3SpecModel
 		diags.Append(plan.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil, diags, false
+			return nil, diags
 		}
 
 		return &namespacev1.ExportSinkSpec{
@@ -426,20 +416,19 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 				KmsArn:       s3Spec.KmsArn.ValueString(),
 				AwsAccountId: s3Spec.AwsAccountId.ValueString(),
 			},
-		}, nil, false
+		}, nil
 	} else if !plan.Gcs.IsNull() {
 		var gcsSpec internaltypes.GCSSpecModel
 		diags.Append(plan.Gcs.As(ctx, &gcsSpec, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
-			return nil, diags, false
+			return nil, diags
 		}
 
 		saId := gcsSpec.SaId.ValueString()
 		gcpProjectId := gcsSpec.GcpProjectId.ValueString()
-		isGCPSAEmail := false
 		if saId == "" && gcpProjectId == "" && gcsSpec.ServiceAccountEmail.ValueString() != "" {
 			saId, gcpProjectId = parseSAPrincipal(gcsSpec.ServiceAccountEmail.ValueString())
-			isGCPSAEmail = true
+
 		}
 
 		if saId == "" && gcpProjectId == "" {
@@ -447,7 +436,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 				"Missing Service Account Configuration",
 				"Either provide both service_account_id and gcp_project_id, or provide a valid service_account_email",
 			)
-			return nil, diags, isGCPSAEmail
+			return nil, diags
 		}
 
 		return &namespacev1.ExportSinkSpec{
@@ -459,10 +448,10 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 				GcpProjectId: gcpProjectId,
 				Region:       gcsSpec.Region.ValueString(),
 			},
-		}, nil, isGCPSAEmail
+		}, nil
 	}
 
-	return nil, diags, false
+	return nil, diags
 }
 
 func (r *namespaceExportSinkResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -507,7 +496,7 @@ func (r *namespaceExportSinkResource) Update(ctx context.Context, req resource.U
 		return
 	}
 
-	sinkSpec, diags, isGCPSAEmail := getSinkSpecFromModel(ctx, &plan)
+	sinkSpec, diags := getSinkSpecFromModel(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
