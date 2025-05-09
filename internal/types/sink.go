@@ -15,10 +15,11 @@ var (
 	}
 
 	GcsSpecModelAttrTypes = map[string]attr.Type{
-		"service_account_id": types.StringType,
-		"bucket_name":        types.StringType,
-		"gcp_project_id":     types.StringType,
-		"region":             types.StringType,
+		"service_account_id":    types.StringType,
+		"bucket_name":           types.StringType,
+		"gcp_project_id":        types.StringType,
+		"region":                types.StringType,
+		"service_account_email": types.StringType,
 	}
 )
 
