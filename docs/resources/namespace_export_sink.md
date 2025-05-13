@@ -37,9 +37,13 @@ Provisions a namespace export sink.
 Required:
 
 - `bucket_name` (String) The name of the destination GCS bucket where Temporal will send data.
-- `gcp_project_id` (String) The GCP project ID associated with the GCS bucket and service account.
 - `region` (String) The region of the gcs bucket
-- `service_account_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket.
+
+Optional:
+
+- `gcp_project_id` (String) The GCP project ID associated with the GCS bucket and service account. If not provided, the service_account_email must be provided.
+- `service_account_email` (String) The service account email associated with the GCS bucket and service account. If not provided, the service_account_id and gcp_project_id must be provided.
+- `service_account_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's GCS bucket. If not provided, the service_account_email must be provided.
 
 
 <a id="nestedatt--s3"></a>
