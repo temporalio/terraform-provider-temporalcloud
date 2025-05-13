@@ -13,4 +13,5 @@ testacc:
 # Example: Run specific namespace export sink tests
 .PHONY: test-namespace-export-sink
 test-namespace-export-sink:
-	TF_ACC=1 go test ./internal/provider -run TestAccNamespaceExportSink_S3 -v $(TESTARGS) -timeout 120m
+	TF_ACC=1 go test ./internal/provider -run TestAccNamespaceExportSink_GCS -v $(TESTARGS) -timeout 120m
+
