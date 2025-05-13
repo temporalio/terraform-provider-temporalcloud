@@ -121,7 +121,7 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
-			// Update testing
+			// Update with SA email
 			{
 				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, true),
 				Check:  updateGCSCheckFun,
@@ -138,7 +138,7 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 				Config: testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkName, sinkRegion, true),
 				Check:  creationGCSCheckFun,
 			},
-			// Update with SA email
+			// Update with not SA email
 			{
 				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, false),
 				Check:  updateGCSCheckFun,
@@ -148,6 +148,11 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 				ResourceName:      "temporalcloud_namespace_export_sink.test",
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+			// Update with SA email
+			{
+				Config: testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, true),
+				Check:  updateGCSCheckFun,
 			},
 			// Delete testing
 			{
