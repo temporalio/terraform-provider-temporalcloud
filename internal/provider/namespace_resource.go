@@ -774,9 +774,7 @@ func getCertFiltersFromModel(ctx context.Context, model *namespaceResourceModel)
 func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.CodecServerSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	var codecServer codecServerModel
-	var lifecycle lifecycleModel
 	diags.Append(model.CodecServer.As(ctx, &codecServer, basetypes.ObjectAsOptions{})...)
-	diags.Append(model.NamespaceLifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
 	}
