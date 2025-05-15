@@ -44,10 +44,11 @@ func TestNamespaceSchema(t *testing.T) {
 
 func TestAccBasicNamespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
-	config := func(name string, retention int) string {
+	config := func(name string, retention int, deleteProtection bool) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
-
+  api_key = "eyJhbGciOiJFUzI1NiIsICJraWQiOiJwcGFrSEEifQ.eyJhY2NvdW50X2lkIjoicW1waG0iLCAiYXVkIjpbInRlbXBvcmFsLXRlc3QuaW8iXSwgImV4cCI6MTgxMDQwNjAzNSwgImlzcyI6InRlbXBvcmFsLXRlc3QuaW8iLCAianRpIjoibE9JblZrVTBJSHlDZlM2bHVNOFBBbVJ2eEVKTVV2N1oiLCAia2V5X2lkIjoibE9JblZrVTBJSHlDZlM2bHVNOFBBbVJ2eEVKTVV2N1oiLCAic3ViIjoiMTFjODIxOWYtMzE4Ny00YTEzLTk5YTAtYjA5NWY5ZGU5MGEyIn0.wyn5Fx552-9VnSTq1Hcb5_tdQco1904Mr06_f3mQBfIL5xmRQ7tutLaPDgv3zVNbjU5BlvBTgzw1r7IcMX1adA"
+  endpoint = "saas-api.tmprl-test.cloud:443"
 }
 
 resource "temporalcloud_namespace" "terraform" {
@@ -70,7 +71,10 @@ PEM
 )
 
   retention_days     = %d
-}`, name, retention)
+  namespace_lifecycle = {
+	  enable_delete_protection = %t
+  }
+}`, name, retention, deleteProtection)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -79,15 +83,18 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with retention of 7
-				Config: config(name, 7),
+				Config: config(name, 7, true),
 			},
 			{
-				Config: config(name, 14),
+				Config: config(name, 14, true),
 			},
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_namespace.terraform",
+			},
+			{
+				Config: config(name, 14, false), // disable delete protection for deletion to succeed
 			},
 			// Delete testing automatically occurs in TestCase
 		},
