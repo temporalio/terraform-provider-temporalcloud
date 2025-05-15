@@ -77,8 +77,13 @@ type (
 		ApiKeyAuth         types.Bool                             `tfsdk:"api_key_auth"`
 		CodecServer        types.Object                           `tfsdk:"codec_server"`
 		Endpoints          types.Object                           `tfsdk:"endpoints"`
+		NamespaceLifecycle types.Object                           `tfsdk:"namespace_lifecycle"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	lifecycleModel struct {
+		EnableDeleteProtection types.Bool `tfsdk:"enable_delete_protection"`
 	}
 
 	namespaceCertificateFilterModel struct {
@@ -117,6 +122,10 @@ var (
 		"endpoint":                         types.StringType,
 		"pass_access_token":                types.BoolType,
 		"include_cross_origin_credentials": types.BoolType,
+	}
+
+	lifecycleAttrs = map[string]attr.Type{
+		"enable_delete_protection": types.BoolType,
 	}
 
 	endpointsAttrs = map[string]attr.Type{
@@ -264,6 +273,18 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Computed: true,
 			},
+			"namespace_lifecycle": schema.SingleNestedAttribute{
+				Description: "The lifecycle configuration for the namespace.",
+				Attributes: map[string]schema.Attribute{
+					"enable_delete_protection": schema.BoolAttribute{
+						Description: "If true, the namespace cannot be deleted. This is a safeguard against accidental deletion. To delete a namespace with this option enabled, you must first set it to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+					},
+				},
+				Optional: true,
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -311,11 +332,22 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	var spec = &namespacev1.NamespaceSpec{
 		Name:          plan.Name.ValueString(),
 		Regions:       regions,
 		RetentionDays: int32(plan.RetentionDays.ValueInt64()),
 		CodecServer:   codecServer,
+		Lifecycle:     lifecycle,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -388,7 +420,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -445,12 +477,23 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	var spec = &namespacev1.NamespaceSpec{
 		Name:             plan.Name.ValueString(),
 		Regions:          regions,
 		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
 		CodecServer:      codecServer,
 		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+		Lifecycle:        lifecycle,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -531,7 +574,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -551,7 +594,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -661,6 +704,22 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 	state.CodecServer = codecServerState
 
+	var lifecycleState basetypes.ObjectValue
+	if ns.GetSpec().GetLifecycle() != nil {
+		lifecycle := &lifecycleModel{
+			EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
+		}
+		state, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		lifecycleState = state
+	} else {
+		lifecycleState = types.ObjectNull(lifecycleAttrs)
+	}
+	state.NamespaceLifecycle = lifecycleState
+
 	endpoints := &endpointsModel{
 		GrpcAddress:     stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
 		WebAddress:      stringOrNull(ns.GetEndpoints().GetWebAddress()),
@@ -715,7 +774,9 @@ func getCertFiltersFromModel(ctx context.Context, model *namespaceResourceModel)
 func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.CodecServerSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	var codecServer codecServerModel
+	var lifecycle lifecycleModel
 	diags.Append(model.CodecServer.As(ctx, &codecServer, basetypes.ObjectAsOptions{})...)
+	diags.Append(model.NamespaceLifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
 	if diags.HasError() {
 		return nil, diags
 	}
@@ -723,6 +784,18 @@ func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel)
 		Endpoint:                      codecServer.Endpoint.ValueString(),
 		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
 		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
+	}, diags
+}
+
+func getLifecycleFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.LifecycleSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var lifecycle lifecycleModel
+	diags.Append(model.NamespaceLifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &namespacev1.LifecycleSpec{
+		EnableDeleteProtection: lifecycle.EnableDeleteProtection.ValueBool(),
 	}, diags
 }
 
