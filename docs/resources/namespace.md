@@ -36,7 +36,7 @@ resource "temporalcloud_namespace" "terraform" {
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
   retention_days     = 14
-  lifecycle_namespace = {
+  namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
   }
@@ -104,7 +104,7 @@ resource "temporalcloud_namespace" "terraform2" {
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
   retention_days     = 14
-  lifecycle_namespace = {
+  namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
   }
@@ -116,7 +116,7 @@ resource "temporalcloud_namespace" "terraform3" {
   regions        = ["aws-us-east-1"]
   api_key_auth   = true
   retention_days = 14
-  lifecycle_namespace = {
+  namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
   }
