@@ -324,7 +324,15 @@ func (r *groupAccessResource) Delete(ctx context.Context, req resource.DeleteReq
 		ResourceVersion:  currentGroup.GetGroup().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
+
 	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Group Access Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+			return
+		}
 		resp.Diagnostics.AddError("Failed to remove group access", err.Error())
 		return
 	}

@@ -10,7 +10,7 @@ provider "temporalcloud" {
 
 }
 
-resource "temporalcloud_scim_group" "my_scim_group" {
+data "temporalcloud_scim_group" "my_scim_group" {
   idp_id = "usually-group-name"
 }
 
@@ -34,6 +34,3 @@ resource "temporalcloud_group_access" "my_group_access" {
   ]
 }
 
-output "group_access" {
-  value = temporalcloud_group_access.my_group_access
-}
