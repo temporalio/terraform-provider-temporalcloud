@@ -54,7 +54,7 @@ resource "temporalcloud_group_access" "terraform" {
 }`, role)
 	}
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -85,7 +85,7 @@ provider "temporalcloud" {
 }
 
 resource "temporalcloud_namespace" "test" {
-  name = "%s"
+  name = "{{ .NamespaceName }}"
   regions = ["aws-us-east-1"]
   api_key_auth = true
   retention_days = 7
@@ -97,11 +97,11 @@ data "temporalcloud_scim_group" "terraform" {
 
 resource "temporalcloud_group_access" "terraform" {
   id = data.temporalcloud_scim_group.terraform.id
-  account_access = "%s"
+  account_access = "{{ .AccountPerm }}"
   namespace_accesses = [
     {
       namespace_id = temporalcloud_namespace.test.id
-      permission = "%s"
+      permission = "{{ .NamespacePerm }}"
     }
   ]
 }`))
@@ -118,7 +118,7 @@ resource "temporalcloud_group_access" "terraform" {
 		return buf.String()
 	}
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -177,7 +177,7 @@ data "temporalcloud_scim_group" "terraform" {
 
 resource "temporalcloud_group_access" "terraform" {
   id = data.temporalcloud_scim_group.terraform.id
-  account_access = "%s"
+  account_access = "{{ .AccountPerm }}"
   namespace_accesses = []
 }`))
 
@@ -193,7 +193,7 @@ resource "temporalcloud_group_access" "terraform" {
 		return buf.String()
 	}
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
