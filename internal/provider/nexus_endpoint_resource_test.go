@@ -92,15 +92,16 @@ func testAccNexusEndpointResourceConfig(name, description, targetNamespaceName, 
 	return fmt.Sprintf(`
 %[1]s
 
+# nexus endpoint with all fields
 resource "temporalcloud_nexus_endpoint" "test" {
   name        = %[2]q
   description = %[3]q
-  
+
   worker_target = {
     namespace_id = temporalcloud_namespace.target_namespace.id
     task_queue   = %[4]q
   }
-  
+
   allowed_caller_namespaces = %[5]s
 
   timeouts {
@@ -108,5 +109,41 @@ resource "temporalcloud_nexus_endpoint" "test" {
     delete = "4m"
   }
 }
-`, namespacesConfig, name, description, taskQueue, allowedNamespaceIDsStr)
+
+# nexus endpoint with empty description
+resource "temporalcloud_nexus_endpoint" "test_2" {
+  name        = %[6]q
+  description = ""
+
+  worker_target = {
+    namespace_id = temporalcloud_namespace.target_namespace.id
+    task_queue   = %[4]q
+  }
+
+  allowed_caller_namespaces = %[5]s
+
+  timeouts {
+    create = "4m"
+    delete = "4m"
+  }
+}
+
+# nexus endpoint without optional fields
+resource "temporalcloud_nexus_endpoint" "test_3" {
+  name        = %[7]q
+
+  worker_target = {
+    namespace_id = temporalcloud_namespace.target_namespace.id
+    task_queue   = %[4]q
+  }
+
+  allowed_caller_namespaces = %[5]s
+
+  timeouts {
+    create = "4m"
+    delete = "4m"
+  }
+}
+
+`, namespacesConfig, name, description, taskQueue, allowedNamespaceIDsStr, name+"-2", name+"-3")
 }
