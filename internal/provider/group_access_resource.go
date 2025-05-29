@@ -25,6 +25,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -155,6 +156,11 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 		ResourceVersion:  currentGroup.GetGroup().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
+	if err != nil && status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "nothing to change") {
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		return
+	}
+
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create group access", err.Error())
 		return
@@ -260,6 +266,10 @@ func (r *groupAccessResource) Update(ctx context.Context, req resource.UpdateReq
 		ResourceVersion:  currentGroup.GetGroup().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
+	if err != nil && status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "nothing to change") {
+		resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+		return
+	}
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to update group access", err.Error())
 		return

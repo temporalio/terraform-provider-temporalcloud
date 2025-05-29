@@ -178,7 +178,6 @@ data "temporalcloud_scim_group" "terraform" {
 resource "temporalcloud_group_access" "terraform" {
   id = data.temporalcloud_scim_group.terraform.id
   account_access = "{{ .AccountPerm }}"
-  namespace_accesses = []
 }`))
 
 	config := func(args configArgs) string {
