@@ -705,7 +705,10 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	state.CodecServer = codecServerState
 
 	var lifecycleState basetypes.ObjectValue
-	if ns.GetSpec().GetLifecycle() != nil {
+	// The API always returns a non-empty LifecycleSpec, even if it wasn't specified on object creation. We explicitly
+	// map the EnableDeleteProtection field to `null` if it is false, since an empty lifecycle implies that delete
+	// protection was not set via config.
+	if ns.GetSpec().GetLifecycle().GetEnableDeleteProtection() {
 		lifecycle := &lifecycleModel{
 			EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
 		}
