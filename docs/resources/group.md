@@ -32,13 +32,12 @@ resource "temporalcloud_namespace" "namespace" {
   retention_days     = 14
 }
 
-resource "temporalcloud_group" "admin_group" {
-  name           = "admins"
-  account_access = "admin"
+resource "temporalcloud_group" "namespace_admin_group" {
+  name = "developers"
 }
 
-resource "temporalcloud_group" "namespace_admin_group" {
-  name           = "developers"
+resource "temporalcloud_group_access" "namespace_admin_group_access" {
+  group_id       = temporalcloud_group.namespace_admin_group.id
   account_access = "developer"
   namespace_accesses = [
     {
@@ -54,27 +53,16 @@ resource "temporalcloud_group" "namespace_admin_group" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships.
 - `name` (String) The name of the group
 
 ### Optional
 
-- `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
 - `id` (String) The unique identifier of the group.
 - `state` (String) The current state of the group.
-
-<a id="nestedatt--namespace_accesses"></a>
-### Nested Schema for `namespace_accesses`
-
-Required:
-
-- `namespace_id` (String) The namespace to assign permissions to.
-- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
-
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`

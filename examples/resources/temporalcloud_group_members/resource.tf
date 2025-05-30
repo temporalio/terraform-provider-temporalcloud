@@ -11,7 +11,7 @@ provider "temporalcloud" {
 }
 
 resource "temporalcloud_group" "admin_group" {
-  name           = "admins"
+  name = "admins"
 }
 
 resource "temporalcloud_user" "reader" {
@@ -20,7 +20,7 @@ resource "temporalcloud_user" "reader" {
 }
 
 resource "temporalcloud_group_access" "admin_group_access" {
-  group_id = temporalcloud_group.admin_group.id
+  group_id       = temporalcloud_group.admin_group.id
   account_access = "admin"
 }
 

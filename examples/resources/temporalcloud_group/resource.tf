@@ -22,7 +22,7 @@ resource "temporalcloud_group" "namespace_admin_group" {
 }
 
 resource "temporalcloud_group_access" "namespace_admin_group_access" {
-  group_id = temporalcloud_group.namespace_admin_group.id
+  group_id       = temporalcloud_group.namespace_admin_group.id
   account_access = "developer"
   namespace_accesses = [
     {
