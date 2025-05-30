@@ -17,13 +17,12 @@ resource "temporalcloud_namespace" "namespace" {
   retention_days     = 14
 }
 
-resource "temporalcloud_group" "admin_group" {
-  name           = "admins"
-  account_access = "admin"
+resource "temporalcloud_group" "namespace_admin_group" {
+  name = "developers"
 }
 
-resource "temporalcloud_group" "namespace_admin_group" {
-  name           = "developers"
+resource "temporalcloud_group_access" "namespace_admin_group_access" {
+  group_id = temporalcloud_group.namespace_admin_group.id
   account_access = "developer"
   namespace_accesses = [
     {

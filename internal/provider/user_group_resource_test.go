@@ -1,22 +1,13 @@
 package provider
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"regexp"
 	"testing"
-	"text/template"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
-
-	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 )
 
 func TestGroupSchema(t *testing.T) {
@@ -52,7 +43,6 @@ provider "temporalcloud" {
 
 resource "temporalcloud_group" "terraform" {
   name = "%s"
-  account_access = "%s"
 }`, name, role)
 	}
 
@@ -78,206 +68,6 @@ resource "temporalcloud_group" "terraform" {
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_group.terraform",
-			},
-		},
-	})
-}
-
-func TestAccGroup_WithNamespaceAccesses(t *testing.T) {
-	type configArgs struct {
-		Name          string
-		NamespaceName string
-		AccountPerm   string
-		NamespacePerm string
-	}
-
-	name := createRandomName()
-
-	tmpl := template.Must(template.New("config").Parse(`
-provider "temporalcloud" {
-
-}
-
-resource "temporalcloud_namespace" "test" {
-  name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
-  api_key_auth       = true
-
-  retention_days = 7
-}
-
-resource "temporalcloud_group" "terraform" {
-  name = "{{ .Name }}"
-  account_access = "{{ .AccountPerm }}"
-  namespace_accesses = [
-    {
-      namespace_id = temporalcloud_namespace.test.id
-      permission = "{{ .NamespacePerm }}"
-    }
-  ]
-  
-  depends_on = [temporalcloud_namespace.test]
-}`))
-
-	config := func(args configArgs) string {
-		var buf bytes.Buffer
-		writer := bufio.NewWriter(&buf)
-		if err := tmpl.Execute(writer, args); err != nil {
-			t.Errorf("failed to execute template:  %v", err)
-			t.FailNow()
-		}
-
-		writer.Flush()
-		return buf.String()
-	}
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: config(configArgs{
-					Name:          name,
-					NamespaceName: randomString(10),
-					NamespacePerm: "write",
-					AccountPerm:   "read",
-				}),
-				Check: func(state *terraform.State) error {
-					id := state.RootModule().Resources["temporalcloud_group.terraform"].Primary.Attributes["id"]
-					conn := newConnection(t)
-					group, err := conn.GetUserGroup(context.Background(), &cloudservicev1.GetUserGroupRequest{
-						GroupId: id,
-					})
-					if err != nil {
-						return fmt.Errorf("failed to get group: %v", err)
-					}
-
-					spec := group.Group.GetSpec()
-					if spec.GetAccess().GetAccountAccess().GetRole() != identityv1.AccountAccess_ROLE_READ {
-						return errors.New("expected account role to be read")
-					}
-					nsID := state.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					nsPerm, ok := spec.GetAccess().GetNamespaceAccesses()[nsID]
-					if !ok {
-						return fmt.Errorf("expected entry in NamespaceAccesses for namespace %s", nsID)
-					}
-					if nsPerm.GetPermission() != identityv1.NamespaceAccess_PERMISSION_WRITE {
-						return errors.New("expected namespace access permission to be write")
-					}
-					return nil
-				},
-			},
-			{
-				ImportState:       true,
-				ImportStateVerify: true,
-				ResourceName:      "temporalcloud_group.terraform",
-			},
-		},
-	})
-}
-
-func TestAccGroup_WithEmptyNamespaceAccesses(t *testing.T) {
-	type configArgs struct {
-		Name        string
-		AccountPerm string
-	}
-
-	name := createRandomName()
-
-	tmpl := template.Must(template.New("config").Parse(`
-provider "temporalcloud" {
-
-}
-
-resource "temporalcloud_group" "terraform" {
-  name = "{{ .Name }}"
-  account_access = "{{ .AccountPerm }}"
-  namespace_accesses = []
-}`))
-
-	config := func(args configArgs) string {
-		var buf bytes.Buffer
-		writer := bufio.NewWriter(&buf)
-		if err := tmpl.Execute(writer, args); err != nil {
-			t.Errorf("failed to execute template:  %v", err)
-			t.FailNow()
-		}
-
-		writer.Flush()
-		return buf.String()
-	}
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: config(configArgs{
-					Name:        name,
-					AccountPerm: "Read",
-				}),
-				ExpectError: regexp.MustCompile("namespace_accesses set must contain at least 1 elements"),
-			},
-		},
-	})
-}
-
-func TestAccGroup_WithDuplicateNamespaceAccesses(t *testing.T) {
-	type configArgs struct {
-		Name        string
-		AccountPerm string
-	}
-
-	name := createRandomName()
-
-	tmpl := template.Must(template.New("config").Parse(`
-provider "temporalcloud" {
-
-}
-
-resource "temporalcloud_group" "terraform" {
-  name = "{{ .Name }}"
-  account_access = "{{ .AccountPerm }}"
-  namespace_accesses = [
-    {
-       namespace_id = "NS1"
-       permission = "Read"
-    },
-    {
-       namespace_id = "NS1"
-       permission = "Write"
-    }
-  ]
-}`))
-
-	config := func(args configArgs) string {
-		var buf bytes.Buffer
-		writer := bufio.NewWriter(&buf)
-		if err := tmpl.Execute(writer, args); err != nil {
-			t.Errorf("failed to execute template:  %v", err)
-			t.FailNow()
-		}
-
-		writer.Flush()
-		return buf.String()
-	}
-
-	resource.ParallelTest(t, resource.TestCase{
-		PreCheck: func() {
-			testAccPreCheck(t)
-		},
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		Steps: []resource.TestStep{
-			{
-				Config: config(configArgs{
-					Name:        name,
-					AccountPerm: "Read",
-				}),
-				ExpectError: regexp.MustCompile("namespace_id must be unique across all set entries"),
 			},
 		},
 	})

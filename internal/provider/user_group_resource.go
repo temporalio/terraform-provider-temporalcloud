@@ -21,7 +21,6 @@ import (
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
-	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 type (
@@ -30,11 +29,9 @@ type (
 	}
 
 	userGroupResourceModel struct {
-		ID                types.String                             `tfsdk:"id"`
-		State             types.String                             `tfsdk:"state"`
-		Name              types.String                             `tfsdk:"name"`
-		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
+		ID    types.String `tfsdk:"id"`
+		State types.String `tfsdk:"state"`
+		Name  types.String `tfsdk:"name"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -103,9 +100,6 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		},
 	}
 
-	// Add the account_access and namespace_accesses attributes to the schema.
-	addAccessSchemaAttrs(s)
-
 	resp.Schema = s
 }
 
@@ -125,27 +119,9 @@ func (r *userGroupResource) Create(ctx context.Context, req resource.CreateReque
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	namespaceAccesses, d := getNamespaceAccessesFromSet(ctx, plan.NamespaceAccesses)
-	resp.Diagnostics.Append(d...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		diags.AddError("Failed to convert account access role", err.Error())
-		return
-	}
-
 	svcResp, err := r.client.CloudService().CreateUserGroup(ctx, &cloudservicev1.CreateUserGroupRequest{
 		Spec: &identityv1.UserGroupSpec{
 			DisplayName: plan.Name.ValueString(),
-			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
-				NamespaceAccesses: namespaceAccesses,
-			},
 			GroupType: &identityv1.UserGroupSpec_CloudGroup{
 				CloudGroup: &identityv1.CloudGroupSpec{},
 			},
@@ -217,12 +193,6 @@ func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	namespaceAccesses, d := getNamespaceAccessesFromSet(ctx, plan.NamespaceAccesses)
-	resp.Diagnostics.Append(d...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	currentGroup, err := r.client.CloudService().GetUserGroup(ctx, &cloudservicev1.GetUserGroupRequest{
 		GroupId: plan.ID.ValueString(),
 	})
@@ -231,27 +201,11 @@ func (r *userGroupResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
-		return
-	}
-	access := &identityv1.Access{
-		AccountAccess: &identityv1.AccountAccess{
-			Role: role,
-		},
-		NamespaceAccesses: namespaceAccesses,
-	}
-	// If the role is unspecified (i.e. none), remove the account access from the spec.
-	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
-		access.AccountAccess = nil
-	}
-
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId: plan.ID.ValueString(),
 		Spec: &identityv1.UserGroupSpec{
 			DisplayName: plan.Name.ValueString(),
-			Access:      access,
+			Access:      currentGroup.GetGroup().GetSpec().GetAccess(),
 			GroupType: &identityv1.UserGroupSpec_CloudGroup{
 				CloudGroup: &identityv1.CloudGroupSpec{},
 			},
@@ -356,19 +310,6 @@ func updateGroupModelFromSpec(ctx context.Context, state *userGroupResourceModel
 	}
 	state.State = types.StringValue(stateStr)
 	state.Name = types.StringValue(group.GetSpec().GetDisplayName())
-	role, err := enums.FromAccountAccessRole(group.GetSpec().GetAccess().GetAccountAccess().GetRole())
-	if err != nil {
-		diags.AddError("Failed to convert account access role", err.Error())
-		return diags
-	}
-	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
-
-	namespaceAccesses, d := getNamespaceSetFromSpec(ctx, group.GetSpec().GetAccess())
-	diags.Append(d...)
-	if diags.HasError() {
-		return diags
-	}
-	state.NamespaceAccesses = namespaceAccesses
 
 	return diags
 }
