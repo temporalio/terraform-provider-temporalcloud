@@ -43,7 +43,7 @@ func TestGroupSchema(t *testing.T) {
 func TestAccGroup_Basic(t *testing.T) {
 	name := createRandomName()
 	nameUpdate := createRandomName()
-	config := func(name string, role string) string {
+	config := func(name string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -51,7 +51,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_group" "terraform" {
   name = "%s"
-}`, name, role)
+}`, name)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -61,16 +61,13 @@ resource "temporalcloud_group" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name, "read"),
+				Config: config(name),
 			},
 			{
-				Config: config(name, "developer"),
+				Config: config(name + "developer"),
 			},
 			{
-				Config: config(name, "admin"),
-			},
-			{
-				Config: config(nameUpdate, "admin"),
+				Config: config(name),
 			},
 			{
 				ImportState:       true,
