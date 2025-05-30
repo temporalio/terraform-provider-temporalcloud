@@ -47,8 +47,7 @@ func TestAccBasicNamespace(t *testing.T) {
 	config := func(name string, retention int, deleteProtection bool) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
-  api_key = "eyJhbGciOiJFUzI1NiIsICJraWQiOiJwcGFrSEEifQ.eyJhY2NvdW50X2lkIjoicW1waG0iLCAiYXVkIjpbInRlbXBvcmFsLXRlc3QuaW8iXSwgImV4cCI6MTgxMDQwNjAzNSwgImlzcyI6InRlbXBvcmFsLXRlc3QuaW8iLCAianRpIjoibE9JblZrVTBJSHlDZlM2bHVNOFBBbVJ2eEVKTVV2N1oiLCAia2V5X2lkIjoibE9JblZrVTBJSHlDZlM2bHVNOFBBbVJ2eEVKTVV2N1oiLCAic3ViIjoiMTFjODIxOWYtMzE4Ny00YTEzLTk5YTAtYjA5NWY5ZGU5MGEyIn0.wyn5Fx552-9VnSTq1Hcb5_tdQco1904Mr06_f3mQBfIL5xmRQ7tutLaPDgv3zVNbjU5BlvBTgzw1r7IcMX1adA"
-  endpoint = "saas-api.tmprl-test.cloud:443"
+
 }
 
 resource "temporalcloud_namespace" "terraform" {
