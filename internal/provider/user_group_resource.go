@@ -300,7 +300,7 @@ func (r *userGroupResource) ImportState(ctx context.Context, req resource.Import
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func updateGroupModelFromSpec(ctx context.Context, state *userGroupResourceModel, group *identityv1.UserGroup) diag.Diagnostics {
+func updateGroupModelFromSpec(_ context.Context, state *userGroupResourceModel, group *identityv1.UserGroup) diag.Diagnostics {
 	var diags diag.Diagnostics
 	state.ID = types.StringValue(group.GetId())
 	stateStr, err := enums.FromResourceState(group.GetState())
