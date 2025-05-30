@@ -64,7 +64,7 @@ resource "temporalcloud_group" "terraform" {
 				Config: config(name),
 			},
 			{
-				Config: config(name + "developer"),
+				Config: config(nameUpdate),
 			},
 			{
 				Config: config(name),
