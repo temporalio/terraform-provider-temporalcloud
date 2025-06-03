@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -14,7 +16,6 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
-	"time"
 )
 
 var (
@@ -53,6 +54,7 @@ type (
 		Limits                 types.Object `tfsdk:"limits"`
 		CreatedTime            types.String `tfsdk:"created_time"`
 		LastModifiedTime       types.String `tfsdk:"last_modified_time"`
+		Tags                   types.Map    `tfsdk:"tags"`
 	}
 
 	endpointsDataModel struct {
@@ -273,6 +275,12 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			Computed:    true,
 			Optional:    true,
 			Description: "The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.",
+		},
+		"tags": schema.MapAttribute{
+			Computed:    true,
+			Optional:    true,
+			ElementType: types.StringType,
+			Description: "The tags for the namespace.",
 		},
 	}
 }
@@ -500,6 +508,17 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 		return nil, diags
 	}
 	namespaceModel.Limits = limits
+
+	tags := types.MapNull(types.StringType)
+	if len(ns.GetTags()) > 0 {
+		tagsMap, mapDiags := types.MapValueFrom(ctx, types.StringType, ns.GetTags())
+		diags.Append(mapDiags...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		tags = tagsMap
+	}
+	namespaceModel.Tags = tags
 
 	return namespaceModel, nil
 }

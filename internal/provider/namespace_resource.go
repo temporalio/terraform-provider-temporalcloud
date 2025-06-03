@@ -77,6 +77,7 @@ type (
 		ApiKeyAuth         types.Bool                             `tfsdk:"api_key_auth"`
 		CodecServer        types.Object                           `tfsdk:"codec_server"`
 		Endpoints          types.Object                           `tfsdk:"endpoints"`
+		Tags               types.Map                              `tfsdk:"tags"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -264,6 +265,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Computed: true,
 			},
+			"tags": schema.MapAttribute{
+				Description: "The tags for the namespace.",
+				ElementType: types.StringType,
+				Optional:    true,
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -343,9 +349,16 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		spec.MtlsAuth = mtls
 	}
 
+	tags, d := getTagsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
+		Tags:             tags,
 	})
 
 	if err != nil {
@@ -672,6 +685,17 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		return diags
 	}
 
+	tags := types.MapNull(types.StringType)
+	if len(ns.GetTags()) > 0 {
+		tagsMap, mapDiags := types.MapValueFrom(ctx, types.StringType, ns.GetTags())
+		diags.Append(mapDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		tags = tagsMap
+	}
+	state.Tags = tags
+
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
 	state.CertificateFilters = certificateFilter
@@ -731,4 +755,20 @@ func stringOrNull(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+func getTagsFromModel(ctx context.Context, model *namespaceResourceModel) (map[string]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	tags := make(map[string]string, len(model.Tags.Elements()))
+	diags.Append(model.Tags.ElementsAs(ctx, &tags, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	if len(tags) == 0 {
+		return nil, diags
+	}
+
+	return tags, diags
 }
