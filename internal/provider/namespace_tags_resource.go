@@ -195,6 +195,8 @@ func (r *namespaceTagsResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
+	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &plan, plan.NamespaceID.ValueString(), plannedTags)...)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
