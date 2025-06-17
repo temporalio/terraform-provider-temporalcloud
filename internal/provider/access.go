@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -60,6 +61,10 @@ func addAccessSchemaAttrs(s schema.Schema) {
 		Validators: []validator.Set{
 			setvalidator.SizeAtLeast(1),
 			validation.SetNestedAttributeMustBeUnique("namespace_id"),
+			validation.SetMustBeEmptyWhen(
+				path.Root("account_access"),
+				[]string{"owner", "admin"},
+			),
 		},
 	}
 }
