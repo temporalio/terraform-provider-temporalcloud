@@ -15,7 +15,7 @@ type setEmptyWhen struct {
 	values    []string
 }
 
-// SetMustBeEmptyWhen returns a validator that ensures a set is empty when another attribute has any of the specified values
+// SetMustBeEmptyWhen returns a validator that ensures a set is empty when another attribute has any of the specified values.
 func SetMustBeEmptyWhen(otherPath path.Path, values []string) validator.Set {
 	return setEmptyWhen{
 		otherPath: otherPath,
