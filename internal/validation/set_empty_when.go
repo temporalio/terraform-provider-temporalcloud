@@ -38,6 +38,7 @@ func (s setEmptyWhen) ValidateSet(ctx context.Context, req validator.SetRequest,
 
 	// Get the value of the other attribute
 	var otherValue types.CaseInsensitiveStringValue
+
 	diags := req.Config.GetAttribute(ctx, s.otherPath, &otherValue)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
