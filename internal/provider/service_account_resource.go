@@ -196,17 +196,22 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
 		return
 	}
-	svcResp, err := r.client.CloudService().CreateServiceAccount(ctx, &cloudservicev1.CreateServiceAccountRequest{
-		Spec: &identityv1.ServiceAccountSpec{
-			Name: plan.Name.ValueString(),
-			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
-				NamespaceAccesses: namespaceAccesses,
+	spec := &identityv1.ServiceAccountSpec{
+		Name: plan.Name.ValueString(),
+		Access: &identityv1.Access{
+			AccountAccess: &identityv1.AccountAccess{
+				Role: role,
 			},
-			Description: description,
+			NamespaceAccesses: namespaceAccesses,
 		},
+		Description: description,
+	}
+	if err := enums.ValidateAccess(spec.GetAccess()); err != nil {
+		resp.Diagnostics.AddError("Invalid Access", err.Error())
+		return
+	}
+	svcResp, err := r.client.CloudService().CreateServiceAccount(ctx, &cloudservicev1.CreateServiceAccountRequest{
+		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -296,18 +301,23 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
 		return
 	}
+	spec := &identityv1.ServiceAccountSpec{
+		Name: plan.Name.ValueString(),
+		Access: &identityv1.Access{
+			AccountAccess: &identityv1.AccountAccess{
+				Role: role,
+			},
+			NamespaceAccesses: namespaceAccesses,
+		},
+		Description: description,
+	}
+	if err := enums.ValidateAccess(spec.GetAccess()); err != nil {
+		resp.Diagnostics.AddError("Invalid Access", err.Error())
+		return
+	}
 	svcResp, err := r.client.CloudService().UpdateServiceAccount(ctx, &cloudservicev1.UpdateServiceAccountRequest{
 		ServiceAccountId: plan.ID.ValueString(),
-		Spec: &identityv1.ServiceAccountSpec{
-			Name: plan.Name.ValueString(),
-			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
-				NamespaceAccesses: namespaceAccesses,
-			},
-			Description: description,
-		},
+		Spec:             spec,
 		ResourceVersion:  currentServiceAccount.ServiceAccount.GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})

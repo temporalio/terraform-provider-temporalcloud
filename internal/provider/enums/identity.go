@@ -99,3 +99,16 @@ func FromNamespaceAccessPermission(p identity.NamespaceAccess_Permission) (strin
 		return "", fmt.Errorf("%w: %v", ErrInvalidNamespaceAccessPermission, p)
 	}
 }
+
+func ValidateAccess(access *identity.Access) error {
+	if access == nil {
+		return fmt.Errorf("access cannot be nil")
+	}
+	if access.AccountAccess.Role == identity.AccountAccess_ROLE_ADMIN ||
+		access.AccountAccess.Role == identity.AccountAccess_ROLE_OWNER {
+		if len(access.NamespaceAccesses) > 0 {
+			return fmt.Errorf("namespace accesses must be empty when account access role admin or owner")
+		}
+	}
+	return nil
+}
