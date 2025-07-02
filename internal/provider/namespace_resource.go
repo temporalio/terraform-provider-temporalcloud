@@ -26,6 +26,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"slices"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +45,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -179,9 +180,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
 				},
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
-				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
 				CustomType:  internaltypes.EncodedCAType{},
@@ -311,7 +309,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
-	var spec = &namespacev1.NamespaceSpec{
+	spec := &namespacev1.NamespaceSpec{
 		Name:          plan.Name.ValueString(),
 		Regions:       regions,
 		RetentionDays: int32(plan.RetentionDays.ValueInt64()),
@@ -347,7 +345,6 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create namespace", err.Error())
 		return
@@ -408,6 +405,23 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
+func areRegionsEqual(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	// Create copies to avoid modifying the original slices
+	sortedS1 := make([]string, len(s1))
+	copy(sortedS1, s1)
+	sortedS2 := make([]string, len(s2))
+	copy(sortedS2, s2)
+
+	// Sort both slices
+	sort.Strings(sortedS1)
+	sort.Strings(sortedS2)
+
+	return slices.Compare(sortedS1, sortedS2) == 0
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan namespaceResourceModel
@@ -445,7 +459,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	var spec = &namespacev1.NamespaceSpec{
+	spec := &namespacev1.NamespaceSpec{
 		Name:             plan.Name.ValueString(),
 		Regions:          regions,
 		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
@@ -477,6 +491,11 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 
 		spec.MtlsAuth = mtls
+	}
+
+	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
+		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
+		return
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
