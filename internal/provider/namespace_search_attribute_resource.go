@@ -335,19 +335,6 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 			return
 		}
-
-		updatedNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
-			Namespace: state.NamespaceID.ValueString(),
-		})
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to get namespace after update", err.Error())
-			return
-		}
-
-		resp.Diagnostics.Append(state.updateFromSpec(updatedNs.GetNamespace().GetSpec())...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
 	})
 }
 
