@@ -311,14 +311,15 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 		}
 
 		spec := ns.GetNamespace().GetSpec()
-		_, ok := spec.GetSearchAttributes()[state.ID.String()]
+		_, ok := spec.GetSearchAttributes()[state.Name.ValueString()]
 		if !ok {
 			// search attribute is already deleted
+			resp.Diagnostics.AddWarning("Custom search attribute was already deleted", state.ID.String())
 			return
 		}
 
 		// delete the search attribute
-		delete(spec.SearchAttributes, state.ID.String())
+		delete(spec.SearchAttributes, state.Name.ValueString())
 
 		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 			Namespace:        state.NamespaceID.ValueString(),
@@ -327,12 +328,12 @@ func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resou
 			AsyncOperationId: uuid.New().String(),
 		})
 		if err != nil {
-			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			resp.Diagnostics.AddError("Failed delete search attribute", err.Error())
 			return
 		}
 
 		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
-			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			resp.Diagnostics.AddError("Failed delete search attribute", err.Error())
 			return
 		}
 	})
