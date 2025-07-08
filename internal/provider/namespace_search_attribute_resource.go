@@ -295,10 +295,48 @@ func (r *namespaceSearchAttributeResource) Update(ctx context.Context, req resou
 }
 
 func (r *namespaceSearchAttributeResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddWarning(
-		"Delete Ignored",
-		"The Temporal Cloud API does not support deleting a search attribute. Terraform will silently drop this resource but will not delete it from the Temporal Cloud namespace.",
-	)
+	var state namespaceSearchAttributeModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	withNamespaceLock(state.NamespaceID.ValueString(), func() {
+		ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: state.NamespaceID.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get namespace", err.Error())
+			return
+		}
+
+		spec := ns.GetNamespace().GetSpec()
+		_, ok := spec.GetSearchAttributes()[state.Name.ValueString()]
+		if !ok {
+			// search attribute is already deleted
+			resp.Diagnostics.AddWarning("Custom search attribute was already deleted", state.ID.String())
+			return
+		}
+
+		// delete the search attribute
+		delete(spec.SearchAttributes, state.Name.ValueString())
+
+		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+			Namespace:        state.NamespaceID.ValueString(),
+			Spec:             spec,
+			ResourceVersion:  ns.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed delete search attribute", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+			resp.Diagnostics.AddError("Failed delete search attribute", err.Error())
+			return
+		}
+	})
 }
 
 func (r *namespaceSearchAttributeResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
