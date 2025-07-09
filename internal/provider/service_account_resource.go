@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -127,7 +126,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 				Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("admin", "developer", "read"),
+					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
@@ -144,13 +143,13 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 							Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
 							Required:    true,
 							Validators: []validator.String{
-								stringvalidator.OneOfCaseInsensitive("admin", "write", "read"),
+								stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),
 							},
 						},
 					},
 				},
 				Validators: []validator.Set{
-					setvalidator.SizeAtLeast(1),
+					validation.NewNamespaceAccessValidator("account_access"),
 					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
