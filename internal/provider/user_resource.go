@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -140,6 +141,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					},
 				},
 				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
 					validation.NewNamespaceAccessValidator("account_access"),
 					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
