@@ -10,7 +10,7 @@ import (
 )
 
 func TestAccDataSource_User(t *testing.T) {
-	email := createRandomName()
+	email := createRandomEmail()
 	config := func(email string, role string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
