@@ -19,14 +19,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
-	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 )
 
 type (
@@ -117,7 +118,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				Description: "The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships.",
 				Required:    true,
 				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read", "none"),
+					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
@@ -134,13 +135,14 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 							Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
 							Required:    true,
 							Validators: []validator.String{
-								stringvalidator.OneOfCaseInsensitive("admin", "write", "read"),
+								stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),
 							},
 						},
 					},
 				},
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
+					validation.NewNamespaceAccessValidator("account_access"),
 					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 				},
 			},
@@ -194,7 +196,6 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		},
 		AsyncOperationId: uuid.New().String(),
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create user", err.Error())
 		return

@@ -55,6 +55,16 @@ func ToAccountAccessRole(s string) (identity.AccountAccess_Role, error) {
 	}
 }
 
+func AllowedAccountAccessRoles() []string {
+	return []string{
+		"owner",
+		"admin",
+		"developer",
+		"read",
+		"financeadmin",
+	}
+}
+
 func FromAccountAccessRole(r identity.AccountAccess_Role) (string, error) {
 	switch r {
 	case identity.AccountAccess_ROLE_OWNER:
@@ -97,5 +107,13 @@ func FromNamespaceAccessPermission(p identity.NamespaceAccess_Permission) (strin
 		return "read", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidNamespaceAccessPermission, p)
+	}
+}
+
+func AllowedNamespaceAccessPermissions() []string {
+	return []string{
+		"admin",
+		"write",
+		"read",
 	}
 }
