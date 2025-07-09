@@ -62,7 +62,6 @@ func AllowedAccountAccessRoles() []string {
 		"developer",
 		"read",
 		"financeadmin",
-		"none",
 	}
 }
 
