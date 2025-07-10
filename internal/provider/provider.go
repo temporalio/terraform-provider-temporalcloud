@@ -190,6 +190,8 @@ func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datas
 		NewUserDataSource,
 		NewUsersDataSource,
 		NewSCIMGroupDataSource,
+		NewNexusEndpointDataSource,
+		NewNexusEndpointsDataSource,
 	}
 }
 
