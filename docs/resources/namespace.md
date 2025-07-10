@@ -4,16 +4,17 @@ page_title: "temporalcloud_namespace Resource - terraform-provider-temporalcloud
 subcategory: ""
 description: |-
   Provisions a Temporal Cloud namespace.
+  Regions available in Temporal Cloud: https://docs.temporal.io/cloud/regions.
+  Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)
 ---
 
 # temporalcloud_namespace (Resource)
 
-Provisions a Temporal Cloud namespace.
+Provisions a Temporal Cloud namespace. 
 
-Regions available in Temporal Cloud: https://docs.temporal.io/cloud/regions
+Regions available in Temporal Cloud: https://docs.temporal.io/cloud/regions. 
 
 Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)
-
 
 ## Example Usage
 
@@ -137,7 +138,7 @@ resource "temporalcloud_namespace" "terraform3" {
 ### Required
 
 - `name` (String) The name of the namespace.
-- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a "Multi-region Namespace". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.
+- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a "Multi-region Namespace". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over. See https://docs.temporal.io/cloud/regions for a list of available regions. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 
 ### Optional
