@@ -10,6 +10,11 @@ description: |-
 
 Provisions a Temporal Cloud namespace.
 
+Regions available in Temporal Cloud: https://docs.temporal.io/cloud/regions
+
+Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)
+
+
 ## Example Usage
 
 ```terraform
