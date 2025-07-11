@@ -337,6 +337,7 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": plan.ID.ValueString(),
 			})
+			resp.State.RemoveResource(ctx)
 
 			return
 		}
@@ -361,6 +362,7 @@ func (r *namespaceExportSinkResource) Delete(ctx context.Context, req resource.D
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": plan.ID.ValueString(),
 			})
+			resp.State.RemoveResource(ctx)
 
 			return
 		}
