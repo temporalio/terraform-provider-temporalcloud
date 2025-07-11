@@ -69,15 +69,16 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                 types.String                           `tfsdk:"id"`
-		Name               types.String                           `tfsdk:"name"`
-		Regions            internaltypes.UnorderedStringListValue `tfsdk:"regions"`
-		AcceptedClientCA   internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
-		RetentionDays      types.Int64                            `tfsdk:"retention_days"`
-		CertificateFilters types.List                             `tfsdk:"certificate_filters"`
-		ApiKeyAuth         types.Bool                             `tfsdk:"api_key_auth"`
-		CodecServer        types.Object                           `tfsdk:"codec_server"`
-		Endpoints          types.Object                           `tfsdk:"endpoints"`
+		ID                  types.String                           `tfsdk:"id"`
+		Name                types.String                           `tfsdk:"name"`
+		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
+		AcceptedClientCA    internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
+		RetentionDays       types.Int64                            `tfsdk:"retention_days"`
+		CertificateFilters  types.List                             `tfsdk:"certificate_filters"`
+		ApiKeyAuth          types.Bool                             `tfsdk:"api_key_auth"`
+		CodecServer         types.Object                           `tfsdk:"codec_server"`
+		Endpoints           types.Object                           `tfsdk:"endpoints"`
+		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -262,6 +263,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Computed: true,
 			},
+			"connectivity_rule_ids": schema.ListAttribute{
+				Description: "The IDs of the connectivity rules for this namespace.",
+				Optional:    true,
+				Computed:    true,
+				ElementType: types.StringType,
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -309,11 +316,18 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
-	spec := &namespacev1.NamespaceSpec{
-		Name:          plan.Name.ValueString(),
-		Regions:       regions,
-		RetentionDays: int32(plan.RetentionDays.ValueInt64()),
-		CodecServer:   codecServer,
+	connectivityRuleIds, d := getConnectivityRuleIdsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var spec = &namespacev1.NamespaceSpec{
+		Name:                plan.Name.ValueString(),
+		Regions:             regions,
+		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:         codecServer,
+		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -441,6 +455,12 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	connectivityRuleIds, d := getConnectivityRuleIdsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	currentNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
@@ -459,12 +479,13 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	spec := &namespacev1.NamespaceSpec{
-		Name:             plan.Name.ValueString(),
-		Regions:          regions,
-		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
-		CodecServer:      codecServer,
-		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+	var spec = &namespacev1.NamespaceSpec{
+		Name:                plan.Name.ValueString(),
+		Regions:             regions,
+		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:         codecServer,
+		SearchAttributes:    currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -604,6 +625,21 @@ func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]s
 	}
 
 	return requestRegions, diags
+}
+
+func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	connectivityRuleIds := make([]types.String, 0, len(plan.ConnectivityRuleIds.Elements()))
+	diags.Append(plan.ConnectivityRuleIds.ElementsAs(ctx, &connectivityRuleIds, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	requestConnectivityRuleIds := make([]string, len(connectivityRuleIds))
+	for i, connectivityRuleId := range connectivityRuleIds {
+		requestConnectivityRuleIds[i] = connectivityRuleId.ValueString()
+	}
+	return requestConnectivityRuleIds, diags
 }
 
 func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns *namespacev1.Namespace) diag.Diagnostics {

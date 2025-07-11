@@ -42,16 +42,16 @@ terraform {
 
 provider "temporalcloud" {
   # Also can be set by environment variable `TEMPORAL_CLOUD_API_KEY`
-  api_key = "eyJhbGciOiJFUzI1NiIsImtpZCI6Ild2dHdhQSJ9.eyJhY2NvdW50X2lkIjoiYTJkZDYiLCJhdWQiOlsidGVtcG9yYWwuaW8iXSwiZXhwIjoxNzU0NzY3MTc4LCJpc3MiOiJ0ZW1wb3JhbC5pbyIsImp0aSI6IjFYdlU1bVVEcHJSZ2JIeUlPYm1mWklMelVqRG12aHl6Iiwia2V5X2lkIjoiMVh2VTVtVURwclJnYkh5SU9ibWZaSUx6VWpEbXZoeXoiLCJzdWIiOiI3ZGVlYjI4Ny1mZTZmLTRhNjgtODk5Yy1jZTlhMzUzOGFlZTAifQ.9_zXRyGs1-tmcht4OSgLUVc9gVktk-Ig6gMVViCJwEfM4si4d5LRV9d_WRja_cr8QqMsVpl2o3kaF5WeHqPcqA"
+  api_key = "my-temporalcloud-api-key"
 
   # Also can be set by environment variable `TEMPORAL_CLOUD_ENDPOINT`
-  endpoint = "saas-api.tmprl-test.cloud:443"
+  endpoint = "saas-api.tmprl.cloud:443"
 
   # Also can be set by environment variable `TEMPORAL_CLOUD_ALLOW_INSECURE`
   allow_insecure = false
 
   # Also can be set by environment variable `TEMPORAL_CLOUD_ALLOWED_ACCOUNT_ID`
-  allowed_account_id = "temporal-dev"
+  allowed_account_id = "my-temporalcloud-account-id"
 }
 ```
 
