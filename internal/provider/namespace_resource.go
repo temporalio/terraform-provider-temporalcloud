@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"time"
@@ -36,6 +37,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -60,6 +62,8 @@ import (
 const (
 	defaultCreateTimeout time.Duration = 5 * time.Minute
 	defaultDeleteTimeout time.Duration = 5 * time.Minute
+
+	maxNamespaceNameOnlyLength = 39
 )
 
 type (
@@ -162,6 +166,10 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"name": schema.StringAttribute{
 				Description: "The name of the namespace.",
 				Required:    true,
+				Validators: []validator.String{
+					stringvalidator.RegexMatches(regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$`), "invalid namespace string: please refer to https://docs.temporal.io/concepts/what-is-a-cloud-namespace-name/ for requirements"),
+					stringvalidator.LengthAtMost(maxNamespaceNameOnlyLength),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
