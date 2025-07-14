@@ -48,6 +48,7 @@ func nexusEndpointSchema(idRequired bool) map[string]schema.Attribute {
 			Description: "The description of the Nexus Endpoint.",
 			Optional:    true,
 			Sensitive:   true,
+			Computed:    true,
 		},
 		"worker_target": schema.SingleNestedAttribute{
 			Description: "The target spec for routing nexus requests to a specific cloud namespace worker.",
