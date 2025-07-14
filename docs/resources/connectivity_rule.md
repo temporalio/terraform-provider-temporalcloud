@@ -17,13 +17,13 @@ Provisions a Temporal Cloud Connectivity Rule.
 
 ### Required
 
-- `connection_id` (String) The connection ID of the private connection.
 - `connectivity_type` (String) The type of connectivity. Must be one of 'public' or 'private'.
-- `region` (String) The region of the connection. Example: 'aws-us-west-2'
 
 ### Optional
 
+- `connection_id` (String) The connection ID of the private connection.
 - `gcp_project_id` (String) The GCP project ID. Required when cloud_provider is 'gcp'.
+- `region` (String) The region of the connection. Example: 'aws-us-west-2'.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

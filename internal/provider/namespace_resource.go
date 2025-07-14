@@ -267,7 +267,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Description: "The IDs of the connectivity rules for this namespace.",
 				Optional:    true,
 				Computed:    true,
-				ElementType: types.StringType,
+				CustomType: internaltypes.UnorderedStringListType{
+					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -725,6 +727,15 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	diags.Append(objectDiags...)
 	if diags.HasError() {
 		return diags
+	}
+
+	planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetConnectivityRuleIds())
+	diags.Append(listDiags...)
+	if diags.HasError() {
+		return diags
+	}
+	state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
+		ListValue: planConnectivityRuleIds,
 	}
 
 	state.Endpoints = endpointsState

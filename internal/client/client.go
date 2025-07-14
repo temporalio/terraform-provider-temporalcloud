@@ -53,6 +53,7 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, 
 		APIKey:        apiKey,
 		AllowInsecure: allowInsecure,
 		UserAgent:     userAgentProject,
+		APIVersion:    "prerelease",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %v", err)

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -101,7 +102,9 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 			},
 			"connection_id": schema.StringAttribute{
 				Description: "The connection ID of the private connection.",
-				Required:    true,
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -113,8 +116,10 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 				Default:     stringdefault.StaticString(""),
 			},
 			"region": schema.StringAttribute{
-				Description: "The region of the connection. Example: 'aws-us-west-2'",
-				Required:    true,
+				Description: "The region of the connection. Example: 'aws-us-west-2'.",
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -145,7 +150,7 @@ func (r *connectivityRuleResource) Create(ctx context.Context, req resource.Crea
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	spec, d := getConnectivityRuleSpecFromModel(ctx, &plan)
+	spec, d := getConnectivityRuleSpecFromModel(&plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -172,7 +177,7 @@ func (r *connectivityRuleResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
-	resp.Diagnostics.Append(updateConnectivityRuleModelFromSpec(ctx, &plan, connectivityRule.ConnectivityRule)...)
+	resp.Diagnostics.Append(updateConnectivityRuleModelFromSpec(&plan, connectivityRule.ConnectivityRule)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -213,7 +218,7 @@ func (r *connectivityRuleResource) Read(ctx context.Context, req resource.ReadRe
 		return
 	}
 
-	resp.Diagnostics.Append(updateConnectivityRuleModelFromSpec(ctx, &state, connectivityRule.ConnectivityRule)...)
+	resp.Diagnostics.Append(updateConnectivityRuleModelFromSpec(&state, connectivityRule.ConnectivityRule)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -265,9 +270,11 @@ func (r *connectivityRuleResource) Delete(ctx context.Context, req resource.Dele
 				"id": state.ID.ValueString(),
 			})
 			resp.State.RemoveResource(ctx)
-
 			return
 		}
+
+		resp.Diagnostics.AddError("Failed to delete Connectivity Rule", err.Error())
+		return
 	}
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to delete Connectivity Rule", err.Error())
@@ -279,18 +286,18 @@ func (r *connectivityRuleResource) ImportState(ctx context.Context, req resource
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getConnectivityRuleSpecFromModel(ctx context.Context, model *connectivityRuleResourceModel) (*connectivityrulev1.ConnectivityRuleSpec, diag.Diagnostics) {
+func getConnectivityRuleSpecFromModel(model *connectivityRuleResourceModel) (*connectivityrulev1.ConnectivityRuleSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	switch model.ConnectivityType.ValueString() {
-	case "public":
+	case connectivityRuleTypePublic:
 		return &connectivityrulev1.ConnectivityRuleSpec{
 			ConnectionType: &connectivityrulev1.ConnectivityRuleSpec_PublicRule{
 				PublicRule: &connectivityrulev1.PublicConnectivityRule{},
 			},
 		}, diags
 
-	case "private":
+	case connectivityRuleTypePrivate:
 		if model.ConnectionID.IsNull() {
 			diags.AddError("Connection ID is required", "connection_id must be specified when connectivity_type is 'private'")
 			return nil, diags
@@ -298,6 +305,11 @@ func getConnectivityRuleSpecFromModel(ctx context.Context, model *connectivityRu
 
 		if model.Region.IsNull() {
 			diags.AddError("Region is required", "region must be specified when connectivity_type is 'private'")
+			return nil, diags
+		}
+
+		if strings.HasPrefix(model.Region.ValueString(), "gcp") && model.GcpProjectID.IsNull() {
+			diags.AddError("GCP Project ID is required", "gcp_project_id must be specified when region is gcp")
 			return nil, diags
 		}
 
@@ -318,8 +330,10 @@ func getConnectivityRuleSpecFromModel(ctx context.Context, model *connectivityRu
 	}
 }
 
-func updateConnectivityRuleModelFromSpec(ctx context.Context, model *connectivityRuleResourceModel, connectivityRule *connectivityrulev1.ConnectivityRule) diag.Diagnostics {
+func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, connectivityRule *connectivityrulev1.ConnectivityRule) diag.Diagnostics {
 	var diags diag.Diagnostics
+
+	model.ID = types.StringValue(connectivityRule.GetId())
 
 	if connectivityRule.Spec.GetPrivateRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
@@ -328,6 +342,9 @@ func updateConnectivityRuleModelFromSpec(ctx context.Context, model *connectivit
 		model.GcpProjectID = types.StringValue(connectivityRule.Spec.GetPrivateRule().GetGcpProjectId())
 	} else if connectivityRule.Spec.GetPublicRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePublic)
+		model.ConnectionID = types.StringValue("")
+		model.Region = types.StringValue("")
+		model.GcpProjectID = types.StringValue("")
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
 		return diags

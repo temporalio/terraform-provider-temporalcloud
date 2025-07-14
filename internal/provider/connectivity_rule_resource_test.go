@@ -45,6 +45,7 @@ func TestAccConnectivityRuleResource_Public(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "connectivity_type", "public"),
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "connection_id", ""),
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "region", ""),
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "gcp_project_id", ""),
 				),
 			},
 			// Import state testing
@@ -111,18 +112,23 @@ func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutConnectionId(),
 				// Should fail at plan time due to missing required attribute
-				ExpectError: regexp.MustCompile("Missing required argument"),
+				ExpectError: regexp.MustCompile("private connection id is empty"),
 			},
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutRegion(),
 				// Should fail at plan time due to missing required attribute
-				ExpectError: regexp.MustCompile("Missing required argument"),
+				ExpectError: regexp.MustCompile("region is empty"),
+			},
+			{
+				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutGcpProjectId(),
+				// Should fail at plan time due to missing required attribute
+				ExpectError: regexp.MustCompile("gcp project id is required"),
 			},
 		},
 	})
 }
 
-// Test configuration functions
+// Test configuration functions.
 func testAccConnectivityRuleResourceConfig_Public() string {
 	return `
 provider "temporalcloud" {
@@ -184,6 +190,20 @@ provider "temporalcloud" {
 resource "temporalcloud_connectivity_rule" "test" {
   connectivity_type = "private"
   connection_id     = "vpce-12345678"
+}
+`
+}
+
+func testAccConnectivityRuleResourceConfig_PrivateWithoutGcpProjectId() string {
+	return `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test" {
+  connectivity_type = "private"
+  connection_id     = "vpce-12345678"
+  region           = "gcp-us-central1"
 }
 `
 }
