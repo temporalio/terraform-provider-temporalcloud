@@ -238,8 +238,8 @@ go.opentelemetry.io/otel/trace v1.35.0 h1:dPpEfJu1sDIqruz7BHFG3c7528f6ddfSWfFDVt
 go.opentelemetry.io/otel/trace v1.35.0/go.mod h1:WUk7DtFp1Aw2MkvqGdwiXYDZZNvA/1J8o6xRXLrIkyc=
 go.temporal.io/api v1.50.0 h1:7s8Cn+fKfNx9G0v2Ge9We6X2WiCA3JvJ9JryeNbx1Bc=
 go.temporal.io/api v1.50.0/go.mod h1:iaxoP/9OXMJcQkETTECfwYq4cw/bj4nwov8b3ZLVnXM=
-go.temporal.io/cloud-sdk v0.3.1 h1:yhS0XnPOnsu80opXIgFnihGU3tBeHHQA479GHUo/cv8=
-go.temporal.io/cloud-sdk v0.3.1/go.mod h1:AueDDyuayosk+zalfrnuftRqnRQTHwD0HYwNgEQc0YE=
+go.temporal.io/cloud-sdk v0.4.0 h1:1sU7dUaEHBZ61qfxkUeGICWcyc0RmfOnpvpTWI+bYao=
+go.temporal.io/cloud-sdk v0.4.0/go.mod h1:AueDDyuayosk+zalfrnuftRqnRQTHwD0HYwNgEQc0YE=
 go.temporal.io/sdk v1.35.0 h1:lRNAQ5As9rLgYa7HBvnmKyzxLcdElTuoFJ0FXM/AsLQ=
 go.temporal.io/sdk v1.35.0/go.mod h1:1q5MuLc2MEJ4lneZTHJzpVebW2oZnyxoIOWX3oFVebw=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
