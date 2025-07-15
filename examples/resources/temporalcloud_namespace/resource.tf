@@ -110,20 +110,25 @@ resource "temporalcloud_namespace" "terraform3" {
   }
 }
 
-// example namespace that need to attach cr ids
+// Attaching connectivity rules to a namespace
 resource "temporalcloud_namespace" "terraform4" {
-  name           = "terraform4"
-  regions        = ["aws-us-east-1"]
+  name               = "terraform4"
+  regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
-  retention_days = 14
-  // In this example, the rule id is a dummy value. Please create a connectivity rule and save the id after creation and 
-  // attach to your namespace.    
+  retention_days     = 14
+  // This is a placeholder rule ID. Please create a connectivity rule first,
+  // then replace this value with the actual ID returned after creation.
   connectivity_rule_ids = [
     "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
   ]
+}
 
-  // Prevents Terraform from deleting namespace. Must remove this before destroying resource.
-  lifecycle {
-    prevent_destroy = true
-  }
+// Remove connectivity rules to a namespace
+resource "temporalcloud_namespace" "terraform4" {
+  name               = "terraform4"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
+  retention_days     = 14
+  // Need to specifically calls out connectivity_rule_ids field when we want to do a clean up.
+  connectivity_rule_ids = []
 }

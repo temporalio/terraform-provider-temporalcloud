@@ -635,6 +635,8 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 				ruleRefs = append(ruleRefs, fmt.Sprintf("temporalcloud_connectivity_rule.%s.id", ruleName))
 			}
 			connectivityRulesConfig = fmt.Sprintf("connectivity_rule_ids = [%s]", strings.Join(ruleRefs, ", "))
+		} else {
+			connectivityRulesConfig = "connectivity_rule_ids = []"
 		}
 
 		config := fmt.Sprintf(`
@@ -754,31 +756,29 @@ PEM
 					return nil
 				},
 			},
-			// TODO: Still debugging
-			// {
-			// 	// Remove all connectivity rule IDs
-			// 	Config: config(name, []string{}, 1),
-			// 	Check: func(s *terraform.State) error {
-			// 		namespaceId := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-			// 		conn := newConnection(t)
-			// 		ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
-			// 			Namespace: namespaceId,
-			// 		})
-			// 		if err != nil {
-			// 			return fmt.Errorf("failed to get namespace: %v", err)
-			// 		}
+			{
+				// Remove all connectivity rule IDs for namespace
+				Config: config(name, []string{}, 1),
+				Check: func(s *terraform.State) error {
+					namespaceId := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: namespaceId,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
 
-			// 		spec := ns.Namespace.GetSpec()
-			// 		actualRules := spec.GetConnectivityRuleIds()
+					spec := ns.Namespace.GetSpec()
+					actualRules := spec.GetConnectivityRuleIds()
 
-			// 		fmt.Println("actualRules", actualRules)
-			// 		if len(actualRules) != 0 {
-			// 			return fmt.Errorf("expected 0 connectivity rule IDs, got %d", len(actualRules))
-			// 		}
+					if len(actualRules) != 0 {
+						return fmt.Errorf("expected 0 connectivity rule IDs, got %d", len(actualRules))
+					}
 
-			// 		return nil
-			// 	},
-			// },
+					return nil
+				},
+			},
 			{
 				ImportState:       true,
 				ImportStateVerify: true,

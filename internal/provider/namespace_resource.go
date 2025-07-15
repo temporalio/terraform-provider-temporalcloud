@@ -631,6 +631,17 @@ func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]s
 
 func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
 	var diags diag.Diagnostics
+
+	// Check if the value is unknown - return nil to indicate "don't set this field"
+	if plan.ConnectivityRuleIds.ListValue.IsUnknown() {
+		return nil, diags
+	}
+
+	// Check if the value is null - return empty slice to clear connectivity rules
+	if plan.ConnectivityRuleIds.ListValue.IsNull() {
+		return []string{}, diags
+	}
+
 	connectivityRuleIds := make([]types.String, 0, len(plan.ConnectivityRuleIds.Elements()))
 	diags.Append(plan.ConnectivityRuleIds.ElementsAs(ctx, &connectivityRuleIds, false)...)
 	if diags.HasError() {
@@ -729,7 +740,12 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		return diags
 	}
 
-	planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetConnectivityRuleIds())
+	// Handle connectivity rule IDs - ensure empty slice is always treated as empty list, not null
+	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
+	if connectivityRuleIds == nil {
+		connectivityRuleIds = []string{} // Convert nil to empty slice for consistency
+	}
+	planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
 	diags.Append(listDiags...)
 	if diags.HasError() {
 		return diags

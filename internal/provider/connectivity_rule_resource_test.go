@@ -32,7 +32,7 @@ func TestConnectivityRuleSchema(t *testing.T) {
 }
 
 func TestAccConnectivityRuleResource_Public(t *testing.T) {
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -66,7 +66,7 @@ func TestAccConnectivityRuleResource_Public(t *testing.T) {
 }
 
 func TestAccConnectivityRuleResource_AWS_Private(t *testing.T) {
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
@@ -98,7 +98,7 @@ func TestAccConnectivityRuleResource_AWS_Private(t *testing.T) {
 }
 
 func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
 			testAccPreCheck(t)
 		},
