@@ -1,3 +1,15 @@
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "temporalio/temporalcloud"
+    }
+  }
+}
+
+provider "temporalcloud" {
+
+}
+
 // Create Public Connectivity Rule
 resource "temporalcloud_connectivity_rule" "public_rule" {
   connectivity_type = "public"

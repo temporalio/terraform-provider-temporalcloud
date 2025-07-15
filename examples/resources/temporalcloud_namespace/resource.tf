@@ -109,3 +109,21 @@ resource "temporalcloud_namespace" "terraform3" {
     prevent_destroy = true
   }
 }
+
+// example namespace that need to attach cr ids
+resource "temporalcloud_namespace" "terraform4" {
+  name           = "terraform4"
+  regions        = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
+  retention_days = 14
+  // In this example, the rule id is a dummy value. Please create a connectivity rule and save the id after creation and 
+  // attach to your namespace.    
+  connectivity_rule_ids = [
+    "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
+  ]
+
+  // Prevents Terraform from deleting namespace. Must remove this before destroying resource.
+  lifecycle {
+    prevent_destroy = true
+  }
+}
