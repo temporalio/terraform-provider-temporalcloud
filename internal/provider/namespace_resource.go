@@ -266,7 +266,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"connectivity_rule_ids": schema.ListAttribute{
 				Description: "The IDs of the connectivity rules for this namespace.",
 				Optional:    true,
-				Computed:    true,
+				ElementType: types.StringType,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
 				},

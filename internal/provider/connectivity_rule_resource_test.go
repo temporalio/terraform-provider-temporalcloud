@@ -112,17 +112,17 @@ func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutConnectionId(),
 				// Should fail at plan time due to missing required attribute
-				ExpectError: regexp.MustCompile("private connection id is empty"),
+				ExpectError: regexp.MustCompile("Connection ID is required"),
 			},
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutRegion(),
 				// Should fail at plan time due to missing required attribute
-				ExpectError: regexp.MustCompile("region is empty"),
+				ExpectError: regexp.MustCompile("Region is required"),
 			},
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutGcpProjectId(),
 				// Should fail at plan time due to missing required attribute
-				ExpectError: regexp.MustCompile("gcp project id is required"),
+				ExpectError: regexp.MustCompile("GCP Project ID is required"),
 			},
 		},
 	})

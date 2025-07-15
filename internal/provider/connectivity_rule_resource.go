@@ -13,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -103,8 +102,6 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 			"connection_id": schema.StringAttribute{
 				Description: "The connection ID of the private connection.",
 				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -112,17 +109,10 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 			"gcp_project_id": schema.StringAttribute{
 				Description: "The GCP project ID. Required when cloud_provider is 'gcp'.",
 				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
 			},
 			"region": schema.StringAttribute{
 				Description: "The region of the connection. Example: 'aws-us-west-2'.",
 				Optional:    true,
-				Computed:    true,
-				Default:     stringdefault.StaticString(""),
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -210,7 +200,6 @@ func (r *connectivityRuleResource) Read(ctx context.Context, req resource.ReadRe
 				"id": state.ID.ValueString(),
 			})
 
-			resp.State.RemoveResource(ctx)
 			return
 		}
 
@@ -248,7 +237,6 @@ func (r *connectivityRuleResource) Delete(ctx context.Context, req resource.Dele
 				"id": state.ID.ValueString(),
 			})
 
-			resp.State.RemoveResource(ctx)
 			return
 		}
 		resp.Diagnostics.AddError("Failed to get Connectivity Rule", err.Error())
@@ -269,7 +257,6 @@ func (r *connectivityRuleResource) Delete(ctx context.Context, req resource.Dele
 			tflog.Warn(ctx, "Connectivity Rule Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
 			})
-			resp.State.RemoveResource(ctx)
 			return
 		}
 
@@ -339,12 +326,19 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
 		model.ConnectionID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetConnectionId())
 		model.Region = types.StringValue(connectivityRule.Spec.GetPrivateRule().GetRegion())
-		model.GcpProjectID = types.StringValue(connectivityRule.Spec.GetPrivateRule().GetGcpProjectId())
+
+		// Only set gcp_project_id if it's not empty, otherwise keep it as null
+		gcpProjectId := connectivityRule.Spec.GetPrivateRule().GetGcpProjectId()
+		if gcpProjectId != "" {
+			model.GcpProjectID = types.StringValue(gcpProjectId)
+		} else {
+			model.GcpProjectID = types.StringNull()
+		}
 	} else if connectivityRule.Spec.GetPublicRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePublic)
-		model.ConnectionID = types.StringValue("")
-		model.Region = types.StringValue("")
-		model.GcpProjectID = types.StringValue("")
+		model.ConnectionID = types.StringNull()
+		model.Region = types.StringNull()
+		model.GcpProjectID = types.StringNull()
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
 		return diags
