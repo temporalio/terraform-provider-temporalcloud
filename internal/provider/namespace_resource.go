@@ -270,6 +270,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
 				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
+				},
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -632,14 +635,13 @@ func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]s
 func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	// Check if the value is unknown or null - return nil to indicate "don't set this field"
-	if plan.ConnectivityRuleIds.ListValue.IsUnknown() || plan.ConnectivityRuleIds.ListValue.IsNull() {
-		return nil, diags
-	}
-
 	connectivityRuleIds := make([]types.String, 0, len(plan.ConnectivityRuleIds.Elements()))
 	diags.Append(plan.ConnectivityRuleIds.ElementsAs(ctx, &connectivityRuleIds, false)...)
 	if diags.HasError() {
+		return nil, diags
+	}
+
+	if len(connectivityRuleIds) == 0 {
 		return nil, diags
 	}
 
@@ -736,36 +738,24 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 
 	// Handle connectivity rule IDs - preserve the intent from the plan
-	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
 
-	// Check what was in the original plan to preserve user intent
-	if state.ConnectivityRuleIds.ListValue.IsNull() {
-		// Plan had null (not specified), preserve as null regardless of API response
-		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
-			ListValue: types.ListNull(types.StringType),
-		}
-	} else if len(state.ConnectivityRuleIds.Elements()) == 0 {
-		// Plan had empty list (explicitly set to empty), preserve as empty list
-		emptyList, listDiags := types.ListValue(types.StringType, []attr.Value{})
-		diags.Append(listDiags...)
-		if diags.HasError() {
-			return diags
-		}
-		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
-			ListValue: emptyList,
-		}
-	} else {
+	connectivityRuleIdsState := internaltypes.UnorderedStringListValue{
+		ListValue: types.ListNull(types.StringType),
+	}
+	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
+	if len(connectivityRuleIds) > 0 {
 		// Use API response values
 		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
 		diags.Append(listDiags...)
 		if diags.HasError() {
 			return diags
 		}
-		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
+		connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
 			ListValue: planConnectivityRuleIds,
 		}
-	}
 
+	}
+	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
 	state.CertificateFilters = certificateFilter

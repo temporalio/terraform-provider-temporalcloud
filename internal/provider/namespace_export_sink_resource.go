@@ -478,6 +478,8 @@ func (r *namespaceExportSinkResource) Read(ctx context.Context, req resource.Rea
 			tflog.Warn(ctx, "Namespace Export Sink Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
 			})
+			resp.State.RemoveResource(ctx)
+
 			return
 		}
 
