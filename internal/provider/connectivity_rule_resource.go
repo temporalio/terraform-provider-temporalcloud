@@ -196,6 +196,7 @@ func (r *connectivityRuleResource) Read(ctx context.Context, req resource.ReadRe
 			tflog.Warn(ctx, "Connectivity Rule Resource not found, removing from state", map[string]interface{}{
 				"id": state.ID.ValueString(),
 			})
+			resp.State.RemoveResource(ctx)
 
 			return
 		}
