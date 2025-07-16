@@ -109,3 +109,16 @@ resource "temporalcloud_namespace" "terraform3" {
     prevent_destroy = true
   }
 }
+
+// Attaching connectivity rules to a namespace
+resource "temporalcloud_namespace" "terraform4" {
+  name               = "terraform4"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
+  retention_days     = 14
+  // This is a placeholder rule ID. Please create a connectivity rule first,
+  // then replace this value with the actual ID returned after creation.
+  connectivity_rule_ids = [
+    "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
+  ]
+}
