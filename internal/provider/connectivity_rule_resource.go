@@ -102,9 +102,6 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 			"connection_id": schema.StringAttribute{
 				Description: "The connection ID of the private connection.",
 				Optional:    true,
-				PlanModifiers: []planmodifier.String{
-					stringplanmodifier.UseStateForUnknown(),
-				},
 			},
 			"gcp_project_id": schema.StringAttribute{
 				Description: "The GCP project ID. Required when cloud_provider is 'gcp'.",

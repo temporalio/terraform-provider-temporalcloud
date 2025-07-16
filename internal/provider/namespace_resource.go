@@ -632,14 +632,9 @@ func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]s
 func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	// Check if the value is unknown - return nil to indicate "don't set this field"
-	if plan.ConnectivityRuleIds.ListValue.IsUnknown() {
+	// Check if the value is unknown or null - return nil to indicate "don't set this field"
+	if plan.ConnectivityRuleIds.ListValue.IsUnknown() || plan.ConnectivityRuleIds.ListValue.IsNull() {
 		return nil, diags
-	}
-
-	// Check if the value is null - return empty slice to clear connectivity rules
-	if plan.ConnectivityRuleIds.ListValue.IsNull() {
-		return []string{}, diags
 	}
 
 	connectivityRuleIds := make([]types.String, 0, len(plan.ConnectivityRuleIds.Elements()))
@@ -740,13 +735,27 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		return diags
 	}
 
-	// Handle connectivity rule IDs - preserve null when not specified, empty list when explicitly set to empty
+	// Handle connectivity rule IDs - preserve the intent from the plan
 	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
-	if connectivityRuleIds == nil {
+
+	// Check what was in the original plan to preserve user intent
+	if state.ConnectivityRuleIds.ListValue.IsNull() {
+		// Plan had null (not specified), preserve as null regardless of API response
 		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
 			ListValue: types.ListNull(types.StringType),
 		}
+	} else if len(state.ConnectivityRuleIds.Elements()) == 0 {
+		// Plan had empty list (explicitly set to empty), preserve as empty list
+		emptyList, listDiags := types.ListValue(types.StringType, []attr.Value{})
+		diags.Append(listDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
+			ListValue: emptyList,
+		}
 	} else {
+		// Use API response values
 		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
 		diags.Append(listDiags...)
 		if diags.HasError() {

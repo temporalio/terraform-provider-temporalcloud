@@ -16,4 +16,5 @@ test-namespace-export-sink:
 	TF_ACC=1 go test ./internal/provider -run TestAccNamespaceExportSink_GCS -v $(TESTARGS) -timeout 120m
 
 test-connectivity-rule:
-	TF_ACC=1 go test ./internal/provider -run TestAccConnectivityRuleResource_AWS_Private -v $(TESTARGS) -timeout 120m
+	TF_ACC=1 go test ./internal/provider -run TestAccConnectivityRuleResource_Public
+	 -v $(TESTARGS) -timeout 120m
