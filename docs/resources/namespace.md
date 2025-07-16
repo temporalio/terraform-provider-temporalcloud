@@ -151,7 +151,7 @@ resource "temporalcloud_namespace" "terraform4" {
 ### Required
 
 - `name` (String) The name of the namespace.
-- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a "Multi-region Namespace". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over. See https://docs.temporal.io/cloud/regions for a list of available regions. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)
+- `regions` (List of String) The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 
 ### Optional
