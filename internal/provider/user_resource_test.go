@@ -6,10 +6,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"regexp"
 	"testing"
 	"text/template"
+
+	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
