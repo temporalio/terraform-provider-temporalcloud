@@ -174,7 +174,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over. See https://docs.temporal.io/cloud/regions for a list of available regions. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
