@@ -740,18 +740,21 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		return diags
 	}
 
-	// Handle connectivity rule IDs - ensure empty slice is always treated as empty list, not null
+	// Handle connectivity rule IDs - preserve null when not specified, empty list when explicitly set to empty
 	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
 	if connectivityRuleIds == nil {
-		connectivityRuleIds = []string{} // Convert nil to empty slice for consistency
-	}
-	planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
-	diags.Append(listDiags...)
-	if diags.HasError() {
-		return diags
-	}
-	state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
-		ListValue: planConnectivityRuleIds,
+		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
+			ListValue: types.ListNull(types.StringType),
+		}
+	} else {
+		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
+		diags.Append(listDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.ConnectivityRuleIds = internaltypes.UnorderedStringListValue{
+			ListValue: planConnectivityRuleIds,
+		}
 	}
 
 	state.Endpoints = endpointsState
