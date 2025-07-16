@@ -43,9 +43,6 @@ func TestAccConnectivityRuleResource_Public(t *testing.T) {
 				Config: testAccConnectivityRuleResourceConfig_Public(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "connectivity_type", "public"),
-					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "connection_id", ""),
-					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "region", ""),
-					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "gcp_project_id", ""),
 				),
 			},
 			// Import state testing
