@@ -13,6 +13,18 @@ Provisions a Temporal Cloud Connectivity Rule.
 ## Example Usage
 
 ```terraform
+terraform {
+  required_providers {
+    temporalcloud = {
+      source = "temporalio/temporalcloud"
+    }
+  }
+}
+
+provider "temporalcloud" {
+
+}
+
 // Create Public Connectivity Rule
 resource "temporalcloud_connectivity_rule" "public_rule" {
   connectivity_type = "public"
@@ -25,21 +37,6 @@ resource "temporalcloud_connectivity_rule" "private_aws" {
   region            = "aws-us-west-2"
 }
 
-resource "temporalcloud_namespace" "terraform-ns" {
-  name               = "terraform4"
-  regions            = ["aws-us-west-2"]
-  api_key_auth       = true
-  retention_days     = 7
-  // Enable access via internet and over the PrivateLink
-  connectivity_rule_ids = [
-    private_aws.id, public_rule.id
-  ]
-}
-```
-
-GCP PSC rule creation:
-
-```terraform
 // Create Private Connectivity Rule for GCP
 resource "temporalcloud_connectivity_rule" "private_gcp" {
   connectivity_type = "private"
