@@ -479,6 +479,7 @@ func (r *namespaceExportSinkResource) Read(ctx context.Context, req resource.Rea
 				"id": state.ID.ValueString(),
 			})
 			resp.State.RemoveResource(ctx)
+
 			return
 		}
 
