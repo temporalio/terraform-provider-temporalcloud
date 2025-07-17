@@ -78,7 +78,7 @@ type (
 		ApiKeyAuth          types.Bool                             `tfsdk:"api_key_auth"`
 		CodecServer         types.Object                           `tfsdk:"codec_server"`
 		Endpoints           types.Object                           `tfsdk:"endpoints"`
-		NamespaceLifecycle  types.Object                           `tfsdk:"namespace_lifecycle"`
+		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
 		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
@@ -274,6 +274,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"namespace_lifecycle": schema.SingleNestedAttribute{
 				Description: "The lifecycle configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: lifecycleAttrs,
+					},
+				},
 				Attributes: map[string]schema.Attribute{
 					"enable_delete_protection": schema.BoolAttribute{
 						Description: "If true, the namespace cannot be deleted. This is a safeguard against accidental deletion. To delete a namespace with this option enabled, you must first set it to false.",
@@ -786,7 +791,9 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	} else {
 		lifecycleState = types.ObjectNull(lifecycleAttrs)
 	}
-	state.NamespaceLifecycle = lifecycleState
+	state.NamespaceLifecycle = internaltypes.ZeroObjectValue{
+		ObjectValue: lifecycleState,
+	}
 
 	endpoints := &endpointsModel{
 		GrpcAddress:     stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
