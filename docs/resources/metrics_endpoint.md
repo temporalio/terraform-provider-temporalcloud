@@ -44,7 +44,7 @@ provider "tls" {
 // This cert is not stored anywhere locally. 
 // If new certificates are needed you need to regenerate all of them (including the client end-entity certs).
 resource "tls_self_signed_cert" "ca" {
-  private_key_pem = tls_private_key.ca.private_key_pem
+  private_key_pem = tls_private_key.default.private_key_pem
   allowed_uses = [
     "cert_signing",
     "server_auth",
@@ -68,9 +68,9 @@ resource "tls_cert_request" "default" {
 // Reference your KMS's provider documentation for details on how to store a cert in KMS
 resource "tls_locally_signed_cert" "default" {
   cert_request_pem      = tls_cert_request.default.cert_request_pem
-  ca_private_key_pem    = tls_private_key.ca.private_key_pem
+  ca_private_key_pem    = tls_self_signed_cert.ca.private_key_pem
   ca_cert_pem           = tls_self_signed_cert.ca.cert_pem
-  validity_period_hours = var.certificate_expiration_hours
+  validity_period_hours = 8760 // 1 year
   allowed_uses = [
     "client_auth",
     "digital_signature"
