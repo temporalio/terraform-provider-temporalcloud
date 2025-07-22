@@ -131,7 +131,7 @@ func (d *connectivityRuleDataSource) Read(ctx context.Context, req datasource.Re
 		return
 	}
 
-	model, diags := connectivityRuleToConnectivityRuleDataModel(ctx, crResp.GetConnectivityRule())
+	model, diags := connectivityRuleToConnectivityRuleDataModel(crResp.GetConnectivityRule())
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -141,7 +141,7 @@ func (d *connectivityRuleDataSource) Read(ctx context.Context, req datasource.Re
 	resp.Diagnostics.Append(diags...)
 }
 
-func connectivityRuleToConnectivityRuleDataModel(ctx context.Context, connectivityRule *connectivityrulev1.ConnectivityRule) (*connectivityRuleDataModel, diag.Diagnostics) {
+func connectivityRuleToConnectivityRuleDataModel(connectivityRule *connectivityrulev1.ConnectivityRule) (*connectivityRuleDataModel, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	stateStr, err := enums.FromResourceState(connectivityRule.State)
