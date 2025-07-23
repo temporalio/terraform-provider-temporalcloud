@@ -54,6 +54,7 @@ type (
 		Limits                 types.Object `tfsdk:"limits"`
 		CreatedTime            types.String `tfsdk:"created_time"`
 		LastModifiedTime       types.String `tfsdk:"last_modified_time"`
+		ConnectivityRuleIds    types.List   `tfsdk:"connectivity_rule_ids"`
 	}
 
 	endpointsDataModel struct {
@@ -274,6 +275,12 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			Computed:    true,
 			Optional:    true,
 			Description: "The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.",
+		},
+		"connectivity_rule_ids": schema.ListAttribute{
+			Computed:    true,
+			Optional:    true,
+			Description: "The IDs of the connectivity rules for this namespace.",
+			ElementType: types.StringType,
 		},
 	}
 }
@@ -501,6 +508,22 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 		return nil, diags
 	}
 	namespaceModel.Limits = limits
+
+	// Initialize ConnectivityRuleIds with proper type
+	connectivityRuleIds := types.ListNull(types.StringType)
+	if len(ns.GetSpec().GetConnectivityRuleIds()) > 0 {
+		var connectivityRuleIdStrs []attr.Value
+		for _, id := range ns.GetSpec().GetConnectivityRuleIds() {
+			connectivityRuleIdStrs = append(connectivityRuleIdStrs, types.StringValue(id))
+		}
+		connectivityRuleIdsList, listDiags := types.ListValue(types.StringType, connectivityRuleIdStrs)
+		diags.Append(listDiags...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		connectivityRuleIds = connectivityRuleIdsList
+	}
+	namespaceModel.ConnectivityRuleIds = connectivityRuleIds
 
 	return namespaceModel, nil
 }
