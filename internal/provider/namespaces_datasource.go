@@ -509,18 +509,21 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 	namespaceModel.Limits = limits
 
+	// Initialize ConnectivityRuleIds with proper type
+	connectivityRuleIds := types.ListNull(types.StringType)
 	if len(ns.GetSpec().GetConnectivityRuleIds()) > 0 {
 		var connectivityRuleIdStrs []attr.Value
 		for _, id := range ns.GetSpec().GetConnectivityRuleIds() {
 			connectivityRuleIdStrs = append(connectivityRuleIdStrs, types.StringValue(id))
 		}
-		connectivityRuleIds, listDiags := types.ListValue(types.StringType, connectivityRuleIdStrs)
+		connectivityRuleIdsList, listDiags := types.ListValue(types.StringType, connectivityRuleIdStrs)
 		diags.Append(listDiags...)
 		if diags.HasError() {
 			return nil, diags
 		}
-		namespaceModel.ConnectivityRuleIds = connectivityRuleIds
+		connectivityRuleIds = connectivityRuleIdsList
 	}
+	namespaceModel.ConnectivityRuleIds = connectivityRuleIds
 
 	return namespaceModel, nil
 }
