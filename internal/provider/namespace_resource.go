@@ -774,7 +774,7 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 	state.CodecServer = codecServerState
 
-	var lifecycleState basetypes.ObjectValue
+	state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(lifecycleAttrs)}
 	// The API always returns a non-empty LifecycleSpec, even if it wasn't specified on object creation. We explicitly
 	// map the EnableDeleteProtection field to `null` if it is false, since an empty lifecycle implies that delete
 	// protection was not set via config.
@@ -782,17 +782,14 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		lifecycle := &lifecycleModel{
 			EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
 		}
-		state, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
+		st, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
 		diags.Append(objectDiags...)
 		if diags.HasError() {
 			return diags
 		}
-		lifecycleState = state
-	} else {
-		lifecycleState = types.ObjectNull(lifecycleAttrs)
-	}
-	state.NamespaceLifecycle = internaltypes.ZeroObjectValue{
-		ObjectValue: lifecycleState,
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{
+			ObjectValue: st,
+		}
 	}
 
 	endpoints := &endpointsModel{

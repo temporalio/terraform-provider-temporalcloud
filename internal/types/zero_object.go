@@ -122,6 +122,8 @@ func (v ZeroObjectValue) ObjectSemanticEquals(ctx context.Context, newValuable b
 
 		return false, diags
 	}
+
+	diags.AddWarning(fmt.Sprintf("comparing: %v and %v", v.String(), newValue.String()), "comparing")
 	if v.IsZero(ctx) && newValue.IsZero(ctx) {
 		// Both values are zero, so they are semantically equal.
 		return true, diags
