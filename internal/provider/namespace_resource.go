@@ -34,6 +34,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -348,7 +349,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	var lifecycle *namespacev1.LifecycleSpec
-	if !plan.NamespaceLifecycle.IsNull() {
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
 		var d diag.Diagnostics
 		lifecycle, d = getLifecycleFromModel(ctx, &plan)
 		resp.Diagnostics.Append(d...)
@@ -522,7 +523,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	var lifecycle *namespacev1.LifecycleSpec
-	if !plan.NamespaceLifecycle.IsNull() {
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
 		var d diag.Diagnostics
 		lifecycle, d = getLifecycleFromModel(ctx, &plan)
 		resp.Diagnostics.Append(d...)
@@ -694,13 +695,17 @@ func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourc
 	}
 
 	requestConnectivityRuleIds := make([]string, len(connectivityRuleIds))
-	for i, connectivityRuleId := range connectivityRuleIds {
-		requestConnectivityRuleIds[i] = connectivityRuleId.ValueString()
+	for i, id := range connectivityRuleIds {
+		requestConnectivityRuleIds[i] = id.ValueString()
 	}
 	return requestConnectivityRuleIds, diags
 }
 
-func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns *namespacev1.Namespace) diag.Diagnostics {
+func updateModelFromSpec(
+	ctx context.Context,
+	state *namespaceResourceModel,
+	ns *namespacev1.Namespace,
+) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	state.ID = types.StringValue(ns.GetNamespace())
@@ -774,22 +779,19 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 	state.CodecServer = codecServerState
 
-	state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(lifecycleAttrs)}
-	// The API always returns a non-empty LifecycleSpec, even if it wasn't specified on object creation. We explicitly
-	// map the EnableDeleteProtection field to `null` if it is false, since an empty lifecycle implies that delete
-	// protection was not set via config.
-	if ns.GetSpec().GetLifecycle().GetEnableDeleteProtection() {
+	if lifecycleSpec := ns.GetSpec().GetLifecycle(); lifecycleSpec != nil && !proto.Equal(lifecycleSpec, &namespacev1.LifecycleSpec{}) {
 		lifecycle := &lifecycleModel{
-			EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
+			EnableDeleteProtection: types.BoolValue(lifecycleSpec.GetEnableDeleteProtection()),
 		}
 		st, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
 		diags.Append(objectDiags...)
 		if diags.HasError() {
 			return diags
 		}
-		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{
-			ObjectValue: st,
-		}
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: st}
+	} else if !state.NamespaceLifecycle.IsZero(ctx) {
+		// only update the lifecycle if its not already set to zero
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(lifecycleAttrs)}
 	}
 
 	endpoints := &endpointsModel{

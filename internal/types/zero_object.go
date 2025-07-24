@@ -109,7 +109,6 @@ func (v ZeroObjectValue) Type(ctx context.Context) attr.Type {
 
 func (v ZeroObjectValue) ObjectSemanticEquals(ctx context.Context, newValuable basetypes.ObjectValuable) (bool, diag.Diagnostics) {
 	var diags diag.Diagnostics
-
 	newValue, ok := newValuable.(ZeroObjectValue)
 	if !ok {
 		diags.AddError(
@@ -123,7 +122,6 @@ func (v ZeroObjectValue) ObjectSemanticEquals(ctx context.Context, newValuable b
 		return false, diags
 	}
 
-	diags.AddWarning(fmt.Sprintf("comparing: %v and %v", v.String(), newValue.String()), "comparing")
 	if v.IsZero(ctx) && newValue.IsZero(ctx) {
 		// Both values are zero, so they are semantically equal.
 		return true, diags
@@ -134,6 +132,9 @@ func (v ZeroObjectValue) ObjectSemanticEquals(ctx context.Context, newValuable b
 }
 
 func (v ZeroObjectValue) IsZero(ctx context.Context) bool {
+	if v.IsNull() {
+		return true
+	}
 	for _, attrValue := range v.Attributes() {
 		switch value := attrValue.(type) {
 		case basetypes.StringValue:
