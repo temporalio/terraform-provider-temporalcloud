@@ -81,8 +81,7 @@ type (
 		Endpoints           types.Object                           `tfsdk:"endpoints"`
 		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
 		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
-
-		Timeouts timeouts.Value `tfsdk:"timeouts"`
+		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
 	}
 
 	lifecycleModel struct {
