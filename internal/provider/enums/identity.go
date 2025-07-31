@@ -48,6 +48,8 @@ func ToAccountAccessRole(s string) (identity.AccountAccess_Role, error) {
 		return identity.AccountAccess_ROLE_READ, nil
 	case "financeadmin":
 		return identity.AccountAccess_ROLE_FINANCE_ADMIN, nil
+	case "metricsread":
+		return identity.AccountAccess_ROLE_METRICS_READ, nil
 	case "none":
 		return identity.AccountAccess_ROLE_UNSPECIFIED, nil
 	default:
@@ -62,6 +64,7 @@ func AllowedAccountAccessRoles() []string {
 		"developer",
 		"read",
 		"financeadmin",
+		"metricsread",
 	}
 }
 
@@ -77,6 +80,8 @@ func FromAccountAccessRole(r identity.AccountAccess_Role) (string, error) {
 		return "read", nil
 	case identity.AccountAccess_ROLE_FINANCE_ADMIN:
 		return "financeadmin", nil
+	case identity.AccountAccess_ROLE_METRICS_READ:
+		return "metricsread", nil
 	case identity.AccountAccess_ROLE_UNSPECIFIED:
 		return "none", nil
 	default:
