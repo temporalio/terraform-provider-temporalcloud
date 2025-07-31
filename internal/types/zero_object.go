@@ -165,8 +165,24 @@ func (v ZeroObjectValue) IsZero(ctx context.Context) bool {
 			if !value.IsZero(ctx) {
 				return false
 			}
-		case basetypes.ObjectValue:
-			if !value.IsNull() {
+		case basetypes.Int64Value:
+			if value.ValueInt64() != 0 {
+				return false
+			}
+		case basetypes.SetValue:
+			if len(value.Elements()) > 0 {
+				return false
+			}
+		case basetypes.TupleValue:
+			if len(value.Elements()) > 0 {
+				return false
+			}
+		case basetypes.DynamicValue:
+			if !value.IsNull() && !value.IsUnderlyingValueNull() {
+				return false
+			}
+		default:
+			if !attrValue.IsNull() {
 				return false
 			}
 		}
