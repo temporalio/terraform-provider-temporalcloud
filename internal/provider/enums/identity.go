@@ -48,10 +48,23 @@ func ToAccountAccessRole(s string) (identity.AccountAccess_Role, error) {
 		return identity.AccountAccess_ROLE_READ, nil
 	case "financeadmin":
 		return identity.AccountAccess_ROLE_FINANCE_ADMIN, nil
+	case "metricsread":
+		return identity.AccountAccess_ROLE_METRICS_READ, nil
 	case "none":
 		return identity.AccountAccess_ROLE_UNSPECIFIED, nil
 	default:
 		return identity.AccountAccess_ROLE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidAccountAccessRole, s)
+	}
+}
+
+func AllowedAccountAccessRoles() []string {
+	return []string{
+		"owner",
+		"admin",
+		"developer",
+		"read",
+		"financeadmin",
+		"metricsread",
 	}
 }
 
@@ -67,6 +80,8 @@ func FromAccountAccessRole(r identity.AccountAccess_Role) (string, error) {
 		return "read", nil
 	case identity.AccountAccess_ROLE_FINANCE_ADMIN:
 		return "financeadmin", nil
+	case identity.AccountAccess_ROLE_METRICS_READ:
+		return "metricsread", nil
 	case identity.AccountAccess_ROLE_UNSPECIFIED:
 		return "none", nil
 	default:
@@ -97,5 +112,13 @@ func FromNamespaceAccessPermission(p identity.NamespaceAccess_Permission) (strin
 		return "read", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidNamespaceAccessPermission, p)
+	}
+}
+
+func AllowedNamespaceAccessPermissions() []string {
+	return []string{
+		"admin",
+		"write",
+		"read",
 	}
 }
