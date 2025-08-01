@@ -103,6 +103,7 @@ resource "temporalcloud_namespace" "test" {
 
 resource "temporalcloud_group" "terraform" {
   name = "{{ .Name }}"
+}
 
 resource "temporalcloud_group_access" "terraform_access" {
   group_id = temporalcloud_group.terraform.id
