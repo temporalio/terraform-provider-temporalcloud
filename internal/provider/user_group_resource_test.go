@@ -106,7 +106,7 @@ resource "temporalcloud_group" "terraform" {
 }
 
 resource "temporalcloud_group_access" "terraform_access" {
-  group_id = temporalcloud_group.terraform.id
+  id = temporalcloud_group.terraform.id
   account_access = "{{ .AccountPerm }}"
   namespace_accesses = [
     {

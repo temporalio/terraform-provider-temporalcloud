@@ -57,7 +57,6 @@ resource "temporalcloud_user" "user2" {
 
 resource "temporalcloud_group" "terraform" {
   name = "%s"
-  account_access = "developer"
 }
 
 resource "temporalcloud_group_members" "terraform" {
