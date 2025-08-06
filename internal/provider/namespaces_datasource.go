@@ -14,7 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
@@ -544,22 +543,15 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 	namespaceModel.ConnectivityRuleIds = connectivityRuleIds
 
+	lifecycleObjectValue, diag := types.ObjectValueFrom(ctx, lifecycleAttrs, &lifecycleModel{
+		EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
+	})
+	diags.Append(diag...)
+	if diags.HasError() {
+		return nil, diags
+	}
 	namespaceModel.NamespaceLifecycle = internaltypes.ZeroObjectValue{
-		ObjectValue: types.ObjectNull(lifecycleAttrs),
+		ObjectValue: lifecycleObjectValue,
 	}
-	if spec := ns.GetSpec().GetLifecycle(); spec != nil && !proto.Equal(spec, &namespacev1.LifecycleSpec{}) {
-		lifecycleModel := &lifecycleModel{
-			EnableDeleteProtection: types.BoolValue(spec.GetEnableDeleteProtection()),
-		}
-		lifecycle, diag := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycleModel)
-		diags.Append(diag...)
-		if diags.HasError() {
-			return nil, diags
-		}
-		namespaceModel.NamespaceLifecycle = internaltypes.ZeroObjectValue{
-			ObjectValue: lifecycle,
-		}
-	}
-
 	return namespaceModel, nil
 }
