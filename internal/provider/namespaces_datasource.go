@@ -12,10 +12,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 var (
@@ -38,23 +40,24 @@ type (
 	}
 
 	namespaceDataModel struct {
-		ID                     types.String `tfsdk:"id"`
-		Name                   types.String `tfsdk:"name"`
-		State                  types.String `tfsdk:"state"`
-		ActiveRegion           types.String `tfsdk:"active_region"`
-		Regions                types.List   `tfsdk:"regions"`
-		AcceptedClientCA       types.String `tfsdk:"accepted_client_ca"`
-		RetentionDays          types.Int64  `tfsdk:"retention_days"`
-		CertificateFilters     types.List   `tfsdk:"certificate_filters"`
-		ApiKeyAuth             types.Bool   `tfsdk:"api_key_auth"`
-		CodecServer            types.Object `tfsdk:"codec_server"`
-		Endpoints              types.Object `tfsdk:"endpoints"`
-		PrivateConnectivities  types.List   `tfsdk:"private_connectivities"`
-		CustomSearchAttributes types.Map    `tfsdk:"custom_search_attributes"`
-		Limits                 types.Object `tfsdk:"limits"`
-		CreatedTime            types.String `tfsdk:"created_time"`
-		LastModifiedTime       types.String `tfsdk:"last_modified_time"`
-		ConnectivityRuleIds    types.List   `tfsdk:"connectivity_rule_ids"`
+		ID                     types.String                  `tfsdk:"id"`
+		Name                   types.String                  `tfsdk:"name"`
+		State                  types.String                  `tfsdk:"state"`
+		ActiveRegion           types.String                  `tfsdk:"active_region"`
+		Regions                types.List                    `tfsdk:"regions"`
+		AcceptedClientCA       types.String                  `tfsdk:"accepted_client_ca"`
+		RetentionDays          types.Int64                   `tfsdk:"retention_days"`
+		CertificateFilters     types.List                    `tfsdk:"certificate_filters"`
+		ApiKeyAuth             types.Bool                    `tfsdk:"api_key_auth"`
+		CodecServer            types.Object                  `tfsdk:"codec_server"`
+		Endpoints              types.Object                  `tfsdk:"endpoints"`
+		PrivateConnectivities  types.List                    `tfsdk:"private_connectivities"`
+		CustomSearchAttributes types.Map                     `tfsdk:"custom_search_attributes"`
+		Limits                 types.Object                  `tfsdk:"limits"`
+		CreatedTime            types.String                  `tfsdk:"created_time"`
+		LastModifiedTime       types.String                  `tfsdk:"last_modified_time"`
+		ConnectivityRuleIds    types.List                    `tfsdk:"connectivity_rule_ids"`
+		NamespaceLifecycle     internaltypes.ZeroObjectValue `tfsdk:"namespace_lifecycle"`
 	}
 
 	endpointsDataModel struct {
@@ -281,6 +284,21 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			Optional:    true,
 			Description: "The IDs of the connectivity rules for this namespace.",
 			ElementType: types.StringType,
+		},
+		"namespace_lifecycle": schema.SingleNestedAttribute{
+			CustomType: internaltypes.ZeroObjectType{
+				ObjectType: types.ObjectType{
+					AttrTypes: lifecycleAttrs,
+				},
+			},
+			Computed:    true,
+			Description: "The lifecycle settings for the namespace.",
+			Attributes: map[string]schema.Attribute{
+				"enable_delete_protection": schema.BoolAttribute{
+					Computed:    true,
+					Description: "If true, delete protection is enabled for the namespace. This means that the namespace cannot be deleted until this is set to false.",
+				},
+			},
 		},
 	}
 }
@@ -525,5 +543,15 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 	namespaceModel.ConnectivityRuleIds = connectivityRuleIds
 
+	lifecycleObjectValue, diag := types.ObjectValueFrom(ctx, lifecycleAttrs, &lifecycleModel{
+		EnableDeleteProtection: types.BoolValue(ns.GetSpec().GetLifecycle().GetEnableDeleteProtection()),
+	})
+	diags.Append(diag...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.NamespaceLifecycle = internaltypes.ZeroObjectValue{
+		ObjectValue: lifecycleObjectValue,
+	}
 	return namespaceModel, nil
 }
