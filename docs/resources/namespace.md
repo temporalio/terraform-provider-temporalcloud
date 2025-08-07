@@ -42,10 +42,9 @@ resource "temporalcloud_namespace" "terraform" {
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
   retention_days     = 14
-
-  // Prevents Terraform from deleting namespace. Must remove this before destroying resource.
-  lifecycle {
-    prevent_destroy = true
+  namespace_lifecycle = {
+    // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
+    enable_delete_protection = true
   }
 }
 
@@ -111,10 +110,9 @@ resource "temporalcloud_namespace" "terraform2" {
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(tls_self_signed_cert.ca.cert_pem)
   retention_days     = 14
-
-  // Prevents Terraform from deleting namespace. Must remove this before destroying resource.
-  lifecycle {
-    prevent_destroy = true
+  namespace_lifecycle = {
+    // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
+    enable_delete_protection = true
   }
 }
 
@@ -124,10 +122,9 @@ resource "temporalcloud_namespace" "terraform3" {
   regions        = ["aws-us-east-1"]
   api_key_auth   = true
   retention_days = 14
-
-  // Prevents Terraform from deleting namespace. Must remove this before destroying resource.
-  lifecycle {
-    prevent_destroy = true
+  namespace_lifecycle = {
+    // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
+    enable_delete_protection = true
   }
 }
 
@@ -161,6 +158,7 @@ resource "temporalcloud_namespace" "terraform4" {
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (List of String) The IDs of the connectivity rules for this namespace.
+- `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -190,6 +188,14 @@ Optional:
 
 - `include_cross_origin_credentials` (Boolean) If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.
 - `pass_access_token` (Boolean) If true, Temporal Cloud will pass the access token to the codec server upon each request.
+
+
+<a id="nestedatt--namespace_lifecycle"></a>
+### Nested Schema for `namespace_lifecycle`
+
+Optional:
+
+- `enable_delete_protection` (Boolean) If true, the namespace cannot be deleted. This is a safeguard against accidental deletion. To delete a namespace with this option enabled, you must first set it to false.
 
 
 <a id="nestedblock--timeouts"></a>

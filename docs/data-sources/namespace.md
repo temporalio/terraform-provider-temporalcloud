@@ -71,6 +71,7 @@ output "namespace" {
 - `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--endpoints))
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--limits))
 - `name` (String) The name of the namespace.
+- `namespace_lifecycle` (Attributes) The lifecycle settings for the namespace. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 - `state` (String) The current state of the namespace.
@@ -132,3 +133,11 @@ Read-Only:
 Read-Only:
 
 - `actions_per_second_limit` (Number) The number of actions per second (APS) that is currently allowed for the namespace. The namespace may be throttled if its APS exceeds the limit.
+
+
+<a id="nestedatt--namespace_lifecycle"></a>
+### Nested Schema for `namespace_lifecycle`
+
+Read-Only:
+
+- `enable_delete_protection` (Boolean) If true, delete protection is enabled for the namespace. This means that the namespace cannot be deleted until this is set to false.
