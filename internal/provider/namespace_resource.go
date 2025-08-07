@@ -34,6 +34,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -79,9 +80,13 @@ type (
 		ApiKeyAuth          types.Bool                             `tfsdk:"api_key_auth"`
 		CodecServer         types.Object                           `tfsdk:"codec_server"`
 		Endpoints           types.Object                           `tfsdk:"endpoints"`
+		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
 		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
+		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
+	}
 
-		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	lifecycleModel struct {
+		EnableDeleteProtection types.Bool `tfsdk:"enable_delete_protection"`
 	}
 
 	namespaceCertificateFilterModel struct {
@@ -120,6 +125,10 @@ var (
 		"endpoint":                         types.StringType,
 		"pass_access_token":                types.BoolType,
 		"include_cross_origin_credentials": types.BoolType,
+	}
+
+	lifecycleAttrs = map[string]attr.Type{
+		"enable_delete_protection": types.BoolType,
 	}
 
 	endpointsAttrs = map[string]attr.Type{
@@ -267,6 +276,23 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Computed: true,
 			},
+			"namespace_lifecycle": schema.SingleNestedAttribute{
+				Description: "The lifecycle configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: lifecycleAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"enable_delete_protection": schema.BoolAttribute{
+						Description: "If true, the namespace cannot be deleted. This is a safeguard against accidental deletion. To delete a namespace with this option enabled, you must first set it to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+					},
+				},
+				Optional: true,
+			},
 			"connectivity_rule_ids": schema.ListAttribute{
 				Description: "The IDs of the connectivity rules for this namespace.",
 				Optional:    true,
@@ -325,6 +351,16 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	connectivityRuleIds, d := getConnectivityRuleIdsFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -336,6 +372,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		Regions:             regions,
 		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
 		CodecServer:         codecServer,
+		Lifecycle:           lifecycle,
 		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
@@ -408,7 +445,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -488,12 +525,23 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
 	spec := &namespacev1.NamespaceSpec{
 		Name:                plan.Name.ValueString(),
 		Regions:             regions,
 		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
 		CodecServer:         codecServer,
 		SearchAttributes:    currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+		Lifecycle:           lifecycle,
 		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
@@ -580,7 +628,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -600,7 +648,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -650,13 +698,17 @@ func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourc
 	}
 
 	requestConnectivityRuleIds := make([]string, len(connectivityRuleIds))
-	for i, connectivityRuleId := range connectivityRuleIds {
-		requestConnectivityRuleIds[i] = connectivityRuleId.ValueString()
+	for i, id := range connectivityRuleIds {
+		requestConnectivityRuleIds[i] = id.ValueString()
 	}
 	return requestConnectivityRuleIds, diags
 }
 
-func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns *namespacev1.Namespace) diag.Diagnostics {
+func updateModelFromSpec(
+	ctx context.Context,
+	state *namespaceResourceModel,
+	ns *namespacev1.Namespace,
+) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	state.ID = types.StringValue(ns.GetNamespace())
@@ -729,6 +781,21 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		codecServerState = types.ObjectNull(codecServerAttrs)
 	}
 	state.CodecServer = codecServerState
+
+	if lifecycleSpec := ns.GetSpec().GetLifecycle(); lifecycleSpec != nil && !proto.Equal(lifecycleSpec, &namespacev1.LifecycleSpec{}) {
+		lifecycle := &lifecycleModel{
+			EnableDeleteProtection: types.BoolValue(lifecycleSpec.GetEnableDeleteProtection()),
+		}
+		st, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: st}
+	} else if !state.NamespaceLifecycle.IsZero(ctx) {
+		// only update the lifecycle if its not already set to zero
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(lifecycleAttrs)}
+	}
 
 	endpoints := &endpointsModel{
 		GrpcAddress:     stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
@@ -811,6 +878,18 @@ func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel)
 		Endpoint:                      codecServer.Endpoint.ValueString(),
 		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
 		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
+	}, diags
+}
+
+func getLifecycleFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.LifecycleSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var lifecycle lifecycleModel
+	diags.Append(model.NamespaceLifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &namespacev1.LifecycleSpec{
+		EnableDeleteProtection: lifecycle.EnableDeleteProtection.ValueBool(),
 	}, diags
 }
 
