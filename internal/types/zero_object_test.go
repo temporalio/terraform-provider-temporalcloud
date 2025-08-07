@@ -11,13 +11,14 @@ import (
 
 func TestZeroObject(t *testing.T) {
 	type testObject struct {
-		boolVal        bool
-		stringVal      string
-		floatVal       float64
-		listVal        []string
-		mapVal         map[string]int
-		testObject     *testObject
-		testZeroObject *testObject
+		boolVal                bool
+		stringVal              string
+		floatVal               float64
+		listVal                []string
+		mapVal                 map[string]int
+		testObject             *testObject
+		testZeroObject         *testObject
+		unorderedStringListVal []string
 	}
 
 	toObjectFunc := func(testObj *testObject) ZeroObjectValue {
@@ -59,6 +60,18 @@ func TestZeroObject(t *testing.T) {
 				}
 			}
 
+			var unorderedListVal attr.Value
+			if len(testObj.unorderedStringListVal) > 0 {
+				list, _ := types.ListValueFrom(context.Background(), types.StringType, testObj.unorderedStringListVal)
+				unorderedListVal = UnorderedStringListValue{
+					ListValue: list,
+				}
+			} else {
+				unorderedListVal = UnorderedStringListValue{
+					ListValue: types.ListNull(types.StringType),
+				}
+			}
+
 			return ZeroObjectValue{
 				ObjectValue: types.ObjectValueMust(
 					map[string]attr.Type{
@@ -79,15 +92,19 @@ func TestZeroObject(t *testing.T) {
 								"boolVal": types.BoolType,
 							},
 						},
+						"unorderedStringListVal": UnorderedStringListType{
+							ListType: types.ListType{ElemType: types.StringType},
+						},
 					},
 					map[string]attr.Value{
-						"boolVal":        types.BoolValue(testObj.boolVal),
-						"stringVal":      types.StringValue(testObj.stringVal),
-						"floatVal":       types.Float64Value(testObj.floatVal),
-						"listVal":        types.ListValueMust(types.StringType, listVal),
-						"mapVal":         types.MapValueMust(types.Int64Type, mapVal),
-						"testZeroObject": zeroObjVal,
-						"testObject":     objVal,
+						"boolVal":                types.BoolValue(testObj.boolVal),
+						"stringVal":              types.StringValue(testObj.stringVal),
+						"floatVal":               types.Float64Value(testObj.floatVal),
+						"listVal":                types.ListValueMust(types.StringType, listVal),
+						"mapVal":                 types.MapValueMust(types.Int64Type, mapVal),
+						"testZeroObject":         zeroObjVal,
+						"testObject":             objVal,
+						"unorderedStringListVal": unorderedListVal,
 					},
 				),
 			}
@@ -171,6 +188,16 @@ func TestZeroObject(t *testing.T) {
 					boolVal: true,
 				},
 			},
+		},
+		{
+			Name: "zero unordered string list vs nil",
+			ObjectA: &testObject{
+				unorderedStringListVal: []string{},
+			},
+			ObjectB: &testObject{
+				unorderedStringListVal: nil,
+			},
+			ExpectedEqual: true,
 		},
 		{
 			Name: "object nil vs zero",
