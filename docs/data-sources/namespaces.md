@@ -48,6 +48,7 @@ Optional:
 - `api_key_auth` (Boolean) If true, Temporal Cloud will use API key authentication for this namespace. If false, mutual TLS (mTLS) authentication will be used.
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. (see [below for nested schema](#nestedatt--namespaces--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--namespaces--codec_server))
+- `connectivity_rule_ids` (List of String) The IDs of the connectivity rules for this namespace.
 - `custom_search_attributes` (Map of String) The custom search attributes to use for the namespace.
 - `last_modified_time` (String) The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.
 - `private_connectivities` (Attributes List) The private connectivities for the namespace, if any. (see [below for nested schema](#nestedatt--namespaces--private_connectivities))
@@ -61,6 +62,7 @@ Read-Only:
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--namespaces--limits))
 - `name` (String) The name of the namespace.
+- `namespace_lifecycle` (Attributes) The lifecycle settings for the namespace. (see [below for nested schema](#nestedatt--namespaces--namespace_lifecycle))
 - `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 - `state` (String) The current state of the namespace.
@@ -122,3 +124,11 @@ Read-Only:
 Read-Only:
 
 - `actions_per_second_limit` (Number) The number of actions per second (APS) that is currently allowed for the namespace. The namespace may be throttled if its APS exceeds the limit.
+
+
+<a id="nestedatt--namespaces--namespace_lifecycle"></a>
+### Nested Schema for `namespaces.namespace_lifecycle`
+
+Read-Only:
+
+- `enable_delete_protection` (Boolean) If true, delete protection is enabled for the namespace. This means that the namespace cannot be deleted until this is set to false.

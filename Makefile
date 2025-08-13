@@ -14,4 +14,3 @@ testacc:
 .PHONY: test-namespace-export-sink
 test-namespace-export-sink:
 	TF_ACC=1 go test ./internal/provider -run TestAccNamespaceExportSink_GCS -v $(TESTARGS) -timeout 120m
-

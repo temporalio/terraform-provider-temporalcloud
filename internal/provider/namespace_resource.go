@@ -26,12 +26,15 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"slices"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -43,7 +46,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -68,17 +70,22 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                 types.String                           `tfsdk:"id"`
-		Name               types.String                           `tfsdk:"name"`
-		Regions            internaltypes.UnorderedStringListValue `tfsdk:"regions"`
-		AcceptedClientCA   internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
-		RetentionDays      types.Int64                            `tfsdk:"retention_days"`
-		CertificateFilters types.List                             `tfsdk:"certificate_filters"`
-		ApiKeyAuth         types.Bool                             `tfsdk:"api_key_auth"`
-		CodecServer        types.Object                           `tfsdk:"codec_server"`
-		Endpoints          types.Object                           `tfsdk:"endpoints"`
+		ID                  types.String                           `tfsdk:"id"`
+		Name                types.String                           `tfsdk:"name"`
+		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
+		AcceptedClientCA    internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
+		RetentionDays       types.Int64                            `tfsdk:"retention_days"`
+		CertificateFilters  types.List                             `tfsdk:"certificate_filters"`
+		ApiKeyAuth          types.Bool                             `tfsdk:"api_key_auth"`
+		CodecServer         types.Object                           `tfsdk:"codec_server"`
+		Endpoints           types.Object                           `tfsdk:"endpoints"`
+		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
+		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
+		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
+	}
 
-		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	lifecycleModel struct {
+		EnableDeleteProtection types.Bool `tfsdk:"enable_delete_protection"`
 	}
 
 	namespaceCertificateFilterModel struct {
@@ -119,6 +126,10 @@ var (
 		"include_cross_origin_credentials": types.BoolType,
 	}
 
+	lifecycleAttrs = map[string]attr.Type{
+		"enable_delete_protection": types.BoolType,
+	}
+
 	endpointsAttrs = map[string]attr.Type{
 		"web_address":       types.StringType,
 		"grpc_address":      types.StringType,
@@ -156,7 +167,7 @@ func (r *namespaceResource) Metadata(_ context.Context, req resource.MetadataReq
 // Schema defines the schema for the resource.
 func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Provisions a Temporal Cloud namespace.",
+		Description: "Provisions a Temporal Cloud namespace. \n\nRegions available in Temporal Cloud: https://docs.temporal.io/cloud/regions. \n\nNote that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
 				Description: "The name of the namespace.",
@@ -173,14 +184,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a \"Multi-region Namespace\". Please note that changing, adding, or removing regions is not supported and the provider will attempt to recreate the namespace. For Multi-region Namespaces the provider will ignore order changes on regions which can happen if the namespace fails over.",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
-				},
-				PlanModifiers: []planmodifier.List{
-					listplanmodifier.RequiresReplace(),
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
@@ -264,6 +272,34 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Computed: true,
 			},
+			"namespace_lifecycle": schema.SingleNestedAttribute{
+				Description: "The lifecycle configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: lifecycleAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"enable_delete_protection": schema.BoolAttribute{
+						Description: "If true, the namespace cannot be deleted. This is a safeguard against accidental deletion. To delete a namespace with this option enabled, you must first set it to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+					},
+				},
+				Optional: true,
+			},
+			"connectivity_rule_ids": schema.ListAttribute{
+				Description: "The IDs of the connectivity rules for this namespace.",
+				Optional:    true,
+				ElementType: types.StringType,
+				CustomType: internaltypes.UnorderedStringListType{
+					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
+				Validators: []validator.List{
+					listvalidator.SizeAtLeast(1),
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -311,11 +347,29 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		}
 	}
 
-	var spec = &namespacev1.NamespaceSpec{
-		Name:          plan.Name.ValueString(),
-		Regions:       regions,
-		RetentionDays: int32(plan.RetentionDays.ValueInt64()),
-		CodecServer:   codecServer,
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	connectivityRuleIds, d := getConnectivityRuleIdsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	spec := &namespacev1.NamespaceSpec{
+		Name:                plan.Name.ValueString(),
+		Regions:             regions,
+		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:         codecServer,
+		Lifecycle:           lifecycle,
+		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -347,7 +401,6 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
 	})
-
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to create namespace", err.Error())
 		return
@@ -388,7 +441,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -408,6 +461,23 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
+func areRegionsEqual(s1, s2 []string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	// Create copies to avoid modifying the original slices
+	sortedS1 := make([]string, len(s1))
+	copy(sortedS1, s1)
+	sortedS2 := make([]string, len(s2))
+	copy(sortedS2, s2)
+
+	// Sort both slices
+	sort.Strings(sortedS1)
+	sort.Strings(sortedS2)
+
+	return slices.Compare(sortedS1, sortedS2) == 0
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan namespaceResourceModel
@@ -422,6 +492,12 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 	certFilters, d := getCertFiltersFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	connectivityRuleIds, d := getConnectivityRuleIdsFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -445,12 +521,24 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 	}
 
-	var spec = &namespacev1.NamespaceSpec{
-		Name:             plan.Name.ValueString(),
-		Regions:          regions,
-		RetentionDays:    int32(plan.RetentionDays.ValueInt64()),
-		CodecServer:      codecServer,
-		SearchAttributes: currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+	var lifecycle *namespacev1.LifecycleSpec
+	if !plan.NamespaceLifecycle.IsNull() && !plan.NamespaceLifecycle.IsZero(ctx) {
+		var d diag.Diagnostics
+		lifecycle, d = getLifecycleFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	spec := &namespacev1.NamespaceSpec{
+		Name:                plan.Name.ValueString(),
+		Regions:             regions,
+		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		CodecServer:         codecServer,
+		SearchAttributes:    currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+		Lifecycle:           lifecycle,
+		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -477,6 +565,11 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 
 		spec.MtlsAuth = mtls
+	}
+
+	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
+		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
+		return
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
@@ -531,7 +624,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -551,7 +644,7 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
-			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]interface{}{
+			tflog.Warn(ctx, "Namespace Resource not found, removing from state", map[string]any{
 				"id": state.ID.ValueString(),
 			})
 
@@ -587,7 +680,31 @@ func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]s
 	return requestRegions, diags
 }
 
-func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns *namespacev1.Namespace) diag.Diagnostics {
+func getConnectivityRuleIdsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	connectivityRuleIds := make([]types.String, 0, len(plan.ConnectivityRuleIds.Elements()))
+	diags.Append(plan.ConnectivityRuleIds.ElementsAs(ctx, &connectivityRuleIds, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	if len(connectivityRuleIds) == 0 {
+		return nil, diags
+	}
+
+	requestConnectivityRuleIds := make([]string, len(connectivityRuleIds))
+	for i, id := range connectivityRuleIds {
+		requestConnectivityRuleIds[i] = id.ValueString()
+	}
+	return requestConnectivityRuleIds, diags
+}
+
+func updateModelFromSpec(
+	ctx context.Context,
+	state *namespaceResourceModel,
+	ns *namespacev1.Namespace,
+) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	state.ID = types.StringValue(ns.GetNamespace())
@@ -661,6 +778,21 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 	}
 	state.CodecServer = codecServerState
 
+	if lifecycleSpec := ns.GetSpec().GetLifecycle(); lifecycleSpec != nil && !proto.Equal(lifecycleSpec, &namespacev1.LifecycleSpec{}) {
+		lifecycle := &lifecycleModel{
+			EnableDeleteProtection: types.BoolValue(lifecycleSpec.GetEnableDeleteProtection()),
+		}
+		st, objectDiags := types.ObjectValueFrom(ctx, lifecycleAttrs, lifecycle)
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: st}
+	} else if !state.NamespaceLifecycle.IsZero(ctx) {
+		// only update the lifecycle if its not already set to zero
+		state.NamespaceLifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(lifecycleAttrs)}
+	}
+
 	endpoints := &endpointsModel{
 		GrpcAddress:     stringOrNull(ns.GetEndpoints().GetGrpcAddress()),
 		WebAddress:      stringOrNull(ns.GetEndpoints().GetWebAddress()),
@@ -672,6 +804,25 @@ func updateModelFromSpec(ctx context.Context, state *namespaceResourceModel, ns 
 		return diags
 	}
 
+	// Handle connectivity rule IDs - preserve the intent from the plan
+
+	connectivityRuleIdsState := internaltypes.UnorderedStringListValue{
+		ListValue: types.ListNull(types.StringType),
+	}
+	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
+	if len(connectivityRuleIds) > 0 {
+		// Use API response values
+		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
+		diags.Append(listDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
+			ListValue: planConnectivityRuleIds,
+		}
+
+	}
+	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
 	state.CertificateFilters = certificateFilter
@@ -723,6 +874,18 @@ func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel)
 		Endpoint:                      codecServer.Endpoint.ValueString(),
 		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
 		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
+	}, diags
+}
+
+func getLifecycleFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.LifecycleSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var lifecycle lifecycleModel
+	diags.Append(model.NamespaceLifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &namespacev1.LifecycleSpec{
+		EnableDeleteProtection: lifecycle.EnableDeleteProtection.ValueBool(),
 	}, diags
 }
 

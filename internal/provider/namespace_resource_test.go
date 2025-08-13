@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -44,7 +45,7 @@ func TestNamespaceSchema(t *testing.T) {
 
 func TestAccBasicNamespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
-	config := func(name string, retention int) string {
+	config := func(name string, retention int, deleteProtection bool) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -70,7 +71,10 @@ PEM
 )
 
   retention_days     = %d
-}`, name, retention)
+  namespace_lifecycle = {
+	  enable_delete_protection = %t
+  }
+}`, name, retention, deleteProtection)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -79,15 +83,18 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with retention of 7
-				Config: config(name, 7),
+				Config: config(name, 7, true),
 			},
 			{
-				Config: config(name, 14),
+				Config: config(name, 14, true),
 			},
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_namespace.terraform",
+			},
+			{
+				Config: config(name, 14, false), // disable delete protection for deletion to succeed
 			},
 			// Delete testing automatically occurs in TestCase
 		},
@@ -605,4 +612,182 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 	}
 
 	return client.CloudService()
+}
+
+func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-connectivity-rules", randomString(10))
+	allRules := []string{"rule1", "rule2", "rule3", "rule4"}
+
+	// Configuration for namespace with specific connectivity rules
+	config := func(name string, includeRules []string, retentionDays int) string {
+		var connectivityRulesConfig string
+		var ruleRefs []string
+
+		// Create all connectivity rule resources (same as rulesOnlyConfig but with namespace)
+		rulesResources := ""
+		for _, ruleName := range allRules {
+			rulesResources += fmt.Sprintf(`
+	resource "temporalcloud_connectivity_rule" "%s" {
+	  connectivity_type = "private"
+	  connection_id     = "vpce-tftest%s"
+	  region            = "aws-us-east-1"
+	}
+	`, ruleName, ruleName)
+		}
+
+		// Reference the rules specified in includeRules in the namespace
+		if len(includeRules) > 0 {
+			for _, ruleName := range includeRules {
+				ruleRefs = append(ruleRefs, fmt.Sprintf("temporalcloud_connectivity_rule.%s.id", ruleName))
+			}
+			connectivityRulesConfig = fmt.Sprintf("connectivity_rule_ids = [%s]", strings.Join(ruleRefs, ", "))
+		}
+
+		config := fmt.Sprintf(`
+	provider "temporalcloud" {}
+	
+	%s
+		
+	resource "temporalcloud_namespace" "test" {
+	  name               = "%s"
+	  regions            = ["aws-us-east-1"]
+	  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIBxjCCAU2gAwIBAgIRAlyZ5KUmunPLeFAupDwGL8AwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNDA4MTMyMzQ2NThaFw0yNTA4MTMyMzQ3NTha
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAARG+EuL
+uKRsNWs7Rbz6ciaJQB7QINTRLmTgGGE8H/wAs+KjvctjPdDdqFPZrxShRY3PUdk2
+pgQKRugMTe3N52pxBx4Iablz8felfdv4kyLQbdsJzY9XmCYX3D68/9Hxsl2jZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBSYC5/u
+K78bK1M8Fv1M6ELMjF2ZMDAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LjBycDUwCgYIKoZIzj0EAwMDZwAwZAIwSycjxxmYTgV5eSJbaGMINr5LQgyKQUHQ
+ryBKSGLKASa/e2ntyhsqRhj77gJ8DmkZAjAIlpDacF+Sq1kpZ5tMV7ZLElcujzj4
+US8pEmNuIiCguEGwi+pb5CWfabETEHApxmo=
+-----END CERTIFICATE-----
+PEM
+)	
+	  retention_days     = %d
+	  %s
+	}
+	`, rulesResources, name, retentionDays, connectivityRulesConfig)
+		return config
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Create namespace with connectivity rule IDs
+				Config: config(name, allRules[:2], 1),
+				Check: func(s *terraform.State) error {
+					namespaceId := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					rule1Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule1"].Primary.Attributes["id"]
+					rule2Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule2"].Primary.Attributes["id"]
+
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: namespaceId,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					expectedRules := []string{rule1Id, rule2Id}
+					actualRules := spec.GetConnectivityRuleIds()
+
+					if len(actualRules) != len(expectedRules) {
+						return fmt.Errorf("expected %d connectivity rule IDs, got %d", len(expectedRules), len(actualRules))
+					}
+
+					// Convert to maps for easier comparison since order might differ
+					expectedMap := make(map[string]bool)
+					for _, rule := range expectedRules {
+						expectedMap[rule] = true
+					}
+
+					for _, rule := range actualRules {
+						if !expectedMap[rule] {
+							return fmt.Errorf("unexpected connectivity rule ID: %s", rule)
+						}
+					}
+
+					return nil
+				},
+			},
+			{
+				Config: config(name, []string{"rule1", "rule2"}, 2),
+			},
+			{
+				// Update connectivity rule IDs
+				Config: config(name, allRules, 1),
+				Check: func(s *terraform.State) error {
+					namespaceId := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					rule1Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule1"].Primary.Attributes["id"]
+					rule2Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule2"].Primary.Attributes["id"]
+					rule3Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule3"].Primary.Attributes["id"]
+					rule4Id := s.RootModule().Resources["temporalcloud_connectivity_rule.rule4"].Primary.Attributes["id"]
+
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: namespaceId,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					expectedRules := []string{rule1Id, rule2Id, rule3Id, rule4Id}
+					actualRules := spec.GetConnectivityRuleIds()
+
+					if len(actualRules) != len(expectedRules) {
+						return fmt.Errorf("expected %d connectivity rule IDs, got %d", len(expectedRules), len(actualRules))
+					}
+
+					// Convert to maps for easier comparison since order might differ
+					expectedMap := make(map[string]bool)
+					for _, rule := range expectedRules {
+						expectedMap[rule] = true
+					}
+
+					for _, rule := range actualRules {
+						if !expectedMap[rule] {
+							return fmt.Errorf("unexpected connectivity rule ID: %s", rule)
+						}
+					}
+
+					return nil
+				},
+			},
+			{
+				// Remove all connectivity rule IDs for namespace
+				Config: config(name, []string{}, 1),
+				Check: func(s *terraform.State) error {
+					namespaceId := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: namespaceId,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					actualRules := spec.GetConnectivityRuleIds()
+
+					if len(actualRules) != 0 {
+						return fmt.Errorf("expected 0 connectivity rule IDs, got %d", len(actualRules))
+					}
+
+					return nil
+				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
+			},
+		},
+	})
 }
