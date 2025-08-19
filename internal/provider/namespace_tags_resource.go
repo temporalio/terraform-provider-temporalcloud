@@ -246,12 +246,12 @@ func (r *namespaceTagsResource) setNamespaceTags(ctx context.Context, namespaceI
 	added, removed, modified := internaltypes.MapDiff(existing, planned)
 
 	// combine added and modified (api overwrites values for existing keys)
-	tagsToAdd := make(map[string]string)
+	tagsToUpsert := make(map[string]string)
 	for k, v := range added {
-		tagsToAdd[k] = v
+		tagsToUpsert[k] = v
 	}
 	for k, v := range modified {
-		tagsToAdd[k] = v
+		tagsToUpsert[k] = v
 	}
 
 	// extract keys from removed map
@@ -262,7 +262,7 @@ func (r *namespaceTagsResource) setNamespaceTags(ctx context.Context, namespaceI
 
 	resp, err := r.client.CloudService().UpdateNamespaceTags(ctx, &cloudservicev1.UpdateNamespaceTagsRequest{
 		Namespace:    namespaceID,
-		TagsToAdd:    tagsToAdd,
+		TagsToUpsert: tagsToUpsert,
 		TagsToRemove: tagsToRemove,
 	})
 	if err != nil {
