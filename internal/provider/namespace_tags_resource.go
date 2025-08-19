@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/mapvalidator"
@@ -42,8 +43,6 @@ var (
 	_ resource.ResourceWithConfigure   = (*namespaceTagsResource)(nil)
 	_ resource.ResourceWithImportState = (*namespaceTagsResource)(nil)
 )
-
-var idFmt = "namespace/%s/tags"
 
 func NewNamespaceTagsResource() resource.Resource {
 	return &namespaceTagsResource{}
@@ -152,12 +151,13 @@ func (r *namespaceTagsResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	tags, err := getNamespaceTags(ctx, r.client, state.NamespaceID.ValueString())
+	namespaceID := getNamespaceIDFromTagsID(state.ID.ValueString())
+	tags, err := getNamespaceTags(ctx, r.client, namespaceID)
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace resource not found, removing from state", map[string]interface{}{
-				"namespace_id": state.NamespaceID.ValueString(),
+				"namespace_id": namespaceID,
 			})
 
 			resp.State.RemoveResource(ctx)
@@ -168,7 +168,7 @@ func (r *namespaceTagsResource) Read(ctx context.Context, req resource.ReadReque
 		return
 	}
 
-	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &state, state.NamespaceID.ValueString(), tags)...)
+	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &state, namespaceID, tags)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -183,7 +183,8 @@ func (r *namespaceTagsResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	tags, err := getNamespaceTags(ctx, r.client, plan.NamespaceID.ValueString())
+	namespaceID := getNamespaceIDFromTagsID(plan.ID.ValueString())
+	tags, err := getNamespaceTags(ctx, r.client, namespaceID)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get current namespace tags", err.Error())
 		return
@@ -195,13 +196,13 @@ func (r *namespaceTagsResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	err = r.setNamespaceTags(ctx, plan.NamespaceID.ValueString(), tags, plannedTags)
+	err = r.setNamespaceTags(ctx, namespaceID, tags, plannedTags)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to set namespace tags", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &plan, plan.NamespaceID.ValueString(), plannedTags)...)
+	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &plan, namespaceID, plannedTags)...)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -228,12 +229,13 @@ func (r *namespaceTagsResource) Delete(ctx context.Context, req resource.DeleteR
 	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
 	defer cancel()
 
-	err := r.setNamespaceTags(ctx, state.NamespaceID.ValueString(), existingTags, map[string]string{})
+	namespaceID := getNamespaceIDFromTagsID(state.ID.ValueString())
+	err := r.setNamespaceTags(ctx, namespaceID, existingTags, map[string]string{})
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
 			tflog.Warn(ctx, "Namespace resource not found, removing from state", map[string]interface{}{
-				"namespace_id": state.NamespaceID.ValueString(),
+				"namespace_id": namespaceID,
 			})
 
 			return
@@ -307,7 +309,7 @@ func getTagsFromMap(ctx context.Context, m types.Map) (map[string]string, diag.D
 
 func updateTagsModelFromNamespace(ctx context.Context, state *namespaceTagsModel, namespaceID string, tags map[string]string) diag.Diagnostics {
 	var diags diag.Diagnostics
-	state.ID = types.StringValue(fmt.Sprintf(idFmt, namespaceID))
+	state.ID = types.StringValue(fmt.Sprintf("%s/tags", namespaceID))
 	state.NamespaceID = types.StringValue(namespaceID)
 	tagsMap := types.MapNull(types.StringType)
 	if len(tags) > 0 {
@@ -321,4 +323,12 @@ func updateTagsModelFromNamespace(ctx context.Context, state *namespaceTagsModel
 	state.Tags = tagsMap
 
 	return diags
+}
+
+func getNamespaceIDFromTagsID(id string) string {
+	splits := strings.Split(id, "/")
+	if len(splits) == 2 && splits[1] == "tags" {
+		return splits[0]
+	}
+	return ""
 }
