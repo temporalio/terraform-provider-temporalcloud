@@ -70,7 +70,7 @@ func (r *namespaceTagsResource) Metadata(_ context.Context, req resource.Metadat
 	resp.TypeName = req.ProviderTypeName + "_namespace_tags"
 }
 
-func (r *namespaceTagsResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *namespaceTagsResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages the complete set of tags for a Temporal Cloud namespace.",
 		Attributes: map[string]schema.Attribute{
@@ -96,6 +96,12 @@ func (r *namespaceTagsResource) Schema(_ context.Context, _ resource.SchemaReque
 					mapvalidator.SizeAtLeast(1),
 				},
 			},
+		},
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Delete: true,
+			}),
 		},
 	}
 }
