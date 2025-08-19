@@ -245,7 +245,7 @@ func (r *namespaceTagsResource) Delete(ctx context.Context, req resource.DeleteR
 }
 
 func (r *namespaceTagsResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
-	resource.ImportStatePassthroughID(ctx, path.Root("namespace_id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func (r *namespaceTagsResource) setNamespaceTags(ctx context.Context, namespaceID string, existing, planned map[string]string) error {
