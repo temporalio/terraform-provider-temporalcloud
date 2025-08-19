@@ -75,15 +75,19 @@ func TestAccNamespaceTagsResource_ValidationErrors(t *testing.T) {
 	})
 }
 
-func testAccNamespaceTagsConfig(name string) string {
+func testAccNamespaceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
   regions        = ["aws-us-east-1"]
   retention_days = 1
-  api_key_auth = true
+  api_key_auth   = true
+}
+`, name)
 }
 
+func testAccNamespaceTagsConfig(name string) string {
+	return testAccNamespaceConfig(name) + `
 resource "temporalcloud_namespace_tags" "test" {
   namespace_id = temporalcloud_namespace.test.id
   tags = {
@@ -91,39 +95,25 @@ resource "temporalcloud_namespace_tags" "test" {
     team        = "platform"
   }
 }
-`, name)
+`
 }
 
 func testAccNamespaceTagsConfigUpdated(name string) string {
-	return fmt.Sprintf(`
-resource "temporalcloud_namespace" "test" {
-  name           = "%s"
-  regions        = ["aws-us-east-1"]
-  retention_days = 1
-  api_key_auth = true
-}
-
+	return testAccNamespaceConfig(name) + `
 resource "temporalcloud_namespace_tags" "test" {
   namespace_id = temporalcloud_namespace.test.id
   tags = {
     environment = "production"
   }
 }
-`, name)
+`
 }
 
 func testAccNamespaceTagsConfigEmpty(name string) string {
-	return fmt.Sprintf(`
-resource "temporalcloud_namespace" "test" {
-  name           = "%s"
-  regions        = ["aws-us-east-1"]
-  retention_days = 1
-  api_key_auth = true
-}
-
+	return testAccNamespaceConfig(name) + `
 resource "temporalcloud_namespace_tags" "test" {
   namespace_id = temporalcloud_namespace.test.id
   tags = {}
 }
-`, name)
+`
 }
