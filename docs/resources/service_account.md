@@ -89,6 +89,8 @@ Optional:
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
 # Service Accounts can be imported to incorporate existing Service Accounts into your Terraform pipeline. 
 # To import a Service Account, you need

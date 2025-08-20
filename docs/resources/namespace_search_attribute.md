@@ -68,6 +68,8 @@ resource "temporalcloud_namespace_search_attribute" "custom_search_attribute3" {
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
 # Search Attributes can be imported to incorporate existing Namespace Search Attributes into your Terraform pipeline. 
 # To import a Search Attribute, you need
