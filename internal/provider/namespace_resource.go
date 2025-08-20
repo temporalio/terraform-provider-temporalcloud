@@ -37,6 +37,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -195,6 +196,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				CustomType:  internaltypes.EncodedCAType{},
 				Description: "The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud. This is a required field when a Namespace uses mTLS authentication.",
 				Optional:    true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
 			},
 			"retention_days": schema.Int64Attribute{
 				Description: "The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.",
