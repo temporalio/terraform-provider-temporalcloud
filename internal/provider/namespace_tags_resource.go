@@ -140,6 +140,9 @@ func (r *namespaceTagsResource) Create(ctx context.Context, req resource.CreateR
 	}
 
 	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &plan, plan.NamespaceID.ValueString(), plannedTags)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -203,6 +206,9 @@ func (r *namespaceTagsResource) Update(ctx context.Context, req resource.UpdateR
 	}
 
 	resp.Diagnostics.Append(updateTagsModelFromNamespace(ctx, &plan, namespaceID, plannedTags)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
