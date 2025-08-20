@@ -52,6 +52,7 @@ Optional:
 - `custom_search_attributes` (Map of String) The custom search attributes to use for the namespace.
 - `last_modified_time` (String) The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.
 - `private_connectivities` (Attributes List) The private connectivities for the namespace, if any. (see [below for nested schema](#nestedatt--namespaces--private_connectivities))
+- `tags` (Map of String) The tags for the namespace.
 
 Read-Only:
 
