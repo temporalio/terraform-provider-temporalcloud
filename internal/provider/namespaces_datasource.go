@@ -58,6 +58,7 @@ type (
 		LastModifiedTime       types.String                  `tfsdk:"last_modified_time"`
 		ConnectivityRuleIds    types.List                    `tfsdk:"connectivity_rule_ids"`
 		NamespaceLifecycle     internaltypes.ZeroObjectValue `tfsdk:"namespace_lifecycle"`
+		Tags                   types.Map                     `tfsdk:"tags"`
 	}
 
 	endpointsDataModel struct {
@@ -299,6 +300,12 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 					Description: "If true, delete protection is enabled for the namespace. This means that the namespace cannot be deleted until this is set to false.",
 				},
 			},
+		},
+		"tags": schema.MapAttribute{
+			Computed:    true,
+			Optional:    true,
+			ElementType: types.StringType,
+			Description: "The tags for the namespace.",
 		},
 	}
 }
@@ -553,5 +560,17 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	namespaceModel.NamespaceLifecycle = internaltypes.ZeroObjectValue{
 		ObjectValue: lifecycleObjectValue,
 	}
+
+	tags := types.MapNull(types.StringType)
+	if len(ns.GetTags()) > 0 {
+		tagsMap, mapDiags := types.MapValueFrom(ctx, types.StringType, ns.GetTags())
+		diags.Append(mapDiags...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		tags = tagsMap
+	}
+	namespaceModel.Tags = tags
+
 	return namespaceModel, nil
 }

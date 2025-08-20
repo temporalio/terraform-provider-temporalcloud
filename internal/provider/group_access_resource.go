@@ -44,7 +44,6 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-	"go.temporal.io/cloud-sdk/api/identity/v1"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
 )
 
@@ -357,7 +356,7 @@ func (r *groupAccessResource) ImportState(ctx context.Context, req resource.Impo
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel, group *identity.UserGroup) diag.Diagnostics {
+func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel, group *identityv1.UserGroup) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	if group == nil {
