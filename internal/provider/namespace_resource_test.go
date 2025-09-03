@@ -616,7 +616,7 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 
 func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-connectivity-rules", randomString(10))
-	allRules := []string{"rule1", "rule2", "rule3", "rule4"}
+	allRules := []string{"r1", "r2", "r3", "r4"}
 
 	// Configuration for namespace with specific connectivity rules
 	config := func(name string, includeRules []string, retentionDays int) string {
@@ -629,7 +629,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 			rulesResources += fmt.Sprintf(`
 	resource "temporalcloud_connectivity_rule" "%s" {
 	  connectivity_type = "private"
-	  connection_id     = "vpce-tftest%s"
+	  connection_id     = "vpce-tftestrl%s"
 	  region            = "aws-us-east-1"
 	}
 	`, ruleName, ruleName)
