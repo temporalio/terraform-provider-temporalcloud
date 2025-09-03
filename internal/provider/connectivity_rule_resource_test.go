@@ -73,7 +73,7 @@ func TestAccConnectivityRuleResource_AWS_Private(t *testing.T) {
 				Config: testAccConnectivityRuleResourceConfig_Private(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_aws_private", "connectivity_type", "private"),
-					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_aws_private", "connection_id", "vpce-12345678"),
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_aws_private", "connection_id", "vpce-testconnid"),
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_aws_private", "region", "aws-us-west-2"),
 				),
 			},
@@ -146,7 +146,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_connectivity_rule" "test_aws_private" {
   connectivity_type = "private"
-  connection_id     = "vpce-12345678"
+  connection_id     = "vpce-testconnid"
   region           = "aws-us-west-2"
 }
 `
@@ -186,7 +186,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_connectivity_rule" "test" {
   connectivity_type = "private"
-  connection_id     = "vpce-12345678"
+  connection_id     = "vpce-testconnid"
 }
 `
 }
@@ -199,7 +199,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_connectivity_rule" "test" {
   connectivity_type = "private"
-  connection_id     = "vpce-12345678"
+  connection_id     = "vpce-testconnid"
   region           = "gcp-us-central1"
 }
 `

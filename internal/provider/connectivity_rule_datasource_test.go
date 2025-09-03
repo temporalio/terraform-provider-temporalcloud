@@ -101,7 +101,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_connectivity_rule" "test_private" {
   connectivity_type = "private"
-  connection_id     = "vpce-12345678"
+  connection_id     = "vpce-testconnid"
   region           = "aws-us-west-2"
 }
 
@@ -146,8 +146,8 @@ output "connectivity_rule" {
 					if !ok {
 						return fmt.Errorf("expected connection_id to be a string")
 					}
-					if outputConnectionID != "vpce-12345678" {
-						return fmt.Errorf("expected connection_id to be 'vpce-12345678', got: %s", outputConnectionID)
+					if outputConnectionID != "vpce-testconnid" {
+						return fmt.Errorf("expected connection_id to be 'vpce-testconnid', got: %s", outputConnectionID)
 					}
 
 					outputRegion, ok := outputValue["region"].(string)
