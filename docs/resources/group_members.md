@@ -75,6 +75,8 @@ Optional:
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
 # Group Members can be imported to incorporate existing Group Memberships into your Terraform pipeline.
 # To import Group Members, you need
