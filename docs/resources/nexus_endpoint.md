@@ -116,6 +116,8 @@ Optional:
 
 Import is supported using the following syntax:
 
+The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
+
 ```shell
 # Nexus Endpoints can be imported to incorporate existing Nexus Endpoints into your Terraform pipeline. 
 # To import a Nexus Endpoint, you need
