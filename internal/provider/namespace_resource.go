@@ -401,6 +401,16 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		ConnectivityRuleIds: connectivityRuleIds,
 	}
 
+	if !plan.Capacity.IsNull() {
+		var d diag.Diagnostics
+		capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.CapacitySpec = capacitySpec
+	}
+
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
 		resp.Diagnostics.AddError("Namespace not configured with authentication", "accepted_client_ca or api_key_auth must be set")
 		return
@@ -872,6 +882,7 @@ func updateModelFromSpec(
 	if capacitySpec != nil {
 		if capacitySpec.GetOnDemand() != nil {
 			capacityMode = types.StringValue("on_demand")
+			capacityValue = types.Float64Value(0)
 		} else if capacitySpec.GetProvisioned() != nil {
 			capacityMode = types.StringValue("provisioned")
 			capacityValue = types.Float64Value(capacitySpec.GetProvisioned().GetValue())
@@ -885,6 +896,8 @@ func updateModelFromSpec(
 			return diags
 		}
 		state.Capacity = capacity
+	} else {
+		state.Capacity = types.ObjectNull(capacityAttrs)
 	}
 
 	state.ConnectivityRuleIds = connectivityRuleIdsState
