@@ -794,13 +794,13 @@ PEM
 
 func TestAccNamespaceWithCapacity(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
-	config := func(name string, retention int, deleteProtection bool, mode string, value int) string {
+	config := func(name string, retention int, deleteProtection bool, mode string, value string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
 }
 
-resource "temporalcloud_namespace" "terraform" {
+resource "temporalcloud_namespace" "capacitytest" {
   name               = "%s"
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(<<PEM
@@ -825,7 +825,7 @@ PEM
   }
   capacity = {
 	  mode = "%s"
-	  value = %d
+	  %s
   }
 }`, name, retention, deleteProtection, mode, value)
 	}
@@ -836,10 +836,10 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with retention of 7
-				Config: config(name, 7, true, "provisioned", 16),
+				Config: config(name, 14, true, "provisioned", `value = 16`),
 			},
 			{
-				Config: config(name, 14, true, "on_demand", 0),
+				Config: config(name, 14, true, "on_demand", ""),
 			},
 			{
 				ImportState:       true,
@@ -847,7 +847,7 @@ PEM
 				ResourceName:      "temporalcloud_namespace.terraform",
 			},
 			{
-				Config: config(name, 14, false, "on_demand", 0), // disable delete protection for deletion to succeed
+				Config: config(name, 14, false, "on_demand", ""), // disable delete protection for deletion to succeed
 			},
 			// Delete testing automatically occurs in TestCase
 		},
