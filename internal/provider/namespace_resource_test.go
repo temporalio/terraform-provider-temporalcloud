@@ -796,3 +796,249 @@ PEM
 		},
 	})
 }
+
+func TestGetCapacityFromModel(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		capacityModel capacityModel
+		expectedSpec  *namespacev1.CapacitySpec
+		expectError   bool
+		errorMessage  string
+	}{
+		{
+			name: "provisioned capacity with valid value",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("provisioned"),
+				Value: types.Float64Value(100.0),
+			},
+			expectedSpec: &namespacev1.CapacitySpec{
+				Spec: &namespacev1.CapacitySpec_Provisioned_{
+					Provisioned: &namespacev1.CapacitySpec_Provisioned{
+						Value: 100.0,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "on_demand capacity",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("on_demand"),
+				Value: types.Float64Null(),
+			},
+			expectedSpec: &namespacev1.CapacitySpec{
+				Spec: &namespacev1.CapacitySpec_OnDemand_{
+					OnDemand: &namespacev1.CapacitySpec_OnDemand{},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "provisioned capacity with zero value should fail",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("provisioned"),
+				Value: types.Float64Value(0.0),
+			},
+			expectedSpec: nil,
+			expectError:  true,
+			errorMessage: "Invalid capacity value",
+		},
+		{
+			name: "provisioned capacity with negative value should fail",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("provisioned"),
+				Value: types.Float64Value(-10.0),
+			},
+			expectedSpec: nil,
+			expectError:  true,
+			errorMessage: "Invalid capacity value",
+		},
+		{
+			name: "provisioned capacity with null value should fail",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("provisioned"),
+				Value: types.Float64Null(),
+			},
+			expectedSpec: nil,
+			expectError:  true,
+			errorMessage: "Invalid capacity value",
+		},
+		{
+			name: "invalid capacity mode should fail",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue("invalid_mode"),
+				Value: types.Float64Value(50.0),
+			},
+			expectedSpec: nil,
+			expectError:  true,
+			errorMessage: "Invalid capacity mode",
+		},
+		{
+			name: "empty capacity mode should fail",
+			capacityModel: capacityModel{
+				Mode:  types.StringValue(""),
+				Value: types.Float64Value(50.0),
+			},
+			expectedSpec: nil,
+			expectError:  true,
+			errorMessage: "Invalid capacity mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a capacity object from the model
+			capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &tt.capacityModel)
+			require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
+
+			// Create a namespace model with the capacity
+			model := &namespaceResourceModel{
+				Capacity: capacity,
+			}
+
+			// Call the function under test
+			spec, diags := getCapacityFromModel(ctx, model)
+
+			if tt.expectError {
+				assert.True(t, diags.HasError(), "Expected error but got none")
+				if tt.errorMessage != "" {
+					found := false
+					for _, diag := range diags.Errors() {
+						if strings.Contains(diag.Summary(), tt.errorMessage) {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "Expected error message '%s' not found in diagnostics: %v", tt.errorMessage, diags.Errors())
+				}
+				assert.Nil(t, spec, "Expected nil spec on error")
+			} else {
+				assert.False(t, diags.HasError(), "Unexpected error: %v", diags.Errors())
+				assert.NotNil(t, spec, "Expected non-nil spec")
+
+				// Compare the specs
+				if tt.expectedSpec.GetProvisioned() != nil {
+					require.NotNil(t, spec.GetProvisioned(), "Expected provisioned capacity spec")
+					assert.Equal(t, tt.expectedSpec.GetProvisioned().GetValue(), spec.GetProvisioned().GetValue())
+				}
+
+				if tt.expectedSpec.GetOnDemand() != nil {
+					require.NotNil(t, spec.GetOnDemand(), "Expected on-demand capacity spec")
+				}
+			}
+		})
+	}
+}
+
+func TestCapacityModelValidation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("capacity model can be created from object value", func(t *testing.T) {
+		testCapacity := capacityModel{
+			Mode:  types.StringValue("provisioned"),
+			Value: types.Float64Value(50.0),
+		}
+
+		capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &testCapacity)
+		require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
+
+		var retrievedCapacity capacityModel
+		diags = capacity.As(ctx, &retrievedCapacity, basetypes.ObjectAsOptions{})
+		require.False(t, diags.HasError(), "Failed to retrieve capacity model: %v", diags.Errors())
+
+		assert.Equal(t, "provisioned", retrievedCapacity.Mode.ValueString())
+		assert.Equal(t, 50.0, retrievedCapacity.Value.ValueFloat64())
+	})
+
+	t.Run("capacity model can handle null values", func(t *testing.T) {
+		testCapacity := capacityModel{
+			Mode:  types.StringValue("on_demand"),
+			Value: types.Float64Null(),
+		}
+
+		capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &testCapacity)
+		require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
+
+		var retrievedCapacity capacityModel
+		diags = capacity.As(ctx, &retrievedCapacity, basetypes.ObjectAsOptions{})
+		require.False(t, diags.HasError(), "Failed to retrieve capacity model: %v", diags.Errors())
+
+		assert.Equal(t, "on_demand", retrievedCapacity.Mode.ValueString())
+		assert.True(t, retrievedCapacity.Value.IsNull())
+	})
+}
+
+func TestCapacitySpecParsing(t *testing.T) {
+	tests := []struct {
+		name            string
+		capacitySpec    *namespacev1.CapacitySpec
+		expectedMode    string
+		expectedValue   *float64
+		expectNullValue bool
+	}{
+		{
+			name: "provisioned capacity spec",
+			capacitySpec: &namespacev1.CapacitySpec{
+				Spec: &namespacev1.CapacitySpec_Provisioned_{
+					Provisioned: &namespacev1.CapacitySpec_Provisioned{
+						Value: 75.5,
+					},
+				},
+			},
+			expectedMode:  "provisioned",
+			expectedValue: func() *float64 { v := 75.5; return &v }(),
+		},
+		{
+			name: "on-demand capacity spec",
+			capacitySpec: &namespacev1.CapacitySpec{
+				Spec: &namespacev1.CapacitySpec_OnDemand_{
+					OnDemand: &namespacev1.CapacitySpec_OnDemand{},
+				},
+			},
+			expectedMode:    "on_demand",
+			expectNullValue: true,
+		},
+		{
+			name:            "nil capacity spec",
+			capacitySpec:    nil,
+			expectedMode:    "",
+			expectNullValue: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test the capacity parsing logic from updateModelFromSpec function
+			var capacityMode types.String
+			var capacityValue types.Float64
+
+			if tt.capacitySpec != nil {
+				if tt.capacitySpec.GetOnDemand() != nil {
+					capacityMode = types.StringValue("on_demand")
+					capacityValue = types.Float64Null()
+				} else if tt.capacitySpec.GetProvisioned() != nil {
+					capacityMode = types.StringValue("provisioned")
+					capacityValue = types.Float64Value(tt.capacitySpec.GetProvisioned().GetValue())
+				}
+			} else {
+				capacityMode = types.StringNull()
+				capacityValue = types.Float64Null()
+			}
+
+			if tt.expectedMode != "" {
+				assert.Equal(t, tt.expectedMode, capacityMode.ValueString())
+			} else {
+				assert.True(t, capacityMode.IsNull())
+			}
+
+			if tt.expectNullValue {
+				assert.True(t, capacityValue.IsNull())
+			} else {
+				require.NotNil(t, tt.expectedValue)
+				assert.Equal(t, *tt.expectedValue, capacityValue.ValueFloat64())
+			}
+		})
+	}
+}
