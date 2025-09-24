@@ -882,7 +882,6 @@ func updateModelFromSpec(
 	if capacitySpec != nil {
 		if capacitySpec.GetOnDemand() != nil {
 			capacityMode = types.StringValue("on_demand")
-			capacityValue = types.Float64Value(0)
 		} else if capacitySpec.GetProvisioned() != nil {
 			capacityMode = types.StringValue("provisioned")
 			capacityValue = types.Float64Value(capacitySpec.GetProvisioned().GetValue())
