@@ -316,6 +316,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"capacity": schema.SingleNestedAttribute{
+				Optional:    true,
 				Description: "The capacity configuration for the namespace.",
 				Attributes: map[string]schema.Attribute{
 					"mode": schema.StringAttribute{
