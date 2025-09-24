@@ -31,6 +31,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	"go.temporal.io/cloud-sdk/api/namespace/v1"
 	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
 	"go.temporal.io/cloud-sdk/cloudclient"
 )
@@ -104,6 +105,58 @@ func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operation
 			default:
 				tflog.Warn(ctx, "unknown state, continuing", map[string]any{
 					"state": newOp.GetState(),
+				})
+				continue
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n *namespace.Namespace) error {
+	if n == nil {
+		return fmt.Errorf("namespace is required")
+	}
+	ns := n
+
+	getResp, err := cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: ns.GetNamespace(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get namespace: %w", err)
+	}
+	ctx = tflog.SetField(ctx, "namespace_id", ns.GetNamespace())
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			getResp, err = cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+				Namespace: ns.GetNamespace(),
+			})
+			ns = getResp.GetNamespace()
+			if ns.GetCapacity().GetLatestRequest() == nil {
+				return nil
+			}
+			state := ns.GetCapacity().GetLatestRequest().GetState()
+			switch state {
+			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_UNSPECIFIED:
+				fallthrough
+			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_IN_PROGRESS:
+				tflog.Debug(ctx, "retrying in 1 second", map[string]any{
+					"state": state,
+				})
+				continue
+			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_FAILED:
+				tflog.Debug(ctx, "request failed")
+				return errors.New("capacity request failed")
+			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_COMPLETED:
+				tflog.Debug(ctx, "request completed")
+				return nil
+			default:
+				tflog.Warn(ctx, "unknown state, continuing", map[string]any{
+					"state": state,
 				})
 				continue
 			}
