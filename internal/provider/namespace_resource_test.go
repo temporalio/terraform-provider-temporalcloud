@@ -13,15 +13,10 @@ import (
 	"text/template"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
-	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -797,248 +792,65 @@ PEM
 	})
 }
 
-func TestGetCapacityFromModel(t *testing.T) {
-	ctx := context.Background()
+func TestAccNamespaceWithCapacity(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
+	config := func(name string, retention int, deleteProtection bool, mode string, value int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
 
-	tests := []struct {
-		name          string
-		capacityModel capacityModel
-		expectedSpec  *namespacev1.CapacitySpec
-		expectError   bool
-		errorMessage  string
-	}{
-		{
-			name: "provisioned capacity with valid value",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("provisioned"),
-				Value: types.Float64Value(100.0),
-			},
-			expectedSpec: &namespacev1.CapacitySpec{
-				Spec: &namespacev1.CapacitySpec_Provisioned_{
-					Provisioned: &namespacev1.CapacitySpec_Provisioned{
-						Value: 100.0,
-					},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "on_demand capacity",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("on_demand"),
-				Value: types.Float64Null(),
-			},
-			expectedSpec: &namespacev1.CapacitySpec{
-				Spec: &namespacev1.CapacitySpec_OnDemand_{
-					OnDemand: &namespacev1.CapacitySpec_OnDemand{},
-				},
-			},
-			expectError: false,
-		},
-		{
-			name: "provisioned capacity with zero value should fail",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("provisioned"),
-				Value: types.Float64Value(0.0),
-			},
-			expectedSpec: nil,
-			expectError:  true,
-			errorMessage: "Invalid capacity value",
-		},
-		{
-			name: "provisioned capacity with negative value should fail",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("provisioned"),
-				Value: types.Float64Value(-10.0),
-			},
-			expectedSpec: nil,
-			expectError:  true,
-			errorMessage: "Invalid capacity value",
-		},
-		{
-			name: "provisioned capacity with null value should fail",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("provisioned"),
-				Value: types.Float64Null(),
-			},
-			expectedSpec: nil,
-			expectError:  true,
-			errorMessage: "Invalid capacity value",
-		},
-		{
-			name: "invalid capacity mode should fail",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue("invalid_mode"),
-				Value: types.Float64Value(50.0),
-			},
-			expectedSpec: nil,
-			expectError:  true,
-			errorMessage: "Invalid capacity mode",
-		},
-		{
-			name: "empty capacity mode should fail",
-			capacityModel: capacityModel{
-				Mode:  types.StringValue(""),
-				Value: types.Float64Value(50.0),
-			},
-			expectedSpec: nil,
-			expectError:  true,
-			errorMessage: "Invalid capacity mode",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a capacity object from the model
-			capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &tt.capacityModel)
-			require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
-
-			// Create a namespace model with the capacity
-			model := &namespaceResourceModel{
-				Capacity: capacity,
-			}
-
-			// Call the function under test
-			spec, diags := getCapacityFromModel(ctx, model)
-
-			if tt.expectError {
-				assert.True(t, diags.HasError(), "Expected error but got none")
-				if tt.errorMessage != "" {
-					found := false
-					for _, diag := range diags.Errors() {
-						if strings.Contains(diag.Summary(), tt.errorMessage) {
-							found = true
-							break
-						}
-					}
-					assert.True(t, found, "Expected error message '%s' not found in diagnostics: %v", tt.errorMessage, diags.Errors())
-				}
-				assert.Nil(t, spec, "Expected nil spec on error")
-			} else {
-				assert.False(t, diags.HasError(), "Unexpected error: %v", diags.Errors())
-				assert.NotNil(t, spec, "Expected non-nil spec")
-
-				// Compare the specs
-				if tt.expectedSpec.GetProvisioned() != nil {
-					require.NotNil(t, spec.GetProvisioned(), "Expected provisioned capacity spec")
-					assert.Equal(t, tt.expectedSpec.GetProvisioned().GetValue(), spec.GetProvisioned().GetValue())
-				}
-
-				if tt.expectedSpec.GetOnDemand() != nil {
-					require.NotNil(t, spec.GetOnDemand(), "Expected on-demand capacity spec")
-				}
-			}
-		})
-	}
 }
 
-func TestCapacityModelValidation(t *testing.T) {
-	ctx := context.Background()
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNTA4MjAxNDAwMzNaFw0yNjA4MjAxNDAxMzNa
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAATRWwv2
+nVfToOR59QuRHk5jAVhu991AQWXwLFSzHzjmZ8XIkiVzh3EhPwybsnm+uV6XN/xe
+1+KJ/0NyiVL91KFwS0y5xLKqdvy/mOv0eSUy/blJpLR66diTqPDMlYntuBmjZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTNvOjx
+e/IC/jxLZvXGQT4fmj0eMTAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LjJ5cU4wCgYIKoZIzj0EAwMDaQAwZgIxALwxPDblJQ9R65G9/M7Tyx1H/7EUTeo9
+ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
+5hWHcfGvGFFkZn3TkJIX3kdJslSDmxOXhn7D/w==
+-----END CERTIFICATE-----
+PEM
+)
 
-	t.Run("capacity model can be created from object value", func(t *testing.T) {
-		testCapacity := capacityModel{
-			Mode:  types.StringValue("provisioned"),
-			Value: types.Float64Value(50.0),
-		}
-
-		capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &testCapacity)
-		require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
-
-		var retrievedCapacity capacityModel
-		diags = capacity.As(ctx, &retrievedCapacity, basetypes.ObjectAsOptions{})
-		require.False(t, diags.HasError(), "Failed to retrieve capacity model: %v", diags.Errors())
-
-		assert.Equal(t, "provisioned", retrievedCapacity.Mode.ValueString())
-		assert.Equal(t, 50.0, retrievedCapacity.Value.ValueFloat64())
-	})
-
-	t.Run("capacity model can handle null values", func(t *testing.T) {
-		testCapacity := capacityModel{
-			Mode:  types.StringValue("on_demand"),
-			Value: types.Float64Null(),
-		}
-
-		capacity, diags := types.ObjectValueFrom(ctx, capacityAttrs, &testCapacity)
-		require.False(t, diags.HasError(), "Failed to create capacity object: %v", diags.Errors())
-
-		var retrievedCapacity capacityModel
-		diags = capacity.As(ctx, &retrievedCapacity, basetypes.ObjectAsOptions{})
-		require.False(t, diags.HasError(), "Failed to retrieve capacity model: %v", diags.Errors())
-
-		assert.Equal(t, "on_demand", retrievedCapacity.Mode.ValueString())
-		assert.True(t, retrievedCapacity.Value.IsNull())
-	})
-}
-
-func TestCapacitySpecParsing(t *testing.T) {
-	tests := []struct {
-		name            string
-		capacitySpec    *namespacev1.CapacitySpec
-		expectedMode    string
-		expectedValue   *float64
-		expectNullValue bool
-	}{
-		{
-			name: "provisioned capacity spec",
-			capacitySpec: &namespacev1.CapacitySpec{
-				Spec: &namespacev1.CapacitySpec_Provisioned_{
-					Provisioned: &namespacev1.CapacitySpec_Provisioned{
-						Value: 75.5,
-					},
-				},
-			},
-			expectedMode:  "provisioned",
-			expectedValue: func() *float64 { v := 75.5; return &v }(),
-		},
-		{
-			name: "on-demand capacity spec",
-			capacitySpec: &namespacev1.CapacitySpec{
-				Spec: &namespacev1.CapacitySpec_OnDemand_{
-					OnDemand: &namespacev1.CapacitySpec_OnDemand{},
-				},
-			},
-			expectedMode:    "on_demand",
-			expectNullValue: true,
-		},
-		{
-			name:            "nil capacity spec",
-			capacitySpec:    nil,
-			expectedMode:    "",
-			expectNullValue: true,
-		},
+  retention_days     = %d
+  namespace_lifecycle = {
+	  enable_delete_protection = %t
+  }
+  capacity = {
+	  mode = "%s"
+	  value = %d
+  }
+}`, name, retention, deleteProtection, mode, value)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test the capacity parsing logic from updateModelFromSpec function
-			var capacityMode types.String
-			var capacityValue types.Float64
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// New namespace with retention of 7
+				Config: config(name, 7, true, "provisioned", 16),
+			},
+			{
+				Config: config(name, 14, true, "on_demand", 0),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
+			},
+			{
+				Config: config(name, 14, false, "on_demand", 0), // disable delete protection for deletion to succeed
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
 
-			if tt.capacitySpec != nil {
-				if tt.capacitySpec.GetOnDemand() != nil {
-					capacityMode = types.StringValue("on_demand")
-					capacityValue = types.Float64Null()
-				} else if tt.capacitySpec.GetProvisioned() != nil {
-					capacityMode = types.StringValue("provisioned")
-					capacityValue = types.Float64Value(tt.capacitySpec.GetProvisioned().GetValue())
-				}
-			} else {
-				capacityMode = types.StringNull()
-				capacityValue = types.Float64Null()
-			}
-
-			if tt.expectedMode != "" {
-				assert.Equal(t, tt.expectedMode, capacityMode.ValueString())
-			} else {
-				assert.True(t, capacityMode.IsNull())
-			}
-
-			if tt.expectNullValue {
-				assert.True(t, capacityValue.IsNull())
-			} else {
-				require.NotNil(t, tt.expectedValue)
-				assert.Equal(t, *tt.expectedValue, capacityValue.ValueFloat64())
-			}
-		})
-	}
 }
