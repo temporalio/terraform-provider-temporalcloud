@@ -120,21 +120,18 @@ func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n
 	}
 	ns := n
 
-	getResp, err := cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
-		Namespace: ns.GetNamespace(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get namespace: %w", err)
-	}
 	ctx = tflog.SetField(ctx, "namespace_id", ns.GetNamespace())
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			getResp, err = cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			getResp, err := cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 				Namespace: ns.GetNamespace(),
 			})
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %w", err)
+			}
 			ns = getResp.GetNamespace()
 			if ns.GetCapacity().GetLatestRequest() == nil {
 				return nil

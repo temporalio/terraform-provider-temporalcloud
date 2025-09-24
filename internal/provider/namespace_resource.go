@@ -595,6 +595,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.MtlsAuth = mtls
 	}
 
+	if !plan.Capacity.IsNull() {
+		var d diag.Diagnostics
+		capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.CapacitySpec = capacitySpec
+	}
+
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
 		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
 		return
