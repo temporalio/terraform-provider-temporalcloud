@@ -794,7 +794,7 @@ PEM
 
 func TestAccNamespaceWithCapacity(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
-	config := func(name string, retention int, deleteProtection bool, variable string) string {
+	config := func(name string, variable string) string {
 		return fmt.Sprintf(`
 variable "provisioned" {
   type = object({
@@ -840,11 +840,6 @@ ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
 -----END CERTIFICATE-----
 PEM
 )
-
-  retention_days     = %d
-  namespace_lifecycle = {
-	  enable_delete_protection = %t
-  }
   capacity = %s
 }`, name, retention, deleteProtection, variable)
 	}
@@ -855,14 +850,14 @@ PEM
 		Steps: []resource.TestStep{
 			{
 				// New namespace with on demand capacity
-				Config: config(name, 14, false, "null"),
+				Config: config(name, "null"),
 			},
 			// cannot do provisioned capacity because the test environment doesn't have enough capacity
 			// {
-			// 	Config: config(name, 14, false, "var.on_demand"), // disable delete protection for deletion to succeed
+			// 	Config: config(name, "var.on_demand"),
 			// },
 			// {
-			// 	Config: config(name, 14, true, "var.provisioned"),
+			// 	Config: config(name, "var.provisioned"),
 			// },
 			{
 				ImportState:       true,
@@ -870,7 +865,7 @@ PEM
 				ResourceName:      "temporalcloud_namespace.capacitytest",
 			},
 			// {
-			// 	Config: config(name, 14, false, "var.on_demand"), // disable delete protection for deletion to succeed
+			// 	Config: config(name, "var.on_demand"),
 			// },
 			// Delete testing automatically occurs in TestCase
 		},
