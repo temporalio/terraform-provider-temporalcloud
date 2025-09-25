@@ -124,7 +124,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
+				Description: "The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).",
 				Required:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),

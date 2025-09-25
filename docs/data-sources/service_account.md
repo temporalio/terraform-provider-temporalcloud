@@ -52,7 +52,7 @@ output "service_account" {
 
 ### Read-Only
 
-- `account_access` (String) The role on the account. Must be one of admin, developer, or read (case-insensitive).
+- `account_access` (String) The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).
 - `created_at` (String) The creation time of the Service Account.
 - `description` (String) The description of the Service Account.
 - `name` (String) The name associated with the service account.
