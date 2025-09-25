@@ -648,7 +648,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if err := client.AwaitNamespaceCapacityOperation(ctx, r.client, ns.Namespace); err != nil {
+	if _, err := client.AwaitForFulfillment(ctx, r.client, ns.Namespace, client.AwaitNamespaceCapacityOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace capacity", err.Error())
 		return
 	}
