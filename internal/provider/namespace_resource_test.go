@@ -794,8 +794,30 @@ PEM
 
 func TestAccNamespaceWithCapacity(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
-	config := func(name string, retention int, deleteProtection bool, mode string, value string) string {
+	config := func(name string, retention int, deleteProtection bool, variable string) string {
 		return fmt.Sprintf(`
+variable "provisioned" {
+  type = object({
+	mode = string
+    value = number
+  })
+  default = {
+	mode = "provisioned"
+	value = 2
+  }
+}
+
+variable "on_demand" {
+  type = object({
+	mode = string
+	value = number
+  })
+  default = {
+	mode = "on_demand"
+	value = 0
+  }
+}
+
 provider "temporalcloud" {
 
 }
@@ -823,11 +845,8 @@ PEM
   namespace_lifecycle = {
 	  enable_delete_protection = %t
   }
-  capacity = {
-	  mode = "%s"
-	  %s
-  }
-}`, name, retention, deleteProtection, mode, value)
+  capacity = %s
+}`, name, retention, deleteProtection, variable)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -835,20 +854,24 @@ PEM
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				// New namespace with retention of 7
-				Config: config(name, 14, true, "provisioned", `value = 16`),
+				// New namespace with on demand capacity
+				Config: config(name, 14, false, "null"),
 			},
-			{
-				Config: config(name, 14, true, "on_demand", ""),
-			},
+			// cannot do provisioned capacity because the test environment doesn't have enough capacity
+			// {
+			// 	Config: config(name, 14, false, "var.on_demand"), // disable delete protection for deletion to succeed
+			// },
+			// {
+			// 	Config: config(name, 14, true, "var.provisioned"),
+			// },
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
 				ResourceName:      "temporalcloud_namespace.terraform",
 			},
-			{
-				Config: config(name, 14, false, "on_demand", ""), // disable delete protection for deletion to succeed
-			},
+			// {
+			// 	Config: config(name, 14, false, "var.on_demand"), // disable delete protection for deletion to succeed
+			// },
 			// Delete testing automatically occurs in TestCase
 		},
 	})
