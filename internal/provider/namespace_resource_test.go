@@ -872,4 +872,18 @@ PEM
 		},
 	})
 
+	nameProvisioned := fmt.Sprintf("%s-%s", "tf-capacity-provisioned", randomString(10))
+
+	// provisioned capacity is not supported on namespace creation
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config(nameProvisioned, "var.provisioned"),
+				ExpectError: regexp.MustCompile("Capacity on namespace creation is not supported"),
+			},
+		},
+	})
+
 }
