@@ -402,13 +402,16 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	if !plan.Capacity.IsNull() {
-		var d diag.Diagnostics
-		capacitySpec, d := getCapacityFromModel(ctx, &plan)
-		resp.Diagnostics.Append(d...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		spec.CapacitySpec = capacitySpec
+		resp.Diagnostics.AddError("Capacity on namespace creation is not supported", "capacity should be null or not set when creating a namespace")
+		return
+		// This will be enabled when capacity on namespace creation is supported
+		// var d diag.Diagnostics
+		// capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		// resp.Diagnostics.Append(d...)
+		// if resp.Diagnostics.HasError() {
+		// 	return
+		// }
+		// spec.CapacitySpec = capacitySpec
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {

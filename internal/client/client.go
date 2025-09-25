@@ -133,6 +133,7 @@ func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n
 				return fmt.Errorf("failed to get namespace: %w", err)
 			}
 			ns = getResp.GetNamespace()
+			n.Capacity = ns.GetCapacity()
 			if ns.GetCapacity().GetLatestRequest() == nil {
 				return nil
 			}
