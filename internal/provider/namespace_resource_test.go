@@ -867,7 +867,7 @@ PEM
 			{
 				ImportState:       true,
 				ImportStateVerify: true,
-				ResourceName:      "temporalcloud_namespace.terraform",
+				ResourceName:      "temporalcloud_namespace.capacitytest",
 			},
 			// {
 			// 	Config: config(name, 14, false, "var.on_demand"), // disable delete protection for deletion to succeed
