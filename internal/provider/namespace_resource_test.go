@@ -841,7 +841,7 @@ ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
 PEM
 )
   capacity = %s
-}`, name, retention, deleteProtection, variable)
+}`, name, variable)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
