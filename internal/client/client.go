@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
@@ -40,6 +41,8 @@ import (
 type Client struct {
 	*cloudclient.Client
 }
+
+type AwaitPredicate func(ctx context.Context, cloudclient *Client, n *namespace.Namespace) (bool, error)
 
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, version string) (*Client, error) {
 	userAgentProject := "terraform-provider-temporalcloud"
@@ -114,9 +117,25 @@ func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operation
 	}
 }
 
-func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n *namespace.Namespace) error {
+func AwaitForFulfillment(ctx context.Context, cloudclient *Client, n *namespace.Namespace, predicate ...AwaitPredicate) (bool, error) {
 	if n == nil {
-		return fmt.Errorf("namespace is required")
+		return false, fmt.Errorf("namespace is required")
+	}
+	var bValue bool = true
+	var errs error
+	for _, p := range predicate {
+		b, err := p(ctx, cloudclient, n)
+		if err != nil {
+			multierror.Append(errs, err)
+		}
+		bValue = bValue && b
+	}
+	return bValue, errs
+}
+
+func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n *namespace.Namespace) (bool, error) {
+	if n == nil {
+		return false, fmt.Errorf("namespace is required")
 	}
 	ns := n
 
@@ -130,12 +149,12 @@ func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n
 				Namespace: ns.GetNamespace(),
 			})
 			if err != nil {
-				return fmt.Errorf("failed to get namespace: %w", err)
+				return false, fmt.Errorf("failed to get namespace: %w", err)
 			}
 			ns = getResp.GetNamespace()
 			n.Capacity = ns.GetCapacity()
 			if ns.GetCapacity().GetLatestRequest() == nil {
-				return nil
+				return false, nil
 			}
 			state := ns.GetCapacity().GetLatestRequest().GetState()
 			switch state {
@@ -148,10 +167,10 @@ func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n
 				continue
 			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_FAILED:
 				tflog.Debug(ctx, "request failed")
-				return errors.New("capacity request failed")
+				return false, errors.New("capacity request failed")
 			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_COMPLETED:
 				tflog.Debug(ctx, "request completed")
-				return nil
+				return true, nil
 			default:
 				tflog.Warn(ctx, "unknown state, continuing", map[string]any{
 					"state": state,
@@ -159,7 +178,7 @@ func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n
 				continue
 			}
 		case <-ctx.Done():
-			return ctx.Err()
+			return false, ctx.Err()
 		}
 	}
 }
