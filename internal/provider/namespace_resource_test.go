@@ -840,6 +840,7 @@ ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
 -----END CERTIFICATE-----
 PEM
 )
+  retention_days = 7
   capacity = %s
 }`, name, variable)
 	}
