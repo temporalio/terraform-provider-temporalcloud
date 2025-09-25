@@ -126,7 +126,7 @@ func AwaitForFulfillment(ctx context.Context, cloudclient *Client, n *namespace.
 	for _, p := range predicate {
 		b, err := p(ctx, cloudclient, n)
 		if err != nil {
-			multierror.Append(errs, err)
+			errs = multierror.Append(errs, err)
 		}
 		bValue = bValue && b
 	}
