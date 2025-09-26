@@ -877,7 +877,7 @@ variable "provisioned" {
   })
   default = {
 	mode = "provisioned"
-	value = 2
+	value = 1
   }
 }
 
