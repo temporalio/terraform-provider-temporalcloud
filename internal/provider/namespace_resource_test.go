@@ -803,7 +803,7 @@ variable "provisioned" {
   })
   default = {
 	mode = "provisioned"
-	value = 1
+	value = 4
   }
 }
 
