@@ -146,7 +146,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 					},
 					"kms_arn": schema.StringAttribute{
 						Description: "The AWS Key Management Service (KMS) ARN used for encryption.",
-						Required:    true,
+						Optional:    true,
 					},
 					"aws_account_id": schema.StringAttribute{
 						Description: "The AWS account ID associated with the S3 bucket and the assumed role.",
