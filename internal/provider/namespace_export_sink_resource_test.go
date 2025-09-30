@@ -50,7 +50,6 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-role"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789012"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", ""),
 				),
 			},
 			// ImportState testing

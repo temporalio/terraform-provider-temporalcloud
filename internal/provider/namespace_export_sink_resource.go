@@ -274,9 +274,13 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 			RoleName:     types.StringValue(sink.GetSpec().GetS3().GetRoleName()),
 			BucketName:   types.StringValue(sink.GetSpec().GetS3().GetBucketName()),
 			Region:       types.StringValue(sink.GetSpec().GetS3().GetRegion()),
-			KmsArn:       types.StringValue(sink.GetSpec().GetS3().GetKmsArn()),
 			AwsAccountId: types.StringValue(sink.GetSpec().GetS3().GetAwsAccountId()),
 		}
+
+		if sink.GetSpec().GetS3().GetKmsArn() != "" {
+			s3Spec.KmsArn = types.StringValue(sink.GetSpec().GetS3().GetKmsArn())
+		}
+
 		s3Obj, diags = types.ObjectValueFrom(ctx, internaltypes.S3SpecModelAttrTypes, s3Spec)
 		diags.Append(diags...)
 		if diags.HasError() {
@@ -411,16 +415,22 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 			return nil, diags
 		}
 
+		s3SinkSpec := &sinkv1.S3Spec{
+			RoleName:     s3Spec.RoleName.ValueString(),
+			BucketName:   s3Spec.BucketName.ValueString(),
+			Region:       s3Spec.Region.ValueString(),
+			KmsArn:       s3Spec.KmsArn.ValueString(),
+			AwsAccountId: s3Spec.AwsAccountId.ValueString(),
+		}
+
+		if !s3Spec.KmsArn.IsNull() {
+			s3SinkSpec.KmsArn = s3Spec.KmsArn.ValueString()
+		}
+
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
 			Enabled: plan.Enabled.ValueBool(),
-			S3: &sinkv1.S3Spec{
-				RoleName:     s3Spec.RoleName.ValueString(),
-				BucketName:   s3Spec.BucketName.ValueString(),
-				Region:       s3Spec.Region.ValueString(),
-				KmsArn:       s3Spec.KmsArn.ValueString(),
-				AwsAccountId: s3Spec.AwsAccountId.ValueString(),
-			},
+			S3:      s3SinkSpec,
 		}, nil
 	} else if !plan.Gcs.IsNull() {
 		var gcsSpec internaltypes.GCSSpecModel
