@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -855,6 +856,12 @@ PEM
 			},
 			{
 				Config: config(name, "var.provisioned"),
+			},
+			{
+				PreConfig: func() {
+					time.Sleep(time.Minute * 1) // wait for previous update to finish
+				},
+				Config: config(name, "var.on_demand"),
 			},
 			{
 				ImportState:       true,
