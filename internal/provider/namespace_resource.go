@@ -83,7 +83,7 @@ type (
 		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
 		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
 		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
-		Capacity            types.Object                           `tfsdk:"capacity"`
+		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
 	}
 
 	lifecycleModel struct {
@@ -884,17 +884,18 @@ func updateModelFromSpec(
 			capacityMode = types.StringValue("provisioned")
 			capacityValue = types.Float64Value(capacitySpec.GetProvisioned().GetValue())
 		}
-		capacity, objectDiags := types.ObjectValueFrom(ctx, capacityAttrs, &capacityModel{
+		cp, objectDiags := types.ObjectValueFrom(ctx, capacityAttrs, &capacityModel{
 			Mode:  capacityMode,
 			Value: capacityValue,
 		})
+		capacity := internaltypes.ZeroObjectValue{ObjectValue: cp}
 		diags.Append(objectDiags...)
 		if diags.HasError() {
 			return diags
 		}
 		state.Capacity = capacity
 	} else {
-		state.Capacity = types.ObjectNull(capacityAttrs)
+		state.Capacity = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(capacityAttrs)}
 	}
 
 	state.ConnectivityRuleIds = connectivityRuleIdsState

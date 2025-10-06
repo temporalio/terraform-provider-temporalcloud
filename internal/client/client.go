@@ -28,11 +28,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
-	"go.temporal.io/cloud-sdk/api/namespace/v1"
 	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
 	"go.temporal.io/cloud-sdk/cloudclient"
 )
@@ -41,8 +39,6 @@ import (
 type Client struct {
 	*cloudclient.Client
 }
-
-type AwaitPredicate func(ctx context.Context, cloudclient *Client, n *namespace.Namespace) (bool, error)
 
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, version string) (*Client, error) {
 	userAgentProject := "terraform-provider-temporalcloud"
@@ -113,72 +109,6 @@ func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operation
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		}
-	}
-}
-
-func AwaitForFulfillment(ctx context.Context, cloudclient *Client, n *namespace.Namespace, predicate ...AwaitPredicate) (bool, error) {
-	if n == nil {
-		return false, fmt.Errorf("namespace is required")
-	}
-	var bValue bool = true
-	var errs error
-	for _, p := range predicate {
-		b, err := p(ctx, cloudclient, n)
-		if err != nil {
-			errs = multierror.Append(errs, err)
-		}
-		bValue = bValue && b
-	}
-	return bValue, errs
-}
-
-func AwaitNamespaceCapacityOperation(ctx context.Context, cloudclient *Client, n *namespace.Namespace) (bool, error) {
-	if n == nil {
-		return false, fmt.Errorf("namespace is required")
-	}
-	ns := n
-
-	ctx = tflog.SetField(ctx, "namespace_id", ns.GetNamespace())
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			getResp, err := cloudclient.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
-				Namespace: ns.GetNamespace(),
-			})
-			if err != nil {
-				return false, fmt.Errorf("failed to get namespace: %w", err)
-			}
-			ns = getResp.GetNamespace()
-			n.Capacity = ns.GetCapacity()
-			if ns.GetCapacity().GetLatestRequest() == nil {
-				return false, nil
-			}
-			state := ns.GetCapacity().GetLatestRequest().GetState()
-			switch state {
-			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_UNSPECIFIED:
-				fallthrough
-			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_IN_PROGRESS:
-				tflog.Debug(ctx, "retrying in 1 second", map[string]any{
-					"state": state,
-				})
-				continue
-			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_FAILED:
-				tflog.Debug(ctx, "request failed")
-				return false, errors.New("capacity request failed")
-			case namespace.Capacity_Request_STATE_CAPACITY_REQUEST_COMPLETED:
-				tflog.Debug(ctx, "request completed")
-				return true, nil
-			default:
-				tflog.Warn(ctx, "unknown state, continuing", map[string]any{
-					"state": state,
-				})
-				continue
-			}
-		case <-ctx.Done():
-			return false, ctx.Err()
 		}
 	}
 }
