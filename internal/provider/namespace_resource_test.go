@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 	"text/template"
-	"time"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -793,7 +792,7 @@ PEM
 	})
 }
 
-func TestAccNamespaceWithCapacity(t *testing.T) {
+func TestAccNamespaceWithProvisionedCapacity(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
 	config := func(name string, variable string) string {
 		return fmt.Sprintf(`
@@ -858,9 +857,77 @@ PEM
 				Config: config(name, "var.provisioned"),
 			},
 			{
-				PreConfig: func() {
-					time.Sleep(time.Minute * 1) // wait for previous update to finish
-				},
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.capacitytest",
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+func TestAccNamespaceWithOnDemandCapacity(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-capacity", randomString(10))
+	config := func(name string, variable string) string {
+		return fmt.Sprintf(`
+variable "provisioned" {
+  type = object({
+	mode = string
+    value = number
+  })
+  default = {
+	mode = "provisioned"
+	value = 4
+  }
+}
+
+variable "on_demand" {
+  type = object({
+	mode = string
+	value = number
+  })
+  default = {
+	mode = "on_demand"
+	value = 0
+  }
+}
+
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "capacitytest" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNTA4MjAxNDAwMzNaFw0yNjA4MjAxNDAxMzNa
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAATRWwv2
+nVfToOR59QuRHk5jAVhu991AQWXwLFSzHzjmZ8XIkiVzh3EhPwybsnm+uV6XN/xe
+1+KJ/0NyiVL91KFwS0y5xLKqdvy/mOv0eSUy/blJpLR66diTqPDMlYntuBmjZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTNvOjx
+e/IC/jxLZvXGQT4fmj0eMTAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LjJ5cU4wCgYIKoZIzj0EAwMDaQAwZgIxALwxPDblJQ9R65G9/M7Tyx1H/7EUTeo9
+ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
+5hWHcfGvGFFkZn3TkJIX3kdJslSDmxOXhn7D/w==
+-----END CERTIFICATE-----
+PEM
+)
+  retention_days = 7
+  capacity = %s
+}`, name, variable)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// New namespace with on demand capacity
+				Config: config(name, "null"),
+			},
+			{
 				Config: config(name, "var.on_demand"),
 			},
 			{
