@@ -318,6 +318,11 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			"capacity": schema.SingleNestedAttribute{
 				Optional:    true,
 				Description: "The capacity configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: capacityAttrs,
+					},
+				},
 				Attributes: map[string]schema.Attribute{
 					"mode": schema.StringAttribute{
 						Description: "The mode of the capacity configuration. Must be one of 'provisioned' or 'on_demand'.",
