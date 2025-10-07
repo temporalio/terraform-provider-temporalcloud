@@ -880,11 +880,19 @@ func updateModelFromSpec(
 	}
 
 	capacitySpec := ns.GetSpec().GetCapacitySpec()
-	var capacityMode types.String
-	var capacityValue types.Float64
 	if capacitySpec != nil {
+		var capacityMode types.String
+		var capacityValue types.Float64
 		if capacitySpec.GetOnDemand() != nil {
 			capacityMode = types.StringValue("on_demand")
+			// For on_demand mode, preserve the value from the current state if it exists
+			if !state.Capacity.IsNull() {
+				var currentCapacity capacityModel
+				diags.Append(state.Capacity.As(ctx, &currentCapacity, basetypes.ObjectAsOptions{})...)
+				if !diags.HasError() {
+					capacityValue = currentCapacity.Value
+				}
+			}
 		} else if capacitySpec.GetProvisioned() != nil {
 			capacityMode = types.StringValue("provisioned")
 			capacityValue = types.Float64Value(capacitySpec.GetProvisioned().GetValue())
