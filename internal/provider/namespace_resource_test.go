@@ -880,7 +880,7 @@ PEM
 							} else {
 								value := ns.GetNamespace().GetCapacity().GetProvisioned().GetCurrentValue()
 								if value != 4.0 {
-									return fmt.Errorf("expected provisioned capacity of 4, got %d", value)
+									return fmt.Errorf("expected provisioned capacity of 4, got %f", value)
 								}
 								// success
 								return nil
