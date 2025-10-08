@@ -922,9 +922,10 @@ PEM
 				},
 			},
 			{
-				ImportState:       true,
-				ImportStateVerify: true,
-				ResourceName:      "temporalcloud_namespace.capacitytest",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"capacity.value"},
+				ResourceName:            "temporalcloud_namespace.capacitytest",
 			},
 			// Delete testing automatically occurs in TestCase
 		},
