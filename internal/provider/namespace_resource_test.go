@@ -922,6 +922,10 @@ PEM
 				},
 			},
 			{
+			    // Revert namespace back to defaults
+				Config: config(name, "null"),
+			},
+			{
 				ImportState:             true,
 				ImportStateVerify:       true,
 				ImportStateVerifyIgnore: []string{"capacity.value"},
