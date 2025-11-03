@@ -95,3 +95,5 @@ require (
 	gopkg.in/yaml.v2 v2.3.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace go.temporal.io/cloud-sdk => github.com/temporalio/cloud-sdk-go v0.6.1-0.20251031194819-5117604c8a4f
