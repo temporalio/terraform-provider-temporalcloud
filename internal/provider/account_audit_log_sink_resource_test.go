@@ -33,7 +33,7 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	sinkRegion := "us-east-1"
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
@@ -78,7 +78,7 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
-	resource.ParallelTest(t, resource.TestCase{
+	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
