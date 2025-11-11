@@ -297,25 +297,6 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	// Prevent conversion between account-scoped and namespace-scoped service accounts
-	currentIsNamespaceScoped := currentServiceAccount.ServiceAccount.GetSpec().GetNamespaceScopedAccess() != nil
-	planIsNamespaceScoped := !plan.NamespaceScopedAccess.IsNull()
-
-	if currentIsNamespaceScoped != planIsNamespaceScoped {
-		if currentIsNamespaceScoped {
-			resp.Diagnostics.AddError(
-				"Cannot convert namespace-scoped service account to account-scoped",
-				"This service account is currently namespace-scoped and cannot be converted to an account-scoped service account. You must delete and recreate the service account to change its scope type.",
-			)
-		} else {
-			resp.Diagnostics.AddError(
-				"Cannot convert account-scoped service account to namespace-scoped",
-				"This service account is currently account-scoped and cannot be converted to a namespace-scoped service account. You must delete and recreate the service account to change its scope type.",
-			)
-		}
-		return
-	}
-
 	spec, d := buildServiceAccountSpec(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
