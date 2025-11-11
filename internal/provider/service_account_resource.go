@@ -176,7 +176,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 					},
 					"permission": schema.StringAttribute{
 						CustomType:  internaltypes.CaseInsensitiveStringType{},
-						Description: "The permission level for this namespace. Must be one of admin, write, or read (case-insensitive). This field is mutable.",
+						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive). This field is mutable.",
 						Required:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),

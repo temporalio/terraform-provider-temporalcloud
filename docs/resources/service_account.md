@@ -84,7 +84,7 @@ Required:
 Required:
 
 - `namespace_id` (String) The namespace to scope this service account to. This field is immutable after creation.
-- `permission` (String) The permission level for this namespace. Must be one of admin, write, or read (case-insensitive). This field is mutable.
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive). This field is mutable.
 
 
 <a id="nestedblock--timeouts"></a>
