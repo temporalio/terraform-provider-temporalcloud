@@ -100,7 +100,7 @@ resource "temporalcloud_namespace" "test" {
 
 resource "temporalcloud_service_account" "terraform" {
   name = "{{ .Name }}"
-  namespace_scoped_access {
+  namespace_scoped_access = {
     namespace_id = temporalcloud_namespace.test.id
     permission   = "{{ .Permission }}"
   }

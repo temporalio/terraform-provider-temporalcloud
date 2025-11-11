@@ -368,7 +368,7 @@ resource "temporalcloud_namespace" "test" {
 
 resource "temporalcloud_service_account" "terraform" {
   name = "{{ .Name }}"
-  namespace_scoped_access {
+  namespace_scoped_access = {
     namespace_id = temporalcloud_namespace.test.id
     permission   = "{{ .Permission }}"
   }
@@ -481,7 +481,7 @@ provider "temporalcloud" {
 resource "temporalcloud_service_account" "terraform" {
   name = "%s"
   account_access = "read"
-  namespace_scoped_access {
+  namespace_scoped_access = {
     namespace_id = "test-namespace"
     permission   = "write"
   }
@@ -517,7 +517,7 @@ resource "temporalcloud_service_account" "terraform" {
       permission   = "read"
     }
   ]
-  namespace_scoped_access {
+  namespace_scoped_access = {
     namespace_id = "test-namespace"
     permission   = "write"
   }
@@ -596,7 +596,7 @@ resource "temporalcloud_service_account" "terraform" {
 				Config: config(configArgs{
 					Name:          name,
 					NamespaceName: namespaceName,
-					ConfigStr: `namespace_scoped_access {
+					ConfigStr: `namespace_scoped_access = {
     namespace_id = temporalcloud_namespace.test.id
     permission   = "write"
   }`,
@@ -685,7 +685,7 @@ resource "temporalcloud_service_account" "terraform" {
 				Config: config(configArgs{
 					Name:          name,
 					NamespaceName: namespaceName,
-					ConfigStr: `namespace_scoped_access {
+					ConfigStr: `namespace_scoped_access = {
     namespace_id = temporalcloud_namespace.test.id
     permission   = "write"
   }`,

@@ -65,7 +65,7 @@ resource "temporalcloud_service_account" "account_scoped" {
 
 resource "temporalcloud_service_account" "namespace_scoped" {
   name = "{{ .NamespaceScopedName }}"
-  namespace_scoped_access {
+  namespace_scoped_access = {
     namespace_id = temporalcloud_namespace.test.id
     permission   = "write"
   }
