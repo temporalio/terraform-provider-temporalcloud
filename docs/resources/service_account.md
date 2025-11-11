@@ -54,13 +54,14 @@ resource "temporalcloud_service_account" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of admin, developer, or read (case-insensitive).
 - `name` (String) The name associated with the service account.
 
 ### Optional
 
+- `account_access` (String) The role on the account. Must be one of admin, developer, or read (case-insensitive). Cannot be set if namespace_scoped_access is provided.
 - `description` (String) The description for the service account.
-- `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces. Cannot be set if namespace_scoped_access is provided. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `namespace_scoped_access` (Attributes) Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access or namespace_accesses are provided. (see [below for nested schema](#nestedatt--namespace_scoped_access))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -75,6 +76,15 @@ Required:
 
 - `namespace_id` (String) The namespace to assign permissions to.
 - `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
+
+
+<a id="nestedatt--namespace_scoped_access"></a>
+### Nested Schema for `namespace_scoped_access`
+
+Required:
+
+- `namespace_id` (String) The namespace to scope this service account to. This field is immutable after creation.
+- `permission` (String) The permission level for this namespace. Must be one of admin, write, or read (case-insensitive). This field is mutable.
 
 
 <a id="nestedblock--timeouts"></a>
