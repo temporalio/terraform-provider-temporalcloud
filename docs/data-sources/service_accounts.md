@@ -34,7 +34,7 @@ Read-Only:
 - `description` (String) The description of the Service Account.
 - `id` (String) The unique identifier of the Service Account.
 - `name` (String) The name associated with the service account.
-- `namespace_scoped_access` (Attributes) The namespace-scoped access configuration if this service account is scoped to a single namespace. (see [below for nested schema](#nestedatt--service_accounts--namespace_scoped_access))
+- `namespace_scoped_access` (Attributes) The namespace-scoped access configuration for this service account. (see [below for nested schema](#nestedatt--service_accounts--namespace_scoped_access))
 - `state` (String) The current state of the Service Account.
 - `updated_at` (String) The last update time of the Service Account.
 
@@ -44,7 +44,7 @@ Read-Only:
 Read-Only:
 
 - `namespace_id` (String) The namespace to assign permissions to.
-- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive).
 
 
 <a id="nestedatt--service_accounts--namespace_scoped_access"></a>
@@ -53,4 +53,4 @@ Read-Only:
 Read-Only:
 
 - `namespace_id` (String) The namespace this service account is scoped to.
-- `permission` (String) The permission level for this namespace.
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive).

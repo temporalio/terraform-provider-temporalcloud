@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -116,14 +117,14 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 					},
 					"permission": schema.StringAttribute{
 						CustomType:  types.StringType,
-						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
+						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive).",
 						Computed:    true,
 					},
 				},
 			},
 		},
 		"namespace_scoped_access": schema.SingleNestedAttribute{
-			Description: "The namespace-scoped access configuration if this service account is scoped to a single namespace.",
+			Description: "The namespace-scoped access configuration for this service account.",
 			Computed:    true,
 			Attributes: map[string]schema.Attribute{
 				"namespace_id": schema.StringAttribute{
@@ -132,7 +133,7 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 				},
 				"permission": schema.StringAttribute{
 					CustomType:  internaltypes.CaseInsensitiveStringType{},
-					Description: "The permission level for this namespace.",
+					Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive).",
 					Computed:    true,
 				},
 			},
