@@ -607,6 +607,33 @@ resource "temporalcloud_service_account" "terraform" {
 	})
 }
 
+func TestAccServiceAccountMissingAccessConfiguration(t *testing.T) {
+	name := createRandomName()
+
+	config := fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_service_account" "terraform" {
+  name = "%s"
+  description = "This service account has no access configuration"
+}`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				ExpectError: regexp.MustCompile("Missing access configuration"),
+			},
+		},
+	})
+}
+
 func TestAccAccountScopedServiceAccountConversionBlocked(t *testing.T) {
 	type configArgs struct {
 		Name          string
