@@ -495,7 +495,7 @@ resource "temporalcloud_service_account" "terraform" {
 		Steps: []resource.TestStep{
 			{
 				Config:      config,
-				ExpectError: regexp.MustCompile("(conflicts with|Conflicting configuration arguments)"),
+				ExpectError: regexp.MustCompile("Invalid Attribute Combination"),
 			},
 		},
 	})
@@ -531,7 +531,7 @@ resource "temporalcloud_service_account" "terraform" {
 		Steps: []resource.TestStep{
 			{
 				Config:      config,
-				ExpectError: regexp.MustCompile("(conflicts with|Conflicting configuration arguments)"),
+				ExpectError: regexp.MustCompile("Invalid Attribute Combination"),
 			},
 		},
 	})
@@ -601,7 +601,7 @@ resource "temporalcloud_service_account" "terraform" {
     permission   = "write"
   }`,
 				}),
-				ExpectError: regexp.MustCompile("Cannot convert account-scoped service account to namespace-scoped"),
+				ExpectError: regexp.MustCompile("(Cannot convert account-scoped service account to namespace-scoped|Invalid Attribute Combination)"),
 			},
 		},
 	})
@@ -698,7 +698,7 @@ resource "temporalcloud_service_account" "terraform" {
 					NamespaceName: namespaceName,
 					ConfigStr:     `account_access = "read"`,
 				}),
-				ExpectError: regexp.MustCompile("Cannot convert namespace-scoped service account to account-scoped"),
+				ExpectError: regexp.MustCompile("(Cannot convert namespace-scoped service account to account-scoped|Invalid Attribute Combination)"),
 			},
 		},
 	})
