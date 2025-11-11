@@ -216,49 +216,10 @@ func (r *serviceAccountResource) Create(ctx context.Context, req resource.Create
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
-	description := ""
-	if !plan.Description.IsNull() {
-		description = plan.Description.ValueString()
-	}
-
-	spec := &identityv1.ServiceAccountSpec{
-		Name:        plan.Name.ValueString(),
-		Description: description,
-	}
-
-	// Handle namespace-scoped access
-	if !plan.NamespaceScopedAccess.IsNull() {
-		namespaceScopedAccess, d := getNamespaceScopedAccessFromModel(ctx, &plan)
-		resp.Diagnostics.Append(d...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		spec.NamespaceScopedAccess = namespaceScopedAccess
-	} else {
-		// Handle account-scoped access
-		if plan.AccountAccess.IsNull() {
-			resp.Diagnostics.AddError("Missing access configuration", "Either account_access or namespace_scoped_access must be provided")
-			return
-		}
-
-		namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
-		resp.Diagnostics.Append(d...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
-			return
-		}
-
-		spec.Access = &identityv1.Access{
-			AccountAccess: &identityv1.AccountAccess{
-				Role: role,
-			},
-			NamespaceAccesses: namespaceAccesses,
-		}
+	spec, d := buildServiceAccountSpec(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	svcResp, err := r.client.CloudService().CreateServiceAccount(ctx, &cloudservicev1.CreateServiceAccountRequest{
@@ -355,49 +316,10 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	description := ""
-	if !plan.Description.IsNull() {
-		description = plan.Description.ValueString()
-	}
-
-	spec := &identityv1.ServiceAccountSpec{
-		Name:        plan.Name.ValueString(),
-		Description: description,
-	}
-
-	// Handle namespace-scoped access
-	if !plan.NamespaceScopedAccess.IsNull() {
-		namespaceScopedAccess, d := getNamespaceScopedAccessFromModel(ctx, &plan)
-		resp.Diagnostics.Append(d...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-		spec.NamespaceScopedAccess = namespaceScopedAccess
-	} else {
-		// Handle account-scoped access
-		if plan.AccountAccess.IsNull() {
-			resp.Diagnostics.AddError("Missing access configuration", "Either account_access or namespace_scoped_access must be provided")
-			return
-		}
-
-		namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, &plan)
-		resp.Diagnostics.Append(d...)
-		if resp.Diagnostics.HasError() {
-			return
-		}
-
-		role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-		if err != nil {
-			resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
-			return
-		}
-
-		spec.Access = &identityv1.Access{
-			AccountAccess: &identityv1.AccountAccess{
-				Role: role,
-			},
-			NamespaceAccesses: namespaceAccesses,
-		}
+	spec, d := buildServiceAccountSpec(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	svcResp, err := r.client.CloudService().UpdateServiceAccount(ctx, &cloudservicev1.UpdateServiceAccountRequest{
@@ -522,6 +444,57 @@ func getNamespaceAccessesFromServiceAccountModel(ctx context.Context, model *ser
 	}
 
 	return namespaceAccesses, diags
+}
+
+func buildServiceAccountSpec(ctx context.Context, plan *serviceAccountResourceModel) (*identityv1.ServiceAccountSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	description := ""
+	if !plan.Description.IsNull() {
+		description = plan.Description.ValueString()
+	}
+
+	spec := &identityv1.ServiceAccountSpec{
+		Name:        plan.Name.ValueString(),
+		Description: description,
+	}
+
+	// Handle namespace-scoped access
+	if !plan.NamespaceScopedAccess.IsNull() {
+		namespaceScopedAccess, d := getNamespaceScopedAccessFromModel(ctx, plan)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		spec.NamespaceScopedAccess = namespaceScopedAccess
+	} else {
+		// Handle account-scoped access
+		if plan.AccountAccess.IsNull() {
+			diags.AddError("Missing access configuration", "Either account_access or namespace_scoped_access must be provided")
+			return nil, diags
+		}
+
+		namespaceAccesses, d := getNamespaceAccessesFromServiceAccountModel(ctx, plan)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
+		if err != nil {
+			diags.AddError("Failed to convert account access role", err.Error())
+			return nil, diags
+		}
+
+		spec.Access = &identityv1.Access{
+			AccountAccess: &identityv1.AccountAccess{
+				Role: role,
+			},
+			NamespaceAccesses: namespaceAccesses,
+		}
+	}
+
+	return spec, diags
 }
 
 func getNamespaceScopedAccessFromModel(ctx context.Context, model *serviceAccountResourceModel) (*identityv1.NamespaceScopedAccess, diag.Diagnostics) {
