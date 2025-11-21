@@ -9,6 +9,11 @@ import (
 )
 
 func TestAccDataSource_AccountAuditLogSink_Kinesis(t *testing.T) {
+	accountAuditLogSinkTestLocks.Lock("account")
+	defer func() {
+		_ = accountAuditLogSinkTestLocks.Unlock("account")
+	}()
+
 	sinkRegion := "us-east-1"
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -141,6 +146,11 @@ provider "temporalcloud" {
 }
 
 func TestAccDataSource_AccountAuditLogSink_PubSub(t *testing.T) {
+	accountAuditLogSinkTestLocks.Lock("account")
+	defer func() {
+		_ = accountAuditLogSinkTestLocks.Unlock("account")
+	}()
+
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	config := func(name string) string {

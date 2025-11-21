@@ -7,7 +7,12 @@ import (
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/jpillora/maplock"
 )
+
+// accountAuditLogSinkTestLocks is a per-account mutex that protects against concurrent sink operations
+// across all test files, since an account can only have one audit log sink at a time.
+var accountAuditLogSinkTestLocks = maplock.New()
 
 func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 	t.Parallel()
@@ -30,6 +35,11 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
+	accountAuditLogSinkTestLocks.Lock("account")
+	defer func() {
+		_ = accountAuditLogSinkTestLocks.Unlock("account")
+	}()
+
 	sinkRegion := "us-east-1"
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -76,6 +86,11 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
+	accountAuditLogSinkTestLocks.Lock("account")
+	defer func() {
+		_ = accountAuditLogSinkTestLocks.Unlock("account")
+	}()
+
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
