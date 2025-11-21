@@ -130,6 +130,12 @@ output "account_audit_log_sink" {
 					return nil
 				},
 			},
+			{
+				Config: `
+provider "temporalcloud" {
+}
+`,
+			},
 		},
 	})
 }
@@ -254,6 +260,12 @@ output "account_audit_log_sink" {
 
 					return nil
 				},
+			},
+			{
+				Config: `
+provider "temporalcloud" {
+}
+`,
 			},
 		},
 	})
