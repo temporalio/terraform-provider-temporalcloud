@@ -196,6 +196,7 @@ func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datas
 		NewNexusEndpointDataSource,
 		NewNexusEndpointsDataSource,
 		NewConnectivityRuleDataSource,
+		NewAccountAuditLogSinkDataSource,
 	}
 }
 
