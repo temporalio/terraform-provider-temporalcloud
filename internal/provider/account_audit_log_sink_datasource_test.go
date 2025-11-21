@@ -136,10 +136,10 @@ output "account_audit_log_sink" {
 				},
 			},
 			{
-				Config: `
-provider "temporalcloud" {
-}
-`,
+				ResourceName:      "temporalcloud_account_audit_log_sink.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				Destroy:           true,
 			},
 		},
 	})
@@ -272,10 +272,10 @@ output "account_audit_log_sink" {
 				},
 			},
 			{
-				Config: `
-provider "temporalcloud" {
-}
-`,
+				ResourceName:      "temporalcloud_account_audit_log_sink.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				Destroy:           true,
 			},
 		},
 	})
