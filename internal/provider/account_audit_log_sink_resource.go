@@ -385,7 +385,6 @@ func getAccountAuditLogSinkSpecFromModel(ctx context.Context, plan *accountAudit
 		}, nil
 	}
 
-	diags.AddError("Invalid sink configuration", "Either Kinesis or PubSub must be configured")
 	return nil, diags
 }
 
