@@ -125,7 +125,7 @@ func (d *accountAuditLogSinkDataSource) Configure(ctx context.Context, req datas
 func (d *accountAuditLogSinkDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Fetches details about an account audit log sink.",
-		Attributes:  accountAuditLogSinkDataSourceSchema(true),
+		Attributes:  accountAuditLogSinkDataSourceSchema(false),
 	}
 }
 
