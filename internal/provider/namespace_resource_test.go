@@ -921,10 +921,6 @@ PEM
 					return fmt.Errorf("timed out waiting for capacity change")
 				},
 			},
-			{
-				// Revert namespace back to defaults
-				Config: config(name, "null"),
-			},
 			// Delete testing automatically occurs in TestCase
 		},
 	})
