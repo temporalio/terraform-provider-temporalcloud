@@ -35,6 +35,7 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
+	t.Parallel()
 	accountAuditLogSinkTestLocks.Lock("account")
 	defer func() {
 		_ = accountAuditLogSinkTestLocks.Unlock("account")
@@ -86,6 +87,7 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
+	t.Parallel()
 	accountAuditLogSinkTestLocks.Lock("account")
 	defer func() {
 		_ = accountAuditLogSinkTestLocks.Unlock("account")

@@ -9,6 +9,7 @@ import (
 )
 
 func TestAccDataSource_AccountAuditLogSink_Kinesis(t *testing.T) {
+	t.Parallel()
 	accountAuditLogSinkTestLocks.Lock("account")
 	defer func() {
 		_ = accountAuditLogSinkTestLocks.Unlock("account")
@@ -68,14 +69,6 @@ output "account_audit_log_sink" {
 					}
 					if outputSinkName != sinkName {
 						return fmt.Errorf("expected sink_name to be %q, got: %q", sinkName, outputSinkName)
-					}
-
-					outputID, ok := outputValue["id"].(string)
-					if !ok {
-						return fmt.Errorf("expected id to be a string")
-					}
-					if outputID != sinkName {
-						return fmt.Errorf("expected id to be %q, got: %q", sinkName, outputID)
 					}
 
 					outputEnabled, ok := outputValue["enabled"].(bool)
@@ -146,6 +139,7 @@ output "account_audit_log_sink" {
 }
 
 func TestAccDataSource_AccountAuditLogSink_PubSub(t *testing.T) {
+	t.Parallel()
 	accountAuditLogSinkTestLocks.Lock("account")
 	defer func() {
 		_ = accountAuditLogSinkTestLocks.Unlock("account")
@@ -204,14 +198,6 @@ output "account_audit_log_sink" {
 					}
 					if outputSinkName != sinkName {
 						return fmt.Errorf("expected sink_name to be %q, got: %q", sinkName, outputSinkName)
-					}
-
-					outputID, ok := outputValue["id"].(string)
-					if !ok {
-						return fmt.Errorf("expected id to be a string")
-					}
-					if outputID != sinkName {
-						return fmt.Errorf("expected id to be %q, got: %q", sinkName, outputID)
 					}
 
 					outputEnabled, ok := outputValue["enabled"].(bool)

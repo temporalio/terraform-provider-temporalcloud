@@ -30,7 +30,6 @@ type (
 	}
 
 	accountAuditLogSinkDataModel struct {
-		ID       types.String `tfsdk:"id"`
 		SinkName types.String `tfsdk:"sink_name"`
 		Enabled  types.Bool   `tfsdk:"enabled"`
 		Kinesis  types.Object `tfsdk:"kinesis"`
@@ -39,20 +38,8 @@ type (
 	}
 )
 
-func accountAuditLogSinkDataSourceSchema(idRequired bool) map[string]schema.Attribute {
-	idAttribute := schema.StringAttribute{
-		Description: "The unique identifier of the account audit log sink.",
-	}
-
-	switch idRequired {
-	case true:
-		idAttribute.Required = true
-	case false:
-		idAttribute.Computed = true
-	}
-
+func accountAuditLogSinkDataSourceSchema() map[string]schema.Attribute {
 	return map[string]schema.Attribute{
-		"id": idAttribute,
 		"sink_name": schema.StringAttribute{
 			Description: "The unique name of the audit log sink.",
 			Required:    true,
@@ -125,7 +112,7 @@ func (d *accountAuditLogSinkDataSource) Configure(ctx context.Context, req datas
 func (d *accountAuditLogSinkDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Fetches details about an account audit log sink.",
-		Attributes:  accountAuditLogSinkDataSourceSchema(false),
+		Attributes:  accountAuditLogSinkDataSourceSchema(),
 	}
 }
 
@@ -168,7 +155,6 @@ func accountAuditLogSinkToAccountAuditLogSinkDataModel(ctx context.Context, audi
 	}
 
 	model := new(accountAuditLogSinkDataModel)
-	model.ID = types.StringValue(auditLogSink.GetName())
 	model.SinkName = types.StringValue(auditLogSink.GetName())
 	model.Enabled = types.BoolValue(auditLogSink.GetSpec().GetEnabled())
 	model.State = types.StringValue(stateStr)
