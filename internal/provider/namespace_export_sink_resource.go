@@ -105,7 +105,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 		Description: "Provisions a namespace export sink.",
 		Attributes: map[string]schema.Attribute{
 			"namespace": schema.StringAttribute{
-				Description: "The namespace under which the sink is configured. It's needed to be in the format of <namespace>.<account_id>",
+				Description: "The namespace under which the sink is configured, formatted as `<namespace>.<account_id>`",
 				Required:    true,
 			},
 			"id": schema.StringAttribute{
