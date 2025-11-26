@@ -17,7 +17,7 @@ Provisions a namespace export sink.
 
 ### Required
 
-- `namespace` (String) The namespace under which the sink is configured. It's needed to be in the format of <namespace>.<account_id>
+- `namespace` (String) The namespace under which the sink is configured, formatted as `<namespace>.<account_id>`
 - `sink_name` (String) The unique name of the export sink, it can't be changed once set.
 
 ### Optional
