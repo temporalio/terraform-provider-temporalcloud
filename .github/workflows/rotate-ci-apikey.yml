@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * *'
+# All operations use provided PAT; disable default GITHUB_TOKEN access.
+permissions: {}
 jobs:
   rotate:
     name: Rotate API Key 
