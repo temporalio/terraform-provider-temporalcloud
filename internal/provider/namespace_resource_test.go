@@ -805,7 +805,7 @@ variable "provisioned" {
   })
   default = {
 	mode = "provisioned"
-	value = 4
+	value = 2
   }
 }
 
@@ -879,8 +879,8 @@ PEM
 								return fmt.Errorf("expected provisioned capacity, got nil")
 							} else {
 								value := ns.GetNamespace().GetCapacity().GetProvisioned().GetCurrentValue()
-								if value != 4.0 {
-									return fmt.Errorf("expected provisioned capacity of 4, got %f", value)
+								if value != 2.0 {
+									return fmt.Errorf("expected provisioned capacity of 2, got %f", value)
 								}
 								// success
 								return nil
