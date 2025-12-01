@@ -7,12 +7,7 @@ import (
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/jpillora/maplock"
 )
-
-// accountAuditLogSinkTestLocks is a per-account mutex that protects against concurrent sink operations
-// across all test files, since an account can only have one audit log sink at a time.
-var accountAuditLogSinkTestLocks = maplock.New()
 
 func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 	t.Parallel()
@@ -36,10 +31,6 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	t.Parallel()
-	accountAuditLogSinkTestLocks.Lock("account")
-	defer func() {
-		_ = accountAuditLogSinkTestLocks.Unlock("account")
-	}()
 
 	sinkRegion := "us-east-1"
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
@@ -57,6 +48,13 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-role"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-uri"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					// Verify datasource
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("data.temporalcloud_account_audit_log_sink.test", "state"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-role"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-uri"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
 				),
 			},
 			// ImportState testing
@@ -73,6 +71,12 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-updated-role"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-updated-uri"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					// Verify datasource reflects updates
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-updated-role"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-updated-uri"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
 				),
 			},
 			// Delete testing
@@ -88,10 +92,6 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 	t.Parallel()
-	accountAuditLogSinkTestLocks.Lock("account")
-	defer func() {
-		_ = accountAuditLogSinkTestLocks.Unlock("account")
-	}()
 
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -108,6 +108,13 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-sa"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-topic"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-project"),
+					// Verify datasource
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
+					resource.TestCheckResourceAttrSet("data.temporalcloud_account_audit_log_sink.test", "state"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-sa"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-topic"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-project"),
 				),
 			},
 			// ImportState testing
@@ -124,6 +131,12 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-updated-sa"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-updated-topic"),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-updated-project"),
+					// Verify datasource reflects updates
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-updated-sa"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-updated-topic"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-updated-project"),
 				),
 			},
 			// Delete testing
@@ -151,6 +164,10 @@ resource "temporalcloud_account_audit_log_sink" "test" {
     region         = %[2]q
   }
 }
+
+data "temporalcloud_account_audit_log_sink" "test" {
+  sink_name = temporalcloud_account_audit_log_sink.test.sink_name
+}
 `, sinkName, sinkRegion)
 }
 
@@ -164,6 +181,10 @@ resource "temporalcloud_account_audit_log_sink" "test" {
     destination_uri = "test-updated-uri"
     region         = %[2]q
   }
+}
+
+data "temporalcloud_account_audit_log_sink" "test" {
+  sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
 `, sinkName, sinkRegion)
 }
@@ -182,6 +203,10 @@ resource "temporalcloud_account_audit_log_sink" "test" {
     gcp_project_id     = "test-project"
   }
 }
+
+data "temporalcloud_account_audit_log_sink" "test" {
+  sink_name = temporalcloud_account_audit_log_sink.test.sink_name
+}
 `, sinkName)
 }
 
@@ -195,6 +220,10 @@ resource "temporalcloud_account_audit_log_sink" "test" {
     topic_name         = "test-updated-topic"
     gcp_project_id     = "test-updated-project"
   }
+}
+
+data "temporalcloud_account_audit_log_sink" "test" {
+  sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
 `, sinkName)
 }
