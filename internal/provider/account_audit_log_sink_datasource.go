@@ -82,6 +82,10 @@ func accountAuditLogSinkDataSourceSchema() map[string]schema.Attribute {
 					Description: "The GCP project ID of the PubSub topic and service account.",
 					Computed:    true,
 				},
+				"service_account_email": schema.StringAttribute{
+					Description: "The service account email associated with the PubSub topic and service account.",
+					Computed:    true,
+				},
 			},
 		},
 		"state": schema.StringAttribute{
@@ -176,9 +180,10 @@ func accountAuditLogSinkToAccountAuditLogSinkDataModel(ctx context.Context, audi
 	pubsubObj := types.ObjectNull(internaltypes.PubSubSpecModelAttrTypes)
 	if auditLogSink.GetSpec().GetPubSubSink() != nil {
 		pubsubSpec := internaltypes.PubSubSpecModel{
-			ServiceAccountId: types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetServiceAccountId()),
-			TopicName:        types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetTopicName()),
-			GcpProjectId:     types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetGcpProjectId()),
+			ServiceAccountId:    types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetServiceAccountId()),
+			TopicName:           types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetTopicName()),
+			GcpProjectId:        types.StringValue(auditLogSink.GetSpec().GetPubSubSink().GetGcpProjectId()),
+			ServiceAccountEmail: types.StringValue(fmt.Sprintf("%s@%s.iam.gserviceaccount.com", auditLogSink.GetSpec().GetPubSubSink().GetServiceAccountId(), auditLogSink.GetSpec().GetPubSubSink().GetGcpProjectId())),
 		}
 
 		pubsubObj, diags = types.ObjectValueFrom(ctx, internaltypes.PubSubSpecModelAttrTypes, pubsubSpec)

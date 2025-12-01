@@ -81,9 +81,13 @@ Required:
 
 Required:
 
-- `gcp_project_id` (String) The GCP project ID of the PubSub topic and service account.
-- `service_account_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's PubSub topic.
 - `topic_name` (String) The destination PubSub topic name for Temporal.
+
+Optional:
+
+- `gcp_project_id` (String) The GCP project ID of the PubSub topic and service account.
+- `service_account_email` (String) The service account email associated with the PubSub topic and service account.
+- `service_account_id` (String) The customer service account ID that Temporal Cloud impersonates for writing records to the customer's PubSub topic.
 
 
 <a id="nestedblock--timeouts"></a>

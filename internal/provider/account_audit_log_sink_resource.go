@@ -150,7 +150,8 @@ func (r *accountAuditLogSinkResource) Schema(ctx context.Context, req resource.S
 				Attributes: map[string]schema.Attribute{
 					"service_account_id": schema.StringAttribute{
 						Description: "The customer service account ID that Temporal Cloud impersonates for writing records to the customer's PubSub topic.",
-						Required:    true,
+						Optional:    true,
+						Computed:    true,
 					},
 					"topic_name": schema.StringAttribute{
 						Description: "The destination PubSub topic name for Temporal.",
@@ -158,7 +159,13 @@ func (r *accountAuditLogSinkResource) Schema(ctx context.Context, req resource.S
 					},
 					"gcp_project_id": schema.StringAttribute{
 						Description: "The GCP project ID of the PubSub topic and service account.",
-						Required:    true,
+						Optional:    true,
+						Computed:    true,
+					},
+					"service_account_email": schema.StringAttribute{
+						Description: "The service account email associated with the PubSub topic and service account.",
+						Optional:    true,
+						Computed:    true,
 					},
 				},
 				Validators: []validator.Object{
@@ -250,10 +257,12 @@ func updateAccountAuditLogSinkModelFromSpec(ctx context.Context, state *accountA
 
 	pubsubObj := types.ObjectNull(internaltypes.PubSubSpecModelAttrTypes)
 	if sink.GetSpec().GetPubSubSink() != nil {
+		saEmail := fmt.Sprintf("%s@%s.iam.gserviceaccount.com", sink.GetSpec().GetPubSubSink().GetServiceAccountId(), sink.GetSpec().GetPubSubSink().GetGcpProjectId())
 		pubsubSpec := internaltypes.PubSubSpecModel{
-			ServiceAccountId: types.StringValue(sink.GetSpec().GetPubSubSink().GetServiceAccountId()),
-			TopicName:        types.StringValue(sink.GetSpec().GetPubSubSink().GetTopicName()),
-			GcpProjectId:     types.StringValue(sink.GetSpec().GetPubSubSink().GetGcpProjectId()),
+			ServiceAccountId:    types.StringValue(sink.GetSpec().GetPubSubSink().GetServiceAccountId()),
+			TopicName:           types.StringValue(sink.GetSpec().GetPubSubSink().GetTopicName()),
+			GcpProjectId:        types.StringValue(sink.GetSpec().GetPubSubSink().GetGcpProjectId()),
+			ServiceAccountEmail: types.StringValue(saEmail),
 		}
 
 		pubsubObj, diags = types.ObjectValueFrom(ctx, internaltypes.PubSubSpecModelAttrTypes, pubsubSpec)
@@ -369,11 +378,23 @@ func getAccountAuditLogSinkSpecFromModel(ctx context.Context, plan *accountAudit
 		if diags.HasError() {
 			return nil, diags
 		}
+		saId := pubsubSpec.ServiceAccountId.ValueString()
+		gcpProjectId := pubsubSpec.GcpProjectId.ValueString()
+		if saId == "" && gcpProjectId == "" && pubsubSpec.ServiceAccountEmail.ValueString() != "" {
+			saId, gcpProjectId = parseSAPrincipal(pubsubSpec.ServiceAccountEmail.ValueString())
+		}
 
+		if saId == "" || gcpProjectId == "" {
+			diags.AddError(
+				"Missing Service Account Configuration",
+				"Either provide both service_account_id and gcp_project_id, or provide a valid service_account_email",
+			)
+			return nil, diags
+		}
 		pubsubSinkSpec := &sinkv1.PubSubSpec{
-			ServiceAccountId: pubsubSpec.ServiceAccountId.ValueString(),
+			ServiceAccountId: saId,
 			TopicName:        pubsubSpec.TopicName.ValueString(),
-			GcpProjectId:     pubsubSpec.GcpProjectId.ValueString(),
+			GcpProjectId:     gcpProjectId,
 		}
 
 		return &accountv1.AuditLogSinkSpec{

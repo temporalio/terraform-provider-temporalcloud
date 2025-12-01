@@ -29,9 +29,10 @@ var (
 	}
 
 	PubSubSpecModelAttrTypes = map[string]attr.Type{
-		"service_account_id": types.StringType,
-		"topic_name":         types.StringType,
-		"gcp_project_id":     types.StringType,
+		"service_account_id":    types.StringType,
+		"topic_name":            types.StringType,
+		"gcp_project_id":        types.StringType,
+		"service_account_email": types.StringType,
 	}
 )
 
@@ -89,4 +90,7 @@ type PubSubSpecModel struct {
 
 	// The GCP project ID of the PubSub topic and service account
 	GcpProjectId types.String `tfsdk:"gcp_project_id"`
+
+	// The service account email associated with the PubSub topic and service account
+	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
 }
