@@ -25,6 +25,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -48,6 +49,10 @@ import (
 	accountv1 "go.temporal.io/cloud-sdk/api/account/v1"
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	sinkv1 "go.temporal.io/cloud-sdk/api/sink/v1"
+)
+
+const (
+	defaultAuditLogSinkDeleteTimeout time.Duration = 10 * time.Minute
 )
 
 type (
@@ -287,7 +292,7 @@ func (r *accountAuditLogSinkResource) Delete(ctx context.Context, req resource.D
 		return
 	}
 
-	deleteTimeout, diags := plan.Timeouts.Delete(ctx, defaultDeleteTimeout)
+	deleteTimeout, diags := plan.Timeouts.Delete(ctx, defaultAuditLogSinkDeleteTimeout)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return

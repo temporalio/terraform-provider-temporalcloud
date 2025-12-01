@@ -30,8 +30,6 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
-	t.Parallel()
-
 	sinkRegion := "us-east-1"
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -91,8 +89,6 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
-	t.Parallel()
-
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
