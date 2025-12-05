@@ -21,6 +21,19 @@ var (
 		"region":                types.StringType,
 		"service_account_email": types.StringType,
 	}
+
+	KinesisSpecModelAttrTypes = map[string]attr.Type{
+		"role_name":       types.StringType,
+		"destination_uri": types.StringType,
+		"region":          types.StringType,
+	}
+
+	PubSubSpecModelAttrTypes = map[string]attr.Type{
+		"service_account_id":    types.StringType,
+		"topic_name":            types.StringType,
+		"gcp_project_id":        types.StringType,
+		"service_account_email": types.StringType,
+	}
 )
 
 type S3SpecModel struct {
@@ -54,5 +67,30 @@ type GCSSpecModel struct {
 	Region types.String `tfsdk:"region"`
 
 	// The service account email associated with the GCS bucket and service account
+	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
+}
+
+type KinesisSpecModel struct {
+	// The IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream
+	RoleName types.String `tfsdk:"role_name"`
+
+	// The destination URI of the Kinesis stream where Temporal will send data
+	DestinationUri types.String `tfsdk:"destination_uri"`
+
+	// The region of the Kinesis stream
+	Region types.String `tfsdk:"region"`
+}
+
+type PubSubSpecModel struct {
+	// The customer service account ID that Temporal Cloud impersonates for writing records to the customer's PubSub topic
+	ServiceAccountId types.String `tfsdk:"service_account_id"`
+
+	// The destination PubSub topic name for Temporal
+	TopicName types.String `tfsdk:"topic_name"`
+
+	// The GCP project ID of the PubSub topic and service account
+	GcpProjectId types.String `tfsdk:"gcp_project_id"`
+
+	// The service account email associated with the PubSub topic and service account
 	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
 }
