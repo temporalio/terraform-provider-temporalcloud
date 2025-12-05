@@ -179,6 +179,7 @@ func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resourc
 		NewUserGroupMembersResource,
 		NewGroupAccessResource,
 		NewConnectivityRuleResource,
+		NewAccountAuditLogSinkResource,
 	}
 }
 
@@ -195,6 +196,7 @@ func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datas
 		NewNexusEndpointDataSource,
 		NewNexusEndpointsDataSource,
 		NewConnectivityRuleDataSource,
+		NewAccountAuditLogSinkDataSource,
 	}
 }
 
