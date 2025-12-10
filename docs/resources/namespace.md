@@ -155,6 +155,7 @@ resource "temporalcloud_namespace" "terraform4" {
 
 - `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud. This is a required field when a Namespace uses mTLS authentication.
 - `api_key_auth` (Boolean) If true, Temporal Cloud will enable API key authentication for this namespace.
+- `capacity` (Attributes) The capacity configuration for the namespace. (see [below for nested schema](#nestedatt--capacity))
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (List of String) The IDs of the connectivity rules for this namespace.
@@ -165,6 +166,15 @@ resource "temporalcloud_namespace" "terraform4" {
 
 - `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--endpoints))
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
+
+<a id="nestedatt--capacity"></a>
+### Nested Schema for `capacity`
+
+Optional:
+
+- `mode` (String) The mode of the capacity configuration. Must be one of 'provisioned' or 'on_demand'.
+- `value` (Number) The value of the capacity configuration. Must be set when mode is 'provisioned'.
+
 
 <a id="nestedatt--certificate_filters"></a>
 ### Nested Schema for `certificate_filters`

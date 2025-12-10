@@ -17,7 +17,7 @@ Provisions a namespace export sink.
 
 ### Required
 
-- `namespace` (String) The namespace under which the sink is configured. It's needed to be in the format of <namespace>.<account_id>
+- `namespace` (String) The namespace under which the sink is configured, formatted as `<namespace>.<account_id>`
 - `sink_name` (String) The unique name of the export sink, it can't be changed once set.
 
 ### Optional
@@ -53,9 +53,12 @@ Required:
 
 - `aws_account_id` (String) The AWS account ID associated with the S3 bucket and the assumed role.
 - `bucket_name` (String) The name of the destination S3 bucket where Temporal will send data.
-- `kms_arn` (String) The AWS Key Management Service (KMS) ARN used for encryption.
 - `region` (String) The region where the S3 bucket is located.
 - `role_name` (String) The IAM role that Temporal Cloud assumes for writing records to the customer's S3 bucket.
+
+Optional:
+
+- `kms_arn` (String) The AWS Key Management Service (KMS) ARN used for encryption.
 
 
 <a id="nestedblock--timeouts"></a>
