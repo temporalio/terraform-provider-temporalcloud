@@ -100,7 +100,7 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 		},
 		"account_access": schema.StringAttribute{
 			CustomType:  internaltypes.CaseInsensitiveStringType{},
-			Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
+			Description: "The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).",
 			Computed:    true,
 		},
 		"namespace_accesses": schema.SetNestedAttribute{
