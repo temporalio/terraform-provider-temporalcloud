@@ -288,7 +288,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Computed: true,
 			},
 			"namespace_lifecycle": schema.SingleNestedAttribute{
-				Description: "The lifecycle configuration for the namespace.",
+				Description: "The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud.",
 				CustomType: internaltypes.ZeroObjectType{
 					ObjectType: basetypes.ObjectType{
 						AttrTypes: lifecycleAttrs,
