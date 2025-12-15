@@ -83,6 +83,7 @@ type (
 		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
 		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
 		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
+		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
 	}
 
 	lifecycleModel struct {
@@ -106,6 +107,11 @@ type (
 		WebAddress      types.String `tfsdk:"web_address"`
 		GrpcAddress     types.String `tfsdk:"grpc_address"`
 		MtlsGrpcAddress types.String `tfsdk:"mtls_grpc_address"`
+	}
+
+	capacityModel struct {
+		Mode  types.String  `tfsdk:"mode"`
+		Value types.Float64 `tfsdk:"value"`
 	}
 )
 
@@ -135,6 +141,11 @@ var (
 		"web_address":       types.StringType,
 		"grpc_address":      types.StringType,
 		"mtls_grpc_address": types.StringType,
+	}
+
+	capacityAttrs = map[string]attr.Type{
+		"mode":  types.StringType,
+		"value": types.Float64Type,
 	}
 )
 
@@ -277,7 +288,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Computed: true,
 			},
 			"namespace_lifecycle": schema.SingleNestedAttribute{
-				Description: "The lifecycle configuration for the namespace.",
+				Description: "The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud.",
 				CustomType: internaltypes.ZeroObjectType{
 					ObjectType: basetypes.ObjectType{
 						AttrTypes: lifecycleAttrs,
@@ -302,6 +313,25 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Validators: []validator.List{
 					listvalidator.SizeAtLeast(1),
+				},
+			},
+			"capacity": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "The capacity configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: capacityAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"mode": schema.StringAttribute{
+						Description: "The mode of the capacity configuration. Must be one of 'provisioned' or 'on_demand'.",
+						Optional:    true,
+					},
+					"value": schema.Float64Attribute{
+						Description: "The value of the capacity configuration. Must be set when mode is 'provisioned'.",
+						Optional:    true,
+					},
 				},
 			},
 		},
@@ -374,6 +404,19 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		CodecServer:         codecServer,
 		Lifecycle:           lifecycle,
 		ConnectivityRuleIds: connectivityRuleIds,
+	}
+
+	if !plan.Capacity.IsNull() {
+		resp.Diagnostics.AddError("Capacity on namespace creation is not supported", "capacity should be null or not set when creating a namespace")
+		return
+		// This will be enabled when capacity on namespace creation is supported
+		// var d diag.Diagnostics
+		// capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		// resp.Diagnostics.Append(d...)
+		// if resp.Diagnostics.HasError() {
+		// 	return
+		// }
+		// spec.CapacitySpec = capacitySpec
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -569,6 +612,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		}
 
 		spec.MtlsAuth = mtls
+	}
+
+	if !plan.Capacity.IsNull() {
+		var d diag.Diagnostics
+		capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.CapacitySpec = capacitySpec
 	}
 
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
@@ -824,8 +877,41 @@ func updateModelFromSpec(
 		connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
 			ListValue: planConnectivityRuleIds,
 		}
-
 	}
+
+	capacitySpec := ns.GetSpec().GetCapacitySpec()
+	if capacitySpec != nil {
+		var capacityMode types.String
+		var capacityValue types.Float64
+		if capacitySpec.GetOnDemand() != nil {
+			capacityMode = types.StringValue("on_demand")
+			// For on_demand mode, set value to 0 if it's in the current state, otherwise leave it null
+			if !state.Capacity.IsNull() {
+				var currentCapacity capacityModel
+				diags.Append(state.Capacity.As(ctx, &currentCapacity, basetypes.ObjectAsOptions{})...)
+				if !diags.HasError() && !currentCapacity.Value.IsNull() {
+					// Preserve the value from state if it exists
+					capacityValue = currentCapacity.Value
+				}
+			}
+		} else if capacitySpec.GetProvisioned() != nil {
+			capacityMode = types.StringValue("provisioned")
+			capacityValue = types.Float64Value(capacitySpec.GetProvisioned().GetValue())
+		}
+		cp, objectDiags := types.ObjectValueFrom(ctx, capacityAttrs, &capacityModel{
+			Mode:  capacityMode,
+			Value: capacityValue,
+		})
+		capacity := internaltypes.ZeroObjectValue{ObjectValue: cp}
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.Capacity = capacity
+	} else {
+		state.Capacity = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(capacityAttrs)}
+	}
+
 	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
@@ -891,6 +977,38 @@ func getLifecycleFromModel(ctx context.Context, model *namespaceResourceModel) (
 	return &namespacev1.LifecycleSpec{
 		EnableDeleteProtection: lifecycle.EnableDeleteProtection.ValueBool(),
 	}, diags
+}
+
+func getCapacityFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.CapacitySpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var capacity capacityModel
+	diags.Append(model.Capacity.As(ctx, &capacity, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	switch capacity.Mode.ValueString() {
+	case "provisioned":
+		if capacity.Value.IsNull() || capacity.Value.ValueFloat64() <= 0 {
+			diags.Append(diag.NewErrorDiagnostic("Invalid capacity value", "Capacity value must be set when mode is 'provisioned'"))
+			return nil, diags
+		}
+		return &namespacev1.CapacitySpec{
+			Spec: &namespacev1.CapacitySpec_Provisioned_{
+				Provisioned: &namespacev1.CapacitySpec_Provisioned{
+					Value: capacity.Value.ValueFloat64(),
+				},
+			},
+		}, diags
+	case "on_demand":
+		return &namespacev1.CapacitySpec{
+			Spec: &namespacev1.CapacitySpec_OnDemand_{
+				OnDemand: &namespacev1.CapacitySpec_OnDemand{},
+			},
+		}, diags
+	default:
+		diags.Append(diag.NewErrorDiagnostic("Invalid capacity mode", "Invalid capacity mode: "+capacity.Mode.ValueString()))
+		return nil, diags
+	}
 }
 
 func stringOrNull(s string) types.String {
