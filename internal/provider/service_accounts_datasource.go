@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -39,14 +40,19 @@ type (
 	}
 
 	serviceAccountNSAccessModel struct {
-		NamespaceID types.String `tfsdk:"namespace_id"`
-		Permission  types.String `tfsdk:"permission"`
+		NamespaceID types.String                             `tfsdk:"namespace_id"`
+		Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
 	}
 )
 
 var (
 	_ datasource.DataSource              = (*serviceAccountsDataSource)(nil)
 	_ datasource.DataSourceWithConfigure = (*serviceAccountsDataSource)(nil)
+
+	serviceAccountNamespaceAccessAttrs = map[string]attr.Type{
+		"namespace_id": types.StringType,
+		"permission":   internaltypes.CaseInsensitiveStringType{},
+	}
 )
 
 func NewServiceAccountsDataSource() datasource.DataSource {
@@ -116,7 +122,7 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 						Computed:    true,
 					},
 					"permission": schema.StringAttribute{
-						CustomType:  types.StringType,
+						CustomType:  internaltypes.CaseInsensitiveStringType{},
 						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive).",
 						Computed:    true,
 					},
@@ -238,7 +244,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 
 		model := serviceAccountNSAccessModel{
 			NamespaceID: types.StringValue(namespaceScopedAccess.GetNamespace()),
-			Permission:  types.StringValue(permission),
+			Permission:  internaltypes.CaseInsensitiveString(permission),
 		}
 
 		obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
@@ -273,7 +279,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 
 				model := serviceAccountNSAccessModel{
 					NamespaceID: types.StringValue(ns),
-					Permission:  types.StringValue(permission),
+					Permission:  internaltypes.CaseInsensitiveString(permission),
 				}
 				obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
 				diags.Append(d...)
