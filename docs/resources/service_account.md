@@ -54,7 +54,7 @@ resource "temporalcloud_service_account" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of admin, developer, or read (case-insensitive).
+- `account_access` (String) The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).
 - `name` (String) The name associated with the service account.
 
 ### Optional
