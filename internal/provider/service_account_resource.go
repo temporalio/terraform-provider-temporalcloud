@@ -528,12 +528,13 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 
 		obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
 		diags.Append(d...)
+
 		if diags.HasError() {
 			return diags
 		}
 
 		state.NamespaceScopedAccess = obj
-		state.AccountAccess = internaltypes.CaseInsensitiveStringValue{}
+		state.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
 		state.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	} else {
 		// Handle account-scoped service account

@@ -248,7 +248,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 		}
 
 		serviceAccountModel.NamespaceScopedAccess = obj
-		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveStringValue{}
+		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
 		serviceAccountModel.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	} else {
 		// Handle account-scoped service account
