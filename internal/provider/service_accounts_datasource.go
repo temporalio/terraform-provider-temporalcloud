@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -26,19 +27,20 @@ type (
 	}
 
 	serviceAccountDataModel struct {
-		ID                types.String                             `tfsdk:"id"`
-		Name              types.String                             `tfsdk:"name"`
-		Description       types.String                             `tfsdk:"description"`
-		State             types.String                             `tfsdk:"state"`
-		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
-		CreatedAt         types.String                             `tfsdk:"created_at"`
-		UpdatedAt         types.String                             `tfsdk:"updated_at"`
+		ID                    types.String                             `tfsdk:"id"`
+		Name                  types.String                             `tfsdk:"name"`
+		Description           types.String                             `tfsdk:"description"`
+		State                 types.String                             `tfsdk:"state"`
+		AccountAccess         internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		NamespaceAccesses     types.Set                                `tfsdk:"namespace_accesses"`
+		NamespaceScopedAccess types.Object                             `tfsdk:"namespace_scoped_access"`
+		CreatedAt             types.String                             `tfsdk:"created_at"`
+		UpdatedAt             types.String                             `tfsdk:"updated_at"`
 	}
 
 	serviceAccountNSAccessModel struct {
-		NamespaceID types.String `tfsdk:"namespace_id"`
-		Permission  types.String `tfsdk:"permission"`
+		NamespaceID types.String                             `tfsdk:"namespace_id"`
+		Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
 	}
 )
 
@@ -114,10 +116,25 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 						Computed:    true,
 					},
 					"permission": schema.StringAttribute{
-						CustomType:  types.StringType,
-						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
+						CustomType:  internaltypes.CaseInsensitiveStringType{},
+						Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive).",
 						Computed:    true,
 					},
+				},
+			},
+		},
+		"namespace_scoped_access": schema.SingleNestedAttribute{
+			Description: "The namespace-scoped access configuration for this service account.",
+			Computed:    true,
+			Attributes: map[string]schema.Attribute{
+				"namespace_id": schema.StringAttribute{
+					Description: "The namespace this service account is scoped to.",
+					Computed:    true,
+				},
+				"permission": schema.StringAttribute{
+					CustomType:  internaltypes.CaseInsensitiveStringType{},
+					Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive).",
+					Computed:    true,
 				},
 			},
 		},
@@ -210,46 +227,73 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 		UpdatedAt:   types.StringValue(sa.GetLastModifiedTime().AsTime().GoString()),
 	}
 
-	role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
-	if err != nil {
-		diags.AddError("Failed to convert account access role", err.Error())
-		return nil, diags
-	}
-
-	serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
-
-	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
-
-	if len(sa.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
-		namespaceAccessObjects := make([]types.Object, 0)
-		for ns, namespaceAccess := range sa.GetSpec().GetAccess().GetNamespaceAccesses() {
-			permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
-			if err != nil {
-				diags.AddError("Failed to convert namespace access permission", err.Error())
-				return nil, diags
-			}
-
-			model := serviceAccountNSAccessModel{
-				NamespaceID: types.StringValue(ns),
-				Permission:  types.StringValue(permission),
-			}
-			obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
-			diags.Append(d...)
-			if diags.HasError() {
-				return nil, diags
-			}
-
-			namespaceAccessObjects = append(namespaceAccessObjects, obj)
+	// Check if this is a namespace-scoped service account
+	if sa.GetSpec().GetNamespaceScopedAccess() != nil {
+		namespaceScopedAccess := sa.GetSpec().GetNamespaceScopedAccess()
+		permission, err := enums.FromNamespaceAccessPermission(namespaceScopedAccess.GetAccess().GetPermission())
+		if err != nil {
+			diags.AddError("Failed to convert namespace access permission", err.Error())
+			return nil, diags
 		}
 
-		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+		model := serviceAccountNSAccessModel{
+			NamespaceID: types.StringValue(namespaceScopedAccess.GetNamespace()),
+			Permission:  internaltypes.CaseInsensitiveString(permission),
+		}
+
+		obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
 		diags.Append(d...)
 		if diags.HasError() {
 			return nil, diags
 		}
-		namespaceAccesses = accesses
+
+		serviceAccountModel.NamespaceScopedAccess = obj
+		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
+		serviceAccountModel.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+	} else {
+		// Handle account-scoped service account
+		role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
+		if err != nil {
+			diags.AddError("Failed to convert account access role", err.Error())
+			return nil, diags
+		}
+
+		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
+
+		namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+
+		if len(sa.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
+			namespaceAccessObjects := make([]types.Object, 0)
+			for ns, namespaceAccess := range sa.GetSpec().GetAccess().GetNamespaceAccesses() {
+				permission, err := enums.FromNamespaceAccessPermission(namespaceAccess.GetPermission())
+				if err != nil {
+					diags.AddError("Failed to convert namespace access permission", err.Error())
+					return nil, diags
+				}
+
+				model := serviceAccountNSAccessModel{
+					NamespaceID: types.StringValue(ns),
+					Permission:  internaltypes.CaseInsensitiveString(permission),
+				}
+				obj, d := types.ObjectValueFrom(ctx, serviceAccountNamespaceAccessAttrs, model)
+				diags.Append(d...)
+				if diags.HasError() {
+					return nil, diags
+				}
+
+				namespaceAccessObjects = append(namespaceAccessObjects, obj)
+			}
+
+			accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}, namespaceAccessObjects)
+			diags.Append(d...)
+			if diags.HasError() {
+				return nil, diags
+			}
+			namespaceAccesses = accesses
+		}
+		serviceAccountModel.NamespaceAccesses = namespaceAccesses
+		serviceAccountModel.NamespaceScopedAccess = types.ObjectNull(serviceAccountNamespaceAccessAttrs)
 	}
-	serviceAccountModel.NamespaceAccesses = namespaceAccesses
 
 	return serviceAccountModel, diags
 }
