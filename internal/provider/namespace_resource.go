@@ -311,9 +311,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
 				},
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
-				},
 			},
 			"capacity": schema.SingleNestedAttribute{
 				Optional:    true,
@@ -862,13 +859,28 @@ func updateModelFromSpec(
 	}
 
 	// Handle connectivity rule IDs - preserve the intent from the plan
-
-	connectivityRuleIdsState := internaltypes.UnorderedStringListValue{
-		ListValue: types.ListNull(types.StringType),
-	}
 	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
-	if len(connectivityRuleIds) > 0 {
-		// Use API response values
+	var connectivityRuleIdsState internaltypes.UnorderedStringListValue
+
+	if len(connectivityRuleIds) == 0 {
+		// API returns empty, preserve what was in the plan
+		if state.ConnectivityRuleIds.IsNull() {
+			// Plan had null (not set), keep null
+			connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
+				ListValue: types.ListNull(types.StringType),
+			}
+		} else {
+			// Plan had empty list (explicitly set to []), keep empty list
+			emptyList, listDiags := types.ListValue(types.StringType, []attr.Value{})
+			diags.Append(listDiags...)
+			if diags.HasError() {
+				return diags
+			}
+			connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
+				ListValue: emptyList,
+			}
+		}
+	} else {
 		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
 		diags.Append(listDiags...)
 		if diags.HasError() {
