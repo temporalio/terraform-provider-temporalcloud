@@ -37,6 +37,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 
@@ -81,7 +82,7 @@ type (
 		CodecServer         types.Object                           `tfsdk:"codec_server"`
 		Endpoints           types.Object                           `tfsdk:"endpoints"`
 		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
-		ConnectivityRuleIds internaltypes.UnorderedStringListValue `tfsdk:"connectivity_rule_ids"`
+		ConnectivityRuleIds types.Set                              `tfsdk:"connectivity_rule_ids"`
 		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
 		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
 	}
@@ -304,15 +305,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 				Optional: true,
 			},
-			"connectivity_rule_ids": schema.ListAttribute{
+			"connectivity_rule_ids": schema.SetAttribute{
 				Description: "The IDs of the connectivity rules for this namespace.",
 				Optional:    true,
 				ElementType: types.StringType,
-				CustomType: internaltypes.UnorderedStringListType{
-					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
-				},
-				Validators: []validator.List{
-					listvalidator.SizeAtLeast(1),
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
 				},
 			},
 			"capacity": schema.SingleNestedAttribute{
@@ -861,22 +859,16 @@ func updateModelFromSpec(
 		return diags
 	}
 
-	// Handle connectivity rule IDs - preserve the intent from the plan
-
-	connectivityRuleIdsState := internaltypes.UnorderedStringListValue{
-		ListValue: types.ListNull(types.StringType),
-	}
+	// Handle connectivity rule IDs
 	connectivityRuleIds := ns.GetSpec().GetConnectivityRuleIds()
+	connectivityRuleIdsState := types.SetNull(types.StringType)
 	if len(connectivityRuleIds) > 0 {
-		// Use API response values
-		planConnectivityRuleIds, listDiags := types.ListValueFrom(ctx, types.StringType, connectivityRuleIds)
-		diags.Append(listDiags...)
+		connectivityRuleIdsSet, setDiags := types.SetValueFrom(ctx, types.StringType, connectivityRuleIds)
+		diags.Append(setDiags...)
 		if diags.HasError() {
 			return diags
 		}
-		connectivityRuleIdsState = internaltypes.UnorderedStringListValue{
-			ListValue: planConnectivityRuleIds,
-		}
+		connectivityRuleIdsState = connectivityRuleIdsSet
 	}
 
 	capacitySpec := ns.GetSpec().GetCapacitySpec()

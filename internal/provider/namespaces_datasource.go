@@ -56,7 +56,7 @@ type (
 		Limits                 types.Object                  `tfsdk:"limits"`
 		CreatedTime            types.String                  `tfsdk:"created_time"`
 		LastModifiedTime       types.String                  `tfsdk:"last_modified_time"`
-		ConnectivityRuleIds    types.List                    `tfsdk:"connectivity_rule_ids"`
+		ConnectivityRuleIds    types.Set                     `tfsdk:"connectivity_rule_ids"`
 		NamespaceLifecycle     internaltypes.ZeroObjectValue `tfsdk:"namespace_lifecycle"`
 		Tags                   types.Map                     `tfsdk:"tags"`
 	}
@@ -280,7 +280,7 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			Optional:    true,
 			Description: "The date and time when the namespace was last modified. Will not be set if the namespace has never been modified.",
 		},
-		"connectivity_rule_ids": schema.ListAttribute{
+		"connectivity_rule_ids": schema.SetAttribute{
 			Computed:    true,
 			Optional:    true,
 			Description: "The IDs of the connectivity rules for this namespace.",
@@ -535,18 +535,18 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	namespaceModel.Limits = limits
 
 	// Initialize ConnectivityRuleIds with proper type
-	connectivityRuleIds := types.ListNull(types.StringType)
+	connectivityRuleIds := types.SetNull(types.StringType)
 	if len(ns.GetSpec().GetConnectivityRuleIds()) > 0 {
 		var connectivityRuleIdStrs []attr.Value
 		for _, id := range ns.GetSpec().GetConnectivityRuleIds() {
 			connectivityRuleIdStrs = append(connectivityRuleIdStrs, types.StringValue(id))
 		}
-		connectivityRuleIdsList, listDiags := types.ListValue(types.StringType, connectivityRuleIdStrs)
-		diags.Append(listDiags...)
+		connectivityRuleIdsSet, setDiags := types.SetValue(types.StringType, connectivityRuleIdStrs)
+		diags.Append(setDiags...)
 		if diags.HasError() {
 			return nil, diags
 		}
-		connectivityRuleIds = connectivityRuleIdsList
+		connectivityRuleIds = connectivityRuleIdsSet
 	}
 	namespaceModel.ConnectivityRuleIds = connectivityRuleIds
 
