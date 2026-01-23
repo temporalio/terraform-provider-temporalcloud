@@ -642,7 +642,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 			for _, ruleName := range includeRules {
 				ruleRefs = append(ruleRefs, fmt.Sprintf("temporalcloud_connectivity_rule.%s.id", ruleName))
 			}
-			connectivityRulesConfig = fmt.Sprintf("connectivity_rule_ids = {%s}", strings.Join(ruleRefs, ", "))
+			connectivityRulesConfig = fmt.Sprintf("connectivity_rule_ids = [%s]", strings.Join(ruleRefs, ", "))
 		}
 
 		config := fmt.Sprintf(`
