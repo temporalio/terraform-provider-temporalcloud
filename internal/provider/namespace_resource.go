@@ -276,14 +276,23 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					"grpc_address": schema.StringAttribute{
 						Description: "The gRPC address for API key client connections (may be empty if API keys are disabled).",
 						Computed:    true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"mtls_grpc_address": schema.StringAttribute{
 						Description: "The gRPC address for mTLS client connections (may be empty if mTLS is disabled).",
 						Computed:    true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 					"web_address": schema.StringAttribute{
 						Description: "The address in the Temporal Cloud Web UI for the namespace",
 						Computed:    true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.UseStateForUnknown(),
+						},
 					},
 				},
 				Computed: true,
