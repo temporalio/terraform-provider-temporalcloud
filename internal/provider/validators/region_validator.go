@@ -28,14 +28,14 @@ var validRegions = map[string]bool{
 	"aws-us-east-2":      true, // Ohio
 	"aws-us-west-2":      true, // Oregon
 	// GCP regions (5)
-	"gcp-asia-south1":   true, // Mumbai
-	"gcp-europe-west3":  true, // Frankfurt
-	"gcp-us-central1":   true, // Iowa
-	"gcp-us-east4":      true, // N. Virginia
-	"gcp-us-west1":      true, // Oregon
+	"gcp-asia-south1":  true, // Mumbai
+	"gcp-europe-west3": true, // Frankfurt
+	"gcp-us-central1":  true, // Iowa
+	"gcp-us-east4":     true, // N. Virginia
+	"gcp-us-west1":     true, // Oregon
 }
 
-// regionFormatPattern validates that a region follows the expected format
+// regionFormatPattern validates that a region follows the expected format.
 var regionFormatPattern = regexp.MustCompile(`^(aws|gcp)-[a-z0-9-]+$`)
 
 type regionValidator struct{}

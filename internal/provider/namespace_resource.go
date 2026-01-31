@@ -57,8 +57,8 @@ import (
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
-	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/validators"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 const (
