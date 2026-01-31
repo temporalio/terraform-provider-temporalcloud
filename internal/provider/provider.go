@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/ephemeral"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -17,7 +18,10 @@ import (
 )
 
 // Ensure TerraformCloudProvider satisfies various provider interfaces.
-var _ provider.Provider = &TerraformCloudProvider{}
+var (
+	_ provider.Provider                       = &TerraformCloudProvider{}
+	_ provider.ProviderWithEphemeralResources = &TerraformCloudProvider{}
+)
 
 // TerraformCloudProvider defines the provider implementation.
 type TerraformCloudProvider struct {
@@ -162,6 +166,7 @@ func (p *TerraformCloudProvider) Configure(ctx context.Context, req provider.Con
 
 	resp.DataSourceData = cc
 	resp.ResourceData = cc
+	resp.EphemeralResourceData = cc
 }
 
 func (p *TerraformCloudProvider) Resources(ctx context.Context) []func() resource.Resource {
@@ -197,6 +202,12 @@ func (p *TerraformCloudProvider) DataSources(ctx context.Context) []func() datas
 		NewNexusEndpointsDataSource,
 		NewConnectivityRuleDataSource,
 		NewAccountAuditLogSinkDataSource,
+	}
+}
+
+func (p *TerraformCloudProvider) EphemeralResources(ctx context.Context) []func() ephemeral.EphemeralResource {
+	return []func() ephemeral.EphemeralResource{
+		NewApiKeyEphemeralResource,
 	}
 }
 
