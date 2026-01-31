@@ -86,7 +86,7 @@ resource "temporalcloud_namespace" "test" {
 			{
 				// Name ends with hyphen
 				Config:      config("invalid-"),
-				ExpectError: regexp.MustCompile(`must start with a lowercase letter.*end with a letter or number`),
+				ExpectError: regexp.MustCompile(`(?s)must start with a lowercase letter.*end with a letter or number`),
 			},
 			{
 				// Name contains uppercase
