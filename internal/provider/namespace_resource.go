@@ -58,6 +58,7 @@ import (
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/validators"
 )
 
 const (
@@ -202,6 +203,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(validators.Region()),
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
