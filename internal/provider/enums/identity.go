@@ -103,7 +103,8 @@ func FromAccountAccess(access *identity.AccountAccess) (string, error) {
 		return FromAccountAccessRole(access.GetRole())
 	}
 
-	// Fall back to the deprecated string field if the enum is unspecified
+	// Fall back to the deprecated string field if the enum is unspecified.
+	//nolint:staticcheck // SA1019: RoleDeprecated still used by older Temporal Cloud accounts.
 	if deprecated := access.GetRoleDeprecated(); deprecated != "" {
 		return strings.ToLower(deprecated), nil
 	}
