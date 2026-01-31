@@ -32,13 +32,13 @@ type (
 		Description types.String `tfsdk:"description"`
 		ExpiryTime  types.String `tfsdk:"expiry_time"`
 		Disabled    types.Bool   `tfsdk:"disabled"`
-		// Computed outputs
+		// Computed outputs.
 		ID    types.String `tfsdk:"id"`
 		State types.String `tfsdk:"state"`
 		Token types.String `tfsdk:"token"`
 	}
 
-	// privateData stores API key info for cleanup in Close
+	// privateData stores API key info for cleanup in Close.
 	apiKeyPrivateData struct {
 		KeyID           string `json:"key_id"`
 		ResourceVersion string `json:"resource_version"`
@@ -104,7 +104,7 @@ func (r *apiKeyEphemeralResource) Schema(ctx context.Context, _ ephemeral.Schema
 				Description: "Whether the API key is disabled. Defaults to false.",
 				Optional:    true,
 			},
-			// Computed outputs
+			// Computed outputs.
 			"id": schema.StringAttribute{
 				Description: "The unique identifier of the API key.",
 				Computed:    true,
@@ -129,7 +129,7 @@ func (r *apiKeyEphemeralResource) Open(ctx context.Context, req ephemeral.OpenRe
 		return
 	}
 
-	// Parse the expiry time
+	// Parse the expiry time.
 	expiryTimeString := config.ExpiryTime.ValueString()
 	expiryTime, err := time.Parse(time.RFC3339, expiryTimeString)
 	if err != nil {
@@ -197,7 +197,7 @@ func (r *apiKeyEphemeralResource) Open(ctx context.Context, req ephemeral.OpenRe
 		return
 	}
 
-	// Update the model with computed values
+	// Update the model with computed values.
 	stateStr, err := enums.FromResourceState(apiKey.ApiKey.GetState())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to convert API key state", err.Error())
@@ -210,7 +210,7 @@ func (r *apiKeyEphemeralResource) Open(ctx context.Context, req ephemeral.OpenRe
 
 	resp.Diagnostics.Append(resp.Result.Set(ctx, &config)...)
 
-	// Store private data for cleanup in Close
+	// Store private data for cleanup in Close.
 	privateData := apiKeyPrivateData{
 		KeyID:           apiKey.ApiKey.GetId(),
 		ResourceVersion: apiKey.ApiKey.GetResourceVersion(),
@@ -228,7 +228,7 @@ func (r *apiKeyEphemeralResource) Open(ctx context.Context, req ephemeral.OpenRe
 }
 
 func (r *apiKeyEphemeralResource) Close(ctx context.Context, req ephemeral.CloseRequest, resp *ephemeral.CloseResponse) {
-	// Retrieve private data
+	// Retrieve private data.
 	privateDataBytes, diags := req.Private.GetKey(ctx, "apikey")
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() || len(privateDataBytes) == 0 {
@@ -253,7 +253,7 @@ func (r *apiKeyEphemeralResource) Close(ctx context.Context, req ephemeral.Close
 		"id": privateData.KeyID,
 	})
 
-	// Get current resource version in case it changed
+	// Get current resource version in case it changed.
 	apiKey, err := r.client.CloudService().GetApiKey(ctx, &cloudservicev1.GetApiKeyRequest{
 		KeyId: privateData.KeyID,
 	})

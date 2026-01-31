@@ -20,7 +20,7 @@ func TestApiKeyEphemeralSchema(t *testing.T) {
 		t.Fatalf("Schema method diagnostics: %+v", schemaResponse.Diagnostics)
 	}
 
-	// Validate required attributes exist
+	// Validate required attributes exist.
 	requiredAttrs := []string{"owner_type", "owner_id", "display_name", "expiry_time"}
 	for _, attrName := range requiredAttrs {
 		attr, ok := schemaResponse.Schema.Attributes[attrName]
@@ -33,7 +33,7 @@ func TestApiKeyEphemeralSchema(t *testing.T) {
 		}
 	}
 
-	// Validate computed attributes exist
+	// Validate computed attributes exist.
 	computedAttrs := []string{"id", "state", "token"}
 	for _, attrName := range computedAttrs {
 		attr, ok := schemaResponse.Schema.Attributes[attrName]
@@ -46,7 +46,7 @@ func TestApiKeyEphemeralSchema(t *testing.T) {
 		}
 	}
 
-	// Validate token is sensitive
+	// Validate token is sensitive.
 	tokenAttr, ok := schemaResponse.Schema.Attributes["token"]
 	if !ok {
 		t.Fatal("Expected token attribute to exist")
