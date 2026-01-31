@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"time"
@@ -183,10 +184,17 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		Description: "Provisions a Temporal Cloud namespace. \n\nRegions available in Temporal Cloud: https://docs.temporal.io/cloud/regions. \n\nNote that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
-				Description: "The name of the namespace.",
+				Description: "The name of the namespace. Must be 2-64 characters, start with a letter, contain only lowercase letters, numbers, and hyphens, and not end with a hyphen.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(2, 64),
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$`),
+						"must start with a lowercase letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
+					),
 				},
 			},
 			"id": schema.StringAttribute{

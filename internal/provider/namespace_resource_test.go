@@ -45,6 +45,63 @@ func TestNamespaceSchema(t *testing.T) {
 	}
 }
 
+func TestAccNamespaceNameValidation(t *testing.T) {
+	config := func(name string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_namespace" "test" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  api_key_auth       = true
+  retention_days     = 7
+}`, name)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Name too short (1 char)
+				Config:      config("a"),
+				ExpectError: regexp.MustCompile(`string length must be between 2 and 64`),
+			},
+			{
+				// Name too long (65 chars)
+				Config:      config("a" + strings.Repeat("b", 64)),
+				ExpectError: regexp.MustCompile(`string length must be between 2 and 64`),
+			},
+			{
+				// Name starts with number
+				Config:      config("1invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name starts with hyphen
+				Config:      config("-invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name ends with hyphen
+				Config:      config("invalid-"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter.*end with a letter or number`),
+			},
+			{
+				// Name contains uppercase
+				Config:      config("Invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name contains underscore
+				Config:      config("invalid_name"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+		},
+	})
+}
+
 func TestAccBasicNamespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int, deleteProtection bool) string {
