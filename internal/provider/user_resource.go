@@ -107,7 +107,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"email": schema.StringAttribute{
-				CustomType: internaltypes.CaseInsensitiveStringType{},
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The email address for the user.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
