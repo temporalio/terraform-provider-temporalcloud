@@ -20,7 +20,7 @@ type (
 
 	userDataModel struct {
 		ID                types.String                             `tfsdk:"id"`
-		Email             types.String                             `tfsdk:"email"`
+		Email             internaltypes.CaseInsensitiveStringValue `tfsdk:"email"`
 		State             types.String                             `tfsdk:"state"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
@@ -44,7 +44,7 @@ func userToUserDataModel(ctx context.Context, sa *identityv1.User) (*userDataMod
 
 	userModel := &userDataModel{
 		ID:        types.StringValue(sa.Id),
-		Email:     types.StringValue(sa.GetSpec().GetEmail()),
+		Email:     internaltypes.CaseInsensitiveString(sa.GetSpec().GetEmail()),
 		State:     types.StringValue(stateStr),
 		CreatedAt: types.StringValue(sa.GetCreatedTime().AsTime().GoString()),
 		UpdatedAt: types.StringValue(sa.GetLastModifiedTime().AsTime().GoString()),
@@ -109,6 +109,7 @@ func userSchema(idRequired bool) map[string]schema.Attribute {
 	return map[string]schema.Attribute{
 		"id": idAttribute,
 		"email": schema.StringAttribute{
+			CustomType:  internaltypes.CaseInsensitiveStringType{},
 			Description: "The email of the User.",
 			Computed:    true,
 		},

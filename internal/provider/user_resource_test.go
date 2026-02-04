@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"text/template"
 
@@ -50,6 +51,17 @@ func createRandomEmail() string {
 	return fmt.Sprintf("%s+terraformprovider-%s@%s", emailBaseAddr, randomString(10), emailDomain)
 }
 
+// createCapitalizedEmail returns an email with uppercase letters in the local part.
+// Used to verify that API normalization to lowercase does not cause "inconsistent result" (issue #397).
+func createCapitalizedEmail() string {
+	base := createRandomEmail()
+	at := strings.Index(base, "@")
+	if at < 0 {
+		return base
+	}
+	return strings.ToUpper(base[:at]) + base[at:]
+}
+
 func TestAccBasicUser(t *testing.T) {
 	emailAddr := createRandomEmail()
 	config := func(email string, role string) string {
@@ -78,6 +90,41 @@ resource "temporalcloud_user" "terraform" {
 			},
 			{
 				Config: config(emailAddr, "admin"),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
+			},
+		},
+	})
+}
+
+// TestAccUserWithCapitalizedEmail verifies that creating a user with capitalization in the email
+// does not produce "Provider produced inconsistent result after apply" (issue #397).
+// The Temporal Cloud API normalizes email to lowercase; the provider treats email as case-insensitive.
+func TestAccUserWithCapitalizedEmail(t *testing.T) {
+	emailAddr := createCapitalizedEmail()
+	config := func(email string, role string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_user" "terraform" {
+  email = "%s"
+  account_access = "%s"
+}`, email, role)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(emailAddr, "read"),
 			},
 			{
 				ImportState:       true,
