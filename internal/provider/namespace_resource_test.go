@@ -18,6 +18,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
+	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
+	"google.golang.org/grpc"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 
@@ -984,243 +986,219 @@ PEM
 	})
 }
 
-func TestAreRegionsEqual(t *testing.T) {
+func TestClassifyRegionChanges(t *testing.T) {
 	tests := []struct {
-		name     string
-		s1       []string
-		s2       []string
-		expected bool
+		name            string
+		current         []string
+		planned         []string
+		expectedAdded   []string
+		expectedRemoval bool
 	}{
 		{
-			name:     "equal single region",
-			s1:       []string{"aws-us-east-1"},
-			s2:       []string{"aws-us-east-1"},
-			expected: true,
+			name:            "no change same order",
+			current:         []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:         []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedAdded:   nil,
+			expectedRemoval: false,
 		},
 		{
-			name:     "equal multi region same order",
-			s1:       []string{"aws-us-east-1", "aws-us-west-2"},
-			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
-			expected: true,
+			name:            "no change different order",
+			current:         []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:         []string{"aws-us-west-2", "aws-us-east-1"},
+			expectedAdded:   nil,
+			expectedRemoval: false,
 		},
 		{
-			name:     "equal multi region different order",
-			s1:       []string{"aws-us-west-2", "aws-us-east-1"},
-			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
-			expected: true,
+			name:            "region addition",
+			current:         []string{"aws-us-east-1"},
+			planned:         []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedAdded:   []string{"aws-us-west-2"},
+			expectedRemoval: false,
 		},
 		{
-			name:     "different length",
-			s1:       []string{"aws-us-east-1"},
-			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
-			expected: false,
+			name:            "region addition with prepended region",
+			current:         []string{"aws-us-east-1"},
+			planned:         []string{"aws-us-west-2", "aws-us-east-1"},
+			expectedAdded:   []string{"aws-us-west-2"},
+			expectedRemoval: false,
 		},
 		{
-			name:     "different regions",
-			s1:       []string{"aws-us-east-1"},
-			s2:       []string{"aws-us-west-2"},
-			expected: false,
+			name:            "region replacement is treated as removal",
+			current:         []string{"aws-us-east-1"},
+			planned:         []string{"aws-us-west-2"},
+			expectedAdded:   nil,
+			expectedRemoval: true,
 		},
 		{
-			name:     "both empty",
-			s1:       []string{},
-			s2:       []string{},
-			expected: true,
+			name:            "region removal is blocked",
+			current:         []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:         []string{"aws-us-east-1"},
+			expectedAdded:   nil,
+			expectedRemoval: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := areRegionsEqual(tc.s1, tc.s2)
-			if result != tc.expected {
-				t.Errorf("areRegionsEqual(%v, %v) = %v, want %v", tc.s1, tc.s2, result, tc.expected)
+			added, hasRemoval := classifyRegionChanges(tc.current, tc.planned)
+
+			if !slices.Equal(added, tc.expectedAdded) {
+				t.Errorf("added = %v, want %v", added, tc.expectedAdded)
+			}
+			if hasRemoval != tc.expectedRemoval {
+				t.Errorf("hasRemoval = %v, want %v", hasRemoval, tc.expectedRemoval)
 			}
 		})
 	}
 }
 
-func TestIsRegionRemoval(t *testing.T) {
-	tests := []struct {
-		name           string
-		currentRegions []string
-		newRegions     []string
-		expected       bool
-	}{
-		{
-			name:           "no change single region",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-east-1"},
-			expected:       false,
-		},
-		{
-			name:           "no change multi region",
-			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
-			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
-			expected:       false,
-		},
-		{
-			name:           "adding a region",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
-			expected:       false,
-		},
-		{
-			name:           "removing a region",
-			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
-			newRegions:     []string{"aws-us-east-1"},
-			expected:       true,
-		},
-		{
-			name:           "replacing a region",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-west-2"},
-			expected:       true,
-		},
-		{
-			name:           "replacing one region in multi-region",
-			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
-			newRegions:     []string{"aws-us-east-1", "aws-eu-west-1"},
-			expected:       true,
-		},
-		{
-			name:           "removing all regions",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{},
-			expected:       true,
-		},
-		{
-			name:           "adding to empty",
-			currentRegions: []string{},
-			newRegions:     []string{"aws-us-east-1"},
-			expected:       false,
-		},
+type fakeNamespaceRegionUpdateClient struct {
+	updateRequests       []*cloudservicev1.UpdateNamespaceRequest
+	getNamespaceRequests []*cloudservicev1.GetNamespaceRequest
+	addRequests          []*cloudservicev1.AddNamespaceRegionRequest
+	getResourceVersion   string
+}
+
+func (f *fakeNamespaceRegionUpdateClient) GetNamespace(_ context.Context, req *cloudservicev1.GetNamespaceRequest, _ ...grpc.CallOption) (*cloudservicev1.GetNamespaceResponse, error) {
+	f.getNamespaceRequests = append(f.getNamespaceRequests, &cloudservicev1.GetNamespaceRequest{
+		Namespace: req.GetNamespace(),
+	})
+
+	resourceVersion := f.getResourceVersion
+	if resourceVersion == "" {
+		resourceVersion = "resource-version-default"
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := isRegionRemoval(tc.currentRegions, tc.newRegions)
-			if result != tc.expected {
-				t.Errorf("isRegionRemoval(%v, %v) = %v, want %v", tc.currentRegions, tc.newRegions, result, tc.expected)
-			}
-		})
+	return &cloudservicev1.GetNamespaceResponse{
+		Namespace: &namespace.Namespace{
+			ResourceVersion: resourceVersion,
+		},
+	}, nil
+}
+
+func (f *fakeNamespaceRegionUpdateClient) UpdateNamespace(_ context.Context, req *cloudservicev1.UpdateNamespaceRequest, _ ...grpc.CallOption) (*cloudservicev1.UpdateNamespaceResponse, error) {
+	f.updateRequests = append(f.updateRequests, &cloudservicev1.UpdateNamespaceRequest{
+		Namespace:       req.GetNamespace(),
+		ResourceVersion: req.GetResourceVersion(),
+		Spec: &namespace.NamespaceSpec{
+			Regions: slices.Clone(req.GetSpec().GetRegions()),
+		},
+	})
+
+	return &cloudservicev1.UpdateNamespaceResponse{
+		AsyncOperation: &operationv1.AsyncOperation{
+			Id: "op-update",
+		},
+	}, nil
+}
+
+func (f *fakeNamespaceRegionUpdateClient) AddNamespaceRegion(_ context.Context, req *cloudservicev1.AddNamespaceRegionRequest, _ ...grpc.CallOption) (*cloudservicev1.AddNamespaceRegionResponse, error) {
+	f.addRequests = append(f.addRequests, &cloudservicev1.AddNamespaceRegionRequest{
+		Namespace:       req.GetNamespace(),
+		Region:          req.GetRegion(),
+		ResourceVersion: req.GetResourceVersion(),
+	})
+
+	return &cloudservicev1.AddNamespaceRegionResponse{
+		AsyncOperation: &operationv1.AsyncOperation{
+			Id: "op-add",
+		},
+	}, nil
+}
+
+func TestUpdateNamespaceWithRegions_RegionAdditionSequence(t *testing.T) {
+	fakeClient := &fakeNamespaceRegionUpdateClient{
+		getResourceVersion: "resource-version-after-update",
+	}
+
+	var awaitedOps []string
+	awaitFn := func(_ context.Context, op *operationv1.AsyncOperation) error {
+		if op == nil {
+			return fmt.Errorf("unexpected nil async operation")
+		}
+		awaitedOps = append(awaitedOps, op.GetId())
+		return nil
+	}
+
+	spec := &namespace.NamespaceSpec{
+		Regions: []string{"aws-us-west-2", "aws-us-east-1"},
+	}
+
+	err := updateNamespaceWithRegions(
+		context.Background(),
+		fakeClient,
+		"namespace-id",
+		[]string{"aws-us-east-1"},
+		"resource-version-initial",
+		spec,
+		awaitFn,
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if len(fakeClient.updateRequests) != 1 {
+		t.Fatalf("expected 1 UpdateNamespace call, got %d", len(fakeClient.updateRequests))
+	}
+
+	updateReq := fakeClient.updateRequests[0]
+	if updateReq.GetNamespace() != "namespace-id" {
+		t.Fatalf("expected update namespace %q, got %q", "namespace-id", updateReq.GetNamespace())
+	}
+	if updateReq.GetResourceVersion() != "resource-version-initial" {
+		t.Fatalf("expected update resource version %q, got %q", "resource-version-initial", updateReq.GetResourceVersion())
+	}
+	if !slices.Equal(updateReq.GetSpec().GetRegions(), []string{"aws-us-east-1"}) {
+		t.Fatalf("expected update regions to preserve current order, got %v", updateReq.GetSpec().GetRegions())
+	}
+
+	if len(fakeClient.getNamespaceRequests) != 1 {
+		t.Fatalf("expected 1 GetNamespace call before region add, got %d", len(fakeClient.getNamespaceRequests))
+	}
+	if len(fakeClient.addRequests) != 1 {
+		t.Fatalf("expected 1 AddNamespaceRegion call, got %d", len(fakeClient.addRequests))
+	}
+
+	addReq := fakeClient.addRequests[0]
+	if addReq.GetRegion() != "aws-us-west-2" {
+		t.Fatalf("expected added region %q, got %q", "aws-us-west-2", addReq.GetRegion())
+	}
+	if addReq.GetResourceVersion() != "resource-version-after-update" {
+		t.Fatalf("expected add resource version %q, got %q", "resource-version-after-update", addReq.GetResourceVersion())
+	}
+
+	if !slices.Equal(awaitedOps, []string{"op-update", "op-add"}) {
+		t.Fatalf("expected awaited ops [op-update op-add], got %v", awaitedOps)
 	}
 }
 
-func TestGetAddedRegions(t *testing.T) {
-	tests := []struct {
-		name           string
-		currentRegions []string
-		newRegions     []string
-		expected       []string
-	}{
-		{
-			name:           "no additions",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-east-1"},
-			expected:       []string{},
-		},
-		{
-			name:           "single addition",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
-			expected:       []string{"aws-us-west-2"},
-		},
-		{
-			name:           "single addition prepended",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-west-2", "aws-us-east-1"},
-			expected:       []string{"aws-us-west-2"},
-		},
-		{
-			name:           "deduplicates repeated additions",
-			currentRegions: []string{"aws-us-east-1"},
-			newRegions:     []string{"aws-us-east-1", "aws-us-west-2", "aws-us-west-2"},
-			expected:       []string{"aws-us-west-2"},
-		},
+func TestUpdateNamespaceWithRegions_RemovalBlockedBeforeApiCalls(t *testing.T) {
+	fakeClient := &fakeNamespaceRegionUpdateClient{}
+
+	spec := &namespace.NamespaceSpec{
+		Regions: []string{"aws-us-east-1"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := getAddedRegions(tc.currentRegions, tc.newRegions)
-			if !slices.Equal(result, tc.expected) {
-				t.Errorf("getAddedRegions(%v, %v) = %v, want %v", tc.currentRegions, tc.newRegions, result, tc.expected)
-			}
-		})
-	}
-}
-
-func TestGetRegionUpdatePlan(t *testing.T) {
-	tests := []struct {
-		name                 string
-		currentRegions       []string
-		plannedRegions       []string
-		expectedForUpdate    []string
-		expectedRegionsToAdd []string
-		expectedRemoval      bool
-	}{
-		{
-			name:                 "no change same order",
-			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
-			plannedRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
-			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
-			expectedRegionsToAdd: []string{},
-			expectedRemoval:      false,
-		},
-		{
-			name:                 "no change different order preserves current order for update",
-			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
-			plannedRegions:       []string{"aws-us-west-2", "aws-us-east-1"},
-			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
-			expectedRegionsToAdd: []string{},
-			expectedRemoval:      false,
-		},
-		{
-			name:                 "region addition",
-			currentRegions:       []string{"aws-us-east-1"},
-			plannedRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
-			expectedForUpdate:    []string{"aws-us-east-1"},
-			expectedRegionsToAdd: []string{"aws-us-west-2"},
-			expectedRemoval:      false,
-		},
-		{
-			name:                 "region addition with prepended region",
-			currentRegions:       []string{"aws-us-east-1"},
-			plannedRegions:       []string{"aws-us-west-2", "aws-us-east-1"},
-			expectedForUpdate:    []string{"aws-us-east-1"},
-			expectedRegionsToAdd: []string{"aws-us-west-2"},
-			expectedRemoval:      false,
-		},
-		{
-			name:                 "region replacement is treated as removal",
-			currentRegions:       []string{"aws-us-east-1"},
-			plannedRegions:       []string{"aws-us-west-2"},
-			expectedForUpdate:    []string{"aws-us-east-1"},
-			expectedRegionsToAdd: []string{},
-			expectedRemoval:      true,
-		},
-		{
-			name:                 "region removal is blocked",
-			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
-			plannedRegions:       []string{"aws-us-east-1"},
-			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
-			expectedRegionsToAdd: []string{},
-			expectedRemoval:      true,
-		},
+	err := updateNamespaceWithRegions(
+		context.Background(),
+		fakeClient,
+		"namespace-id",
+		[]string{"aws-us-east-1", "aws-us-west-2"},
+		"resource-version-initial",
+		spec,
+		func(_ context.Context, _ *operationv1.AsyncOperation) error { return nil },
+	)
+	if !errors.Is(err, errNamespaceRegionRemovalNotSupported) {
+		t.Fatalf("expected removal not supported error, got %v", err)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			regionsForUpdate, regionsToAdd, hasRegionRemoval := getRegionUpdatePlan(tc.currentRegions, tc.plannedRegions)
-
-			if !slices.Equal(regionsForUpdate, tc.expectedForUpdate) {
-				t.Errorf("regionsForUpdate = %v, want %v", regionsForUpdate, tc.expectedForUpdate)
-			}
-			if !slices.Equal(regionsToAdd, tc.expectedRegionsToAdd) {
-				t.Errorf("regionsToAdd = %v, want %v", regionsToAdd, tc.expectedRegionsToAdd)
-			}
-			if hasRegionRemoval != tc.expectedRemoval {
-				t.Errorf("hasRegionRemoval = %v, want %v", hasRegionRemoval, tc.expectedRemoval)
-			}
-		})
+	if len(fakeClient.updateRequests) != 0 {
+		t.Fatalf("expected 0 UpdateNamespace calls, got %d", len(fakeClient.updateRequests))
+	}
+	if len(fakeClient.getNamespaceRequests) != 0 {
+		t.Fatalf("expected 0 GetNamespace calls, got %d", len(fakeClient.getNamespaceRequests))
+	}
+	if len(fakeClient.addRequests) != 0 {
+		t.Fatalf("expected 0 AddNamespaceRegion calls, got %d", len(fakeClient.addRequests))
 	}
 }
