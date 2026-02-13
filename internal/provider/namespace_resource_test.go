@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"text/template"
@@ -1100,6 +1101,125 @@ func TestIsRegionRemoval(t *testing.T) {
 			result := isRegionRemoval(tc.currentRegions, tc.newRegions)
 			if result != tc.expected {
 				t.Errorf("isRegionRemoval(%v, %v) = %v, want %v", tc.currentRegions, tc.newRegions, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetAddedRegions(t *testing.T) {
+	tests := []struct {
+		name           string
+		currentRegions []string
+		newRegions     []string
+		expected       []string
+	}{
+		{
+			name:           "no additions",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-east-1"},
+			expected:       []string{},
+		},
+		{
+			name:           "single addition",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
+			expected:       []string{"aws-us-west-2"},
+		},
+		{
+			name:           "single addition prepended",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-west-2", "aws-us-east-1"},
+			expected:       []string{"aws-us-west-2"},
+		},
+		{
+			name:           "deduplicates repeated additions",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-east-1", "aws-us-west-2", "aws-us-west-2"},
+			expected:       []string{"aws-us-west-2"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getAddedRegions(tc.currentRegions, tc.newRegions)
+			if !slices.Equal(result, tc.expected) {
+				t.Errorf("getAddedRegions(%v, %v) = %v, want %v", tc.currentRegions, tc.newRegions, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetRegionUpdatePlan(t *testing.T) {
+	tests := []struct {
+		name                 string
+		currentRegions       []string
+		plannedRegions       []string
+		expectedForUpdate    []string
+		expectedRegionsToAdd []string
+		expectedRemoval      bool
+	}{
+		{
+			name:                 "no change same order",
+			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
+			plannedRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedRegionsToAdd: []string{},
+			expectedRemoval:      false,
+		},
+		{
+			name:                 "no change different order preserves current order for update",
+			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
+			plannedRegions:       []string{"aws-us-west-2", "aws-us-east-1"},
+			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedRegionsToAdd: []string{},
+			expectedRemoval:      false,
+		},
+		{
+			name:                 "region addition",
+			currentRegions:       []string{"aws-us-east-1"},
+			plannedRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedForUpdate:    []string{"aws-us-east-1"},
+			expectedRegionsToAdd: []string{"aws-us-west-2"},
+			expectedRemoval:      false,
+		},
+		{
+			name:                 "region addition with prepended region",
+			currentRegions:       []string{"aws-us-east-1"},
+			plannedRegions:       []string{"aws-us-west-2", "aws-us-east-1"},
+			expectedForUpdate:    []string{"aws-us-east-1"},
+			expectedRegionsToAdd: []string{"aws-us-west-2"},
+			expectedRemoval:      false,
+		},
+		{
+			name:                 "region replacement is treated as removal",
+			currentRegions:       []string{"aws-us-east-1"},
+			plannedRegions:       []string{"aws-us-west-2"},
+			expectedForUpdate:    []string{"aws-us-east-1"},
+			expectedRegionsToAdd: []string{},
+			expectedRemoval:      true,
+		},
+		{
+			name:                 "region removal is blocked",
+			currentRegions:       []string{"aws-us-east-1", "aws-us-west-2"},
+			plannedRegions:       []string{"aws-us-east-1"},
+			expectedForUpdate:    []string{"aws-us-east-1", "aws-us-west-2"},
+			expectedRegionsToAdd: []string{},
+			expectedRemoval:      true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			regionsForUpdate, regionsToAdd, hasRegionRemoval := getRegionUpdatePlan(tc.currentRegions, tc.plannedRegions)
+
+			if !slices.Equal(regionsForUpdate, tc.expectedForUpdate) {
+				t.Errorf("regionsForUpdate = %v, want %v", regionsForUpdate, tc.expectedForUpdate)
+			}
+			if !slices.Equal(regionsToAdd, tc.expectedRegionsToAdd) {
+				t.Errorf("regionsToAdd = %v, want %v", regionsToAdd, tc.expectedRegionsToAdd)
+			}
+			if hasRegionRemoval != tc.expectedRemoval {
+				t.Errorf("hasRegionRemoval = %v, want %v", hasRegionRemoval, tc.expectedRemoval)
 			}
 		})
 	}

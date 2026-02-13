@@ -546,6 +546,39 @@ func isRegionRemoval(currentRegions, newRegions []string) bool {
 	return false
 }
 
+func getAddedRegions(currentRegions, newRegions []string) []string {
+	currentSet := make(map[string]struct{}, len(currentRegions))
+	for _, r := range currentRegions {
+		currentSet[r] = struct{}{}
+	}
+
+	added := make([]string, 0, len(newRegions))
+	for _, r := range newRegions {
+		if _, ok := currentSet[r]; ok {
+			continue
+		}
+		added = append(added, r)
+		currentSet[r] = struct{}{}
+	}
+
+	return added
+}
+
+func getRegionUpdatePlan(currentRegions, plannedRegions []string) (regionsForUpdate []string, regionsToAdd []string, hasRegionRemoval bool) {
+	regionsForUpdate = make([]string, len(currentRegions))
+	copy(regionsForUpdate, currentRegions)
+
+	if areRegionsEqual(currentRegions, plannedRegions) {
+		return regionsForUpdate, nil, false
+	}
+
+	if isRegionRemoval(currentRegions, plannedRegions) {
+		return regionsForUpdate, nil, true
+	}
+
+	return regionsForUpdate, getAddedRegions(currentRegions, plannedRegions), false
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan namespaceResourceModel
@@ -646,15 +679,18 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	currentRegions := currentNs.GetNamespace().GetSpec().GetRegions()
-	if !areRegionsEqual(currentRegions, spec.Regions) {
-		if isRegionRemoval(currentRegions, spec.Regions) {
-			resp.Diagnostics.AddError(
-				"Namespace regions cannot be removed",
-				"Removing or replacing regions of a namespace is not supported via Terraform. Only adding new regions is supported. If you need to remove a region, please use the Temporal Cloud UI or CLI.",
-			)
-			return
-		}
+	regionsForUpdate, regionsToAdd, hasRegionRemoval := getRegionUpdatePlan(currentRegions, spec.Regions)
+	if hasRegionRemoval {
+		resp.Diagnostics.AddError(
+			"Namespace regions cannot be removed",
+			"Removing or replacing regions of a namespace is not supported via Terraform. Only adding new regions is supported. If you need to remove a region, please use the Temporal Cloud UI or CLI.",
+		)
+		return
 	}
+	// Always preserve current region order for UpdateNamespace.
+	// Region additions are handled separately via AddNamespaceRegion to avoid
+	// accidental active-region changes from list reordering.
+	spec.Regions = regionsForUpdate
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace:        plan.ID.ValueString(),
@@ -670,6 +706,32 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 		return
+	}
+
+	for _, regionToAdd := range regionsToAdd {
+		currentNs, err = r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: plan.ID.ValueString(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to get namespace before adding region", err.Error())
+			return
+		}
+
+		addResp, err := r.client.CloudService().AddNamespaceRegion(ctx, &cloudservicev1.AddNamespaceRegionRequest{
+			Namespace:        plan.ID.ValueString(),
+			Region:           regionToAdd,
+			ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to add namespace region", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, addResp.GetAsyncOperation()); err != nil {
+			resp.Diagnostics.AddError("Failed to add namespace region", err.Error())
+			return
+		}
 	}
 
 	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
