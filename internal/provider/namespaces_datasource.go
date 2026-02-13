@@ -152,7 +152,7 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 		},
 		"regions": schema.ListAttribute{
 			Computed:    true,
-			Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.",
+			Description: "The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace.",
 			ElementType: types.StringType,
 		},
 		"accepted_client_ca": schema.StringAttribute{

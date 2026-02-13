@@ -205,7 +205,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Adding a new region to an existing single-region namespace is supported, enabling multi-region without recreating the namespace. To safely enable multi-region, you can add the region via the Temporal Cloud UI or CLI first, wait for replication to become healthy, then run `terraform refresh` and update your configuration to match. Alternatively, you can add the region directly in your Terraform configuration. Removing regions from an existing namespace is not supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
@@ -531,6 +531,21 @@ func areRegionsEqual(s1, s2 []string) bool {
 	return slices.Compare(sortedS1, sortedS2) == 0
 }
 
+// isRegionRemoval checks if any regions from the current set are being removed in the new set.
+// Returns true if any current region is not present in the new set (i.e., a removal or replacement).
+func isRegionRemoval(currentRegions, newRegions []string) bool {
+	newSet := make(map[string]struct{}, len(newRegions))
+	for _, r := range newRegions {
+		newSet[r] = struct{}{}
+	}
+	for _, r := range currentRegions {
+		if _, ok := newSet[r]; !ok {
+			return true
+		}
+	}
+	return false
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan namespaceResourceModel
@@ -630,9 +645,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.CapacitySpec = capacitySpec
 	}
 
-	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
-		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
-		return
+	currentRegions := currentNs.GetNamespace().GetSpec().GetRegions()
+	if !areRegionsEqual(currentRegions, spec.Regions) {
+		if isRegionRemoval(currentRegions, spec.Regions) {
+			resp.Diagnostics.AddError(
+				"Namespace regions cannot be removed",
+				"Removing or replacing regions of a namespace is not supported via Terraform. Only adding new regions is supported. If you need to remove a region, please use the Temporal Cloud UI or CLI.",
+			)
+			return
+		}
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{

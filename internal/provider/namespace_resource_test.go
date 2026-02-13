@@ -982,3 +982,125 @@ PEM
 		},
 	})
 }
+
+func TestAreRegionsEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		s1       []string
+		s2       []string
+		expected bool
+	}{
+		{
+			name:     "equal single region",
+			s1:       []string{"aws-us-east-1"},
+			s2:       []string{"aws-us-east-1"},
+			expected: true,
+		},
+		{
+			name:     "equal multi region same order",
+			s1:       []string{"aws-us-east-1", "aws-us-west-2"},
+			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
+			expected: true,
+		},
+		{
+			name:     "equal multi region different order",
+			s1:       []string{"aws-us-west-2", "aws-us-east-1"},
+			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
+			expected: true,
+		},
+		{
+			name:     "different length",
+			s1:       []string{"aws-us-east-1"},
+			s2:       []string{"aws-us-east-1", "aws-us-west-2"},
+			expected: false,
+		},
+		{
+			name:     "different regions",
+			s1:       []string{"aws-us-east-1"},
+			s2:       []string{"aws-us-west-2"},
+			expected: false,
+		},
+		{
+			name:     "both empty",
+			s1:       []string{},
+			s2:       []string{},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := areRegionsEqual(tc.s1, tc.s2)
+			if result != tc.expected {
+				t.Errorf("areRegionsEqual(%v, %v) = %v, want %v", tc.s1, tc.s2, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestIsRegionRemoval(t *testing.T) {
+	tests := []struct {
+		name           string
+		currentRegions []string
+		newRegions     []string
+		expected       bool
+	}{
+		{
+			name:           "no change single region",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-east-1"},
+			expected:       false,
+		},
+		{
+			name:           "no change multi region",
+			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
+			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
+			expected:       false,
+		},
+		{
+			name:           "adding a region",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-east-1", "aws-us-west-2"},
+			expected:       false,
+		},
+		{
+			name:           "removing a region",
+			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
+			newRegions:     []string{"aws-us-east-1"},
+			expected:       true,
+		},
+		{
+			name:           "replacing a region",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{"aws-us-west-2"},
+			expected:       true,
+		},
+		{
+			name:           "replacing one region in multi-region",
+			currentRegions: []string{"aws-us-east-1", "aws-us-west-2"},
+			newRegions:     []string{"aws-us-east-1", "aws-eu-west-1"},
+			expected:       true,
+		},
+		{
+			name:           "removing all regions",
+			currentRegions: []string{"aws-us-east-1"},
+			newRegions:     []string{},
+			expected:       true,
+		},
+		{
+			name:           "adding to empty",
+			currentRegions: []string{},
+			newRegions:     []string{"aws-us-east-1"},
+			expected:       false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isRegionRemoval(tc.currentRegions, tc.newRegions)
+			if result != tc.expected {
+				t.Errorf("isRegionRemoval(%v, %v) = %v, want %v", tc.currentRegions, tc.newRegions, result, tc.expected)
+			}
+		})
+	}
+}
