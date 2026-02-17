@@ -987,10 +987,8 @@ PEM
 
 func testConfig() waitForNamespaceAvailableConfig {
 	return waitForNamespaceAvailableConfig{
-		initialDelay:     10 * time.Millisecond,
-		retryInterval:    10 * time.Millisecond,
-		maxRetryInterval: 50 * time.Millisecond,
-		maxAttempts:      5,
+		retryInterval: 10 * time.Millisecond,
+		maxAttempts:   5,
 	}
 }
 
@@ -1067,6 +1065,43 @@ func TestWaitForNamespaceAvailableRetriesOnPermissionDenied(t *testing.T) {
 	}
 }
 
+func TestWaitForNamespaceAvailableRetriesOnNotFound(t *testing.T) {
+	attempts := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		attempts++
+		if attempts < 3 {
+			// Return not found for first 2 attempts
+			return nil, status.Error(codes.NotFound, "namespace not found")
+		}
+		// Success on 3rd attempt
+		return &cloudservicev1.GetNamespaceResponse{
+			Namespace: &namespace.Namespace{
+				Namespace: "test-namespace-id",
+				Spec: &namespace.NamespaceSpec{
+					Name: "test-namespace",
+				},
+			},
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+
+	if err != nil {
+		t.Fatalf("Expected success after retries, got error: %v", err)
+	}
+
+	if ns == nil {
+		t.Fatal("Expected namespace, got nil")
+	}
+
+	if attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempts)
+	}
+}
+
 func TestWaitForNamespaceAvailableFailsOnNonRetryableError(t *testing.T) {
 	callCount := 0
 	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
@@ -1105,10 +1140,16 @@ func TestWaitForNamespaceAvailableContextTimeout(t *testing.T) {
 	}
 
 	// Very short timeout to ensure context cancellation
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
 	defer cancel()
 
-	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+	// Use config with longer intervals to ensure timeout occurs before max attempts
+	config := waitForNamespaceAvailableConfig{
+		retryInterval: 20 * time.Millisecond, // Longer than context timeout
+		maxAttempts:   10,                    // High number that won't be reached
+	}
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", config)
 
 	if err == nil {
 		t.Fatal("Expected timeout error, got success")
@@ -1136,10 +1177,8 @@ func TestWaitForNamespaceAvailableMaxAttemptsReached(t *testing.T) {
 	defer cancel()
 
 	config := waitForNamespaceAvailableConfig{
-		initialDelay:     10 * time.Millisecond,
-		retryInterval:    10 * time.Millisecond,
-		maxRetryInterval: 50 * time.Millisecond,
-		maxAttempts:      3, // Small number for fast testing
+		retryInterval: 10 * time.Millisecond,
+		maxAttempts:   3, // Small number for fast testing
 	}
 
 	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", config)

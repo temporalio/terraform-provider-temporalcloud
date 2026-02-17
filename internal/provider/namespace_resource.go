@@ -727,19 +727,15 @@ func (r *namespaceResource) ImportState(ctx context.Context, req resource.Import
 
 // waitForNamespaceAvailableConfig contains configuration for polling behavior.
 type waitForNamespaceAvailableConfig struct {
-	initialDelay     time.Duration
-	retryInterval    time.Duration
-	maxRetryInterval time.Duration
-	maxAttempts      int
+	retryInterval time.Duration
+	maxAttempts   int
 }
 
 // defaultWaitForNamespaceAvailableConfig returns the default polling configuration.
 func defaultWaitForNamespaceAvailableConfig() waitForNamespaceAvailableConfig {
 	return waitForNamespaceAvailableConfig{
-		initialDelay:     time.Second,
-		retryInterval:    10 * time.Second,
-		maxRetryInterval: 30 * time.Second,
-		maxAttempts:      5,
+		retryInterval: 10 * time.Second,
+		maxAttempts:   12,
 	}
 }
 
@@ -753,15 +749,7 @@ func waitForNamespaceAvailable(ctx context.Context, client *client.Client, names
 func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc func(context.Context, *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error), namespaceID string, config waitForNamespaceAvailableConfig) (*namespacev1.Namespace, error) {
 	ctx = tflog.SetField(ctx, "namespace_id", namespaceID)
 
-	// Initial delay before first attempt
-	select {
-	case <-time.After(config.initialDelay):
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
 	retryInterval := config.retryInterval
-	maxRetryInterval := config.maxRetryInterval
 	maxAttempts := config.maxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -779,8 +767,8 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 		}
 
 		// Check if it's a PermissionDenied error that we should retry, or a different error we should fail on
-		if status.Code(err) == codes.PermissionDenied {
-			tflog.Debug(ctx, "namespace not yet accessible due to permissions, retrying", map[string]any{
+		if status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.NotFound {
+			tflog.Debug(ctx, "namespace not yet accessible, retrying", map[string]any{
 				"attempt":  attempt,
 				"retry_in": retryInterval.String(),
 				"error":    err.Error(),
@@ -802,11 +790,6 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 		// Wait before next retry, respecting context cancellation
 		select {
 		case <-time.After(retryInterval):
-			// Exponential backoff: double the interval but cap at maxRetryInterval
-			retryInterval *= 2
-			if retryInterval > maxRetryInterval {
-				retryInterval = maxRetryInterval
-			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
