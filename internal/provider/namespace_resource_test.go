@@ -20,6 +20,8 @@ import (
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
 	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 
@@ -1057,6 +1059,7 @@ type fakeNamespaceRegionUpdateClient struct {
 	getNamespaceRequests []*cloudservicev1.GetNamespaceRequest
 	addRequests          []*cloudservicev1.AddNamespaceRegionRequest
 	getResourceVersion   string
+	updateErr            error
 }
 
 func (f *fakeNamespaceRegionUpdateClient) GetNamespace(_ context.Context, req *cloudservicev1.GetNamespaceRequest, _ ...grpc.CallOption) (*cloudservicev1.GetNamespaceResponse, error) {
@@ -1084,6 +1087,10 @@ func (f *fakeNamespaceRegionUpdateClient) UpdateNamespace(_ context.Context, req
 			Regions: slices.Clone(req.GetSpec().GetRegions()),
 		},
 	})
+
+	if f.updateErr != nil {
+		return nil, f.updateErr
+	}
 
 	return &cloudservicev1.UpdateNamespaceResponse{
 		AsyncOperation: &operationv1.AsyncOperation{
@@ -1200,5 +1207,62 @@ func TestUpdateNamespaceWithRegions_RemovalBlockedBeforeApiCalls(t *testing.T) {
 	}
 	if len(fakeClient.addRequests) != 0 {
 		t.Fatalf("expected 0 AddNamespaceRegion calls, got %d", len(fakeClient.addRequests))
+	}
+}
+
+func TestUpdateNamespaceWithRegions_NothingToChangeSkipsToAddRegion(t *testing.T) {
+	// When the only change is a region addition, UpdateNamespace returns
+	// "nothing to change" because the spec (with preserved current regions)
+	// is identical to the server state. The function should treat this as a
+	// no-op and proceed to AddNamespaceRegion.
+	fakeClient := &fakeNamespaceRegionUpdateClient{
+		getResourceVersion: "resource-version-current",
+		updateErr:          grpcstatus.Error(codes.InvalidArgument, "nothing to change"),
+	}
+
+	var awaitedOps []string
+	awaitFn := func(_ context.Context, op *operationv1.AsyncOperation) error {
+		if op == nil {
+			return fmt.Errorf("unexpected nil async operation")
+		}
+		awaitedOps = append(awaitedOps, op.GetId())
+		return nil
+	}
+
+	spec := &namespace.NamespaceSpec{
+		Regions: []string{"aws-us-east-1", "aws-us-west-2"},
+	}
+
+	err := updateNamespaceWithRegions(
+		context.Background(),
+		fakeClient,
+		"namespace-id",
+		[]string{"aws-us-east-1"},
+		"resource-version-initial",
+		spec,
+		awaitFn,
+	)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// UpdateNamespace was called but returned "nothing to change"
+	if len(fakeClient.updateRequests) != 1 {
+		t.Fatalf("expected 1 UpdateNamespace call, got %d", len(fakeClient.updateRequests))
+	}
+
+	// Should still proceed to add the region
+	if len(fakeClient.addRequests) != 1 {
+		t.Fatalf("expected 1 AddNamespaceRegion call, got %d", len(fakeClient.addRequests))
+	}
+
+	addReq := fakeClient.addRequests[0]
+	if addReq.GetRegion() != "aws-us-west-2" {
+		t.Fatalf("expected added region %q, got %q", "aws-us-west-2", addReq.GetRegion())
+	}
+
+	// Only the add operation should have been awaited (update was a no-op)
+	if !slices.Equal(awaitedOps, []string{"op-add"}) {
+		t.Fatalf("expected awaited ops [op-add], got %v", awaitedOps)
 	}
 }

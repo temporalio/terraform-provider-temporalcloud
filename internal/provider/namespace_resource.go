@@ -576,11 +576,21 @@ func updateNamespaceWithRegions(
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update namespace: %w", err)
-	}
-
-	if err := awaitFn(ctx, svcResp.GetAsyncOperation()); err != nil {
-		return fmt.Errorf("failed to update namespace: %w", err)
+		// When the only change is a region addition, the UpdateNamespace call
+		// sends a spec identical to the current state (since we preserved
+		// currentRegions). The API returns "nothing to change" in this case.
+		// If we have regions to add, treat this as a no-op and proceed.
+		if len(regionsToAdd) > 0 && status.Code(err) == codes.InvalidArgument {
+			tflog.Debug(ctx, "UpdateNamespace returned nothing-to-change, proceeding to add regions", map[string]interface{}{
+				"regions_to_add": regionsToAdd,
+			})
+		} else {
+			return fmt.Errorf("failed to update namespace: %w", err)
+		}
+	} else {
+		if err := awaitFn(ctx, svcResp.GetAsyncOperation()); err != nil {
+			return fmt.Errorf("failed to update namespace: %w", err)
+		}
 	}
 
 	for _, regionToAdd := range regionsToAdd {
