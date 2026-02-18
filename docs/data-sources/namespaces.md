@@ -64,7 +64,7 @@ Read-Only:
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--namespaces--limits))
 - `name` (String) The name of the namespace.
 - `namespace_lifecycle` (Attributes) The lifecycle settings for the namespace. (see [below for nested schema](#nestedatt--namespaces--namespace_lifecycle))
-- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.
+- `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 - `state` (String) The current state of the namespace.
 

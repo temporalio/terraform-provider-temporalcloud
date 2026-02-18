@@ -25,14 +25,14 @@ package provider
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"regexp"
-	"slices"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -56,6 +56,7 @@ import (
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
+	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
@@ -70,6 +71,12 @@ type (
 	namespaceResource struct {
 		// client cloudservicev1.CloudServiceClient
 		client *client.Client
+	}
+
+	namespaceRegionUpdateClient interface {
+		GetNamespace(context.Context, *cloudservicev1.GetNamespaceRequest, ...grpc.CallOption) (*cloudservicev1.GetNamespaceResponse, error)
+		UpdateNamespace(context.Context, *cloudservicev1.UpdateNamespaceRequest, ...grpc.CallOption) (*cloudservicev1.UpdateNamespaceResponse, error)
+		AddNamespaceRegion(context.Context, *cloudservicev1.AddNamespaceRegionRequest, ...grpc.CallOption) (*cloudservicev1.AddNamespaceRegionResponse, error)
 	}
 
 	namespaceResourceModel struct {
@@ -121,6 +128,8 @@ var (
 	_ resource.Resource                = (*namespaceResource)(nil)
 	_ resource.ResourceWithConfigure   = (*namespaceResource)(nil)
 	_ resource.ResourceWithImportState = (*namespaceResource)(nil)
+
+	errNamespaceRegionRemovalNotSupported = errors.New("removing or replacing regions of a namespace is not supported via Terraform")
 
 	namespaceCertificateFilterAttrs = map[string]attr.Type{
 		"common_name":              types.StringType,
@@ -205,9 +214,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Adding a new region to an existing single-region namespace is supported, enabling multi-region without recreating the namespace. To safely enable multi-region, you can add the region via the Temporal Cloud UI or CLI first, wait for replication to become healthy, then run `terraform refresh` and update your configuration to match. Alternatively, you can add the region directly in your Terraform configuration. Removing regions from an existing namespace is not supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
+				Validators: []validator.List{
+					listvalidator.SizeBetween(1, 2),
+				},
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
 				},
@@ -514,21 +526,97 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-func areRegionsEqual(s1, s2 []string) bool {
-	if len(s1) != len(s2) {
-		return false
+// classifyRegionChanges determines which regions are being added and whether
+// any current regions are being removed. With max 2 regions (enforced by
+// schema validation), added will contain at most 1 entry.
+func classifyRegionChanges(current, planned []string) (added []string, hasRemoval bool) {
+	currentSet := make(map[string]struct{}, len(current))
+	for _, r := range current {
+		currentSet[r] = struct{}{}
 	}
-	// Create copies to avoid modifying the original slices
-	sortedS1 := make([]string, len(s1))
-	copy(sortedS1, s1)
-	sortedS2 := make([]string, len(s2))
-	copy(sortedS2, s2)
+	plannedSet := make(map[string]struct{}, len(planned))
+	for _, r := range planned {
+		plannedSet[r] = struct{}{}
+	}
+	for _, r := range current {
+		if _, ok := plannedSet[r]; !ok {
+			return nil, true
+		}
+	}
+	for _, r := range planned {
+		if _, ok := currentSet[r]; !ok {
+			added = append(added, r)
+		}
+	}
+	return added, false
+}
 
-	// Sort both slices
-	sort.Strings(sortedS1)
-	sort.Strings(sortedS2)
+func updateNamespaceWithRegions(
+	ctx context.Context,
+	cloudSvc namespaceRegionUpdateClient,
+	namespaceID string,
+	currentRegions []string,
+	currentResourceVersion string,
+	spec *namespacev1.NamespaceSpec,
+	awaitFn func(context.Context, *operationv1.AsyncOperation) error,
+) error {
+	regionsToAdd, hasRemoval := classifyRegionChanges(currentRegions, spec.Regions)
+	if hasRemoval {
+		return errNamespaceRegionRemovalNotSupported
+	}
 
-	return slices.Compare(sortedS1, sortedS2) == 0
+	// Preserve current region order for UpdateNamespace to avoid accidental
+	// active-region changes. Additions use separate AddNamespaceRegion calls.
+	spec.Regions = currentRegions
+
+	svcResp, err := cloudSvc.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+		Namespace:        namespaceID,
+		Spec:             spec,
+		ResourceVersion:  currentResourceVersion,
+		AsyncOperationId: uuid.New().String(),
+	})
+	if err != nil {
+		// When the only change is a region addition, the UpdateNamespace call
+		// sends a spec identical to the current state (since we preserved
+		// currentRegions). The API returns "nothing to change" in this case.
+		// If we have regions to add, treat this as a no-op and proceed.
+		if len(regionsToAdd) > 0 && status.Code(err) == codes.InvalidArgument {
+			tflog.Debug(ctx, "UpdateNamespace returned nothing-to-change, proceeding to add regions", map[string]interface{}{
+				"regions_to_add": regionsToAdd,
+			})
+		} else {
+			return fmt.Errorf("failed to update namespace: %w", err)
+		}
+	} else {
+		if err := awaitFn(ctx, svcResp.GetAsyncOperation()); err != nil {
+			return fmt.Errorf("failed to update namespace: %w", err)
+		}
+	}
+
+	for _, regionToAdd := range regionsToAdd {
+		currentNs, err := cloudSvc.GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: namespaceID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get namespace before adding region: %w", err)
+		}
+
+		addResp, err := cloudSvc.AddNamespaceRegion(ctx, &cloudservicev1.AddNamespaceRegionRequest{
+			Namespace:        namespaceID,
+			Region:           regionToAdd,
+			ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to add namespace region %q: %w", regionToAdd, err)
+		}
+
+		if err := awaitFn(ctx, addResp.GetAsyncOperation()); err != nil {
+			return fmt.Errorf("failed to add namespace region %q: %w", regionToAdd, err)
+		}
+	}
+
+	return nil
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
@@ -630,23 +718,28 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.CapacitySpec = capacitySpec
 	}
 
-	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
-		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
-		return
+	currentRegions := currentNs.GetNamespace().GetSpec().GetRegions()
+	awaitFn := func(ctx context.Context, op *operationv1.AsyncOperation) error {
+		return client.AwaitAsyncOperation(ctx, r.client, op)
 	}
-
-	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-		Namespace:        plan.ID.ValueString(),
-		Spec:             spec,
-		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
-		AsyncOperationId: uuid.New().String(),
-	})
+	err = updateNamespaceWithRegions(
+		ctx,
+		r.client.CloudService(),
+		plan.ID.ValueString(),
+		currentRegions,
+		currentNs.GetNamespace().GetResourceVersion(),
+		spec,
+		awaitFn,
+	)
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
-	}
+		if errors.Is(err, errNamespaceRegionRemovalNotSupported) {
+			resp.Diagnostics.AddError(
+				"Namespace regions cannot be removed",
+				"Removing or replacing regions of a namespace is not supported via Terraform. Only adding new regions is supported. If you need to remove a region, please use the Temporal Cloud UI or CLI.",
+			)
+			return
+		}
 
-	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 		return
 	}
