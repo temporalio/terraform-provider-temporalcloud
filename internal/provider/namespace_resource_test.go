@@ -17,6 +17,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 
@@ -43,6 +45,63 @@ func TestNamespaceSchema(t *testing.T) {
 	if diagnostics.HasError() {
 		t.Fatalf("Schema validation diagnostics: %+v", diagnostics)
 	}
+}
+
+func TestAccNamespaceNameValidation(t *testing.T) {
+	config := func(name string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_namespace" "test" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  api_key_auth       = true
+  retention_days     = 7
+}`, name)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Name too short (1 char)
+				Config:      config("a"),
+				ExpectError: regexp.MustCompile(`string length must be between 2 and 64`),
+			},
+			{
+				// Name too long (65 chars)
+				Config:      config("a" + strings.Repeat("b", 64)),
+				ExpectError: regexp.MustCompile(`string length must be between 2 and 64`),
+			},
+			{
+				// Name starts with number
+				Config:      config("1invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name starts with hyphen
+				Config:      config("-invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name ends with hyphen
+				Config:      config("invalid-"),
+				ExpectError: regexp.MustCompile(`(?s)must start with a lowercase letter.*end with a letter or number`),
+			},
+			{
+				// Name contains uppercase
+				Config:      config("Invalid"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+			{
+				// Name contains underscore
+				Config:      config("invalid_name"),
+				ExpectError: regexp.MustCompile(`must start with a lowercase letter`),
+			},
+		},
+	})
 }
 
 func TestAccBasicNamespace(t *testing.T) {
@@ -924,4 +983,221 @@ PEM
 			// Delete testing automatically occurs in TestCase
 		},
 	})
+}
+
+func testConfig() waitForNamespaceAvailableConfig {
+	return waitForNamespaceAvailableConfig{
+		retryInterval: 10 * time.Millisecond,
+		maxAttempts:   5,
+	}
+}
+
+func TestWaitForNamespaceAvailableSuccess(t *testing.T) {
+	callCount := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		callCount++
+		return &cloudservicev1.GetNamespaceResponse{
+			Namespace: &namespace.Namespace{
+				Namespace: "test-namespace-id",
+				Spec: &namespace.NamespaceSpec{
+					Name: "test-namespace",
+				},
+			},
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+
+	if err != nil {
+		t.Fatalf("Expected success, got error: %v", err)
+	}
+
+	if ns == nil {
+		t.Fatal("Expected namespace, got nil")
+	}
+
+	if ns.Namespace != "test-namespace-id" {
+		t.Errorf("Expected namespace ID 'test-namespace-id', got '%s'", ns.Namespace)
+	}
+
+	if callCount != 1 {
+		t.Errorf("Expected 1 API call, got %d", callCount)
+	}
+}
+
+func TestWaitForNamespaceAvailableRetriesOnPermissionDenied(t *testing.T) {
+	attempts := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		attempts++
+		if attempts < 3 {
+			// Return permission denied for first 2 attempts
+			return nil, status.Error(codes.PermissionDenied, "permission denied")
+		}
+		// Success on 3rd attempt
+		return &cloudservicev1.GetNamespaceResponse{
+			Namespace: &namespace.Namespace{
+				Namespace: "test-namespace-id",
+				Spec: &namespace.NamespaceSpec{
+					Name: "test-namespace",
+				},
+			},
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+
+	if err != nil {
+		t.Fatalf("Expected success after retries, got error: %v", err)
+	}
+
+	if ns == nil {
+		t.Fatal("Expected namespace, got nil")
+	}
+
+	if attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestWaitForNamespaceAvailableRetriesOnNotFound(t *testing.T) {
+	attempts := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		attempts++
+		if attempts < 3 {
+			// Return not found for first 2 attempts
+			return nil, status.Error(codes.NotFound, "namespace not found")
+		}
+		// Success on 3rd attempt
+		return &cloudservicev1.GetNamespaceResponse{
+			Namespace: &namespace.Namespace{
+				Namespace: "test-namespace-id",
+				Spec: &namespace.NamespaceSpec{
+					Name: "test-namespace",
+				},
+			},
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+
+	if err != nil {
+		t.Fatalf("Expected success after retries, got error: %v", err)
+	}
+
+	if ns == nil {
+		t.Fatal("Expected namespace, got nil")
+	}
+
+	if attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestWaitForNamespaceAvailableFailsOnNonRetryableError(t *testing.T) {
+	callCount := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		callCount++
+		// Return a non-retryable error (not permission denied)
+		return nil, status.Error(codes.Internal, "internal server error")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", testConfig())
+
+	if err == nil {
+		t.Fatal("Expected error, got success")
+	}
+
+	if ns != nil {
+		t.Error("Expected nil namespace, got non-nil")
+	}
+
+	if callCount != 1 {
+		t.Errorf("Expected 1 API call (should fail immediately), got %d", callCount)
+	}
+
+	// Check that the error message indicates it failed to get namespace
+	if !strings.Contains(err.Error(), "failed to get namespace") {
+		t.Errorf("Expected error message to contain 'failed to get namespace', got: %v", err)
+	}
+}
+
+func TestWaitForNamespaceAvailableContextTimeout(t *testing.T) {
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		// Always return permission denied to keep retrying
+		return nil, status.Error(codes.PermissionDenied, "permission denied")
+	}
+
+	// Very short timeout to ensure context cancellation
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	// Use config with longer intervals to ensure timeout occurs before max attempts
+	config := waitForNamespaceAvailableConfig{
+		retryInterval: 20 * time.Millisecond, // Longer than context timeout
+		maxAttempts:   10,                    // High number that won't be reached
+	}
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", config)
+
+	if err == nil {
+		t.Fatal("Expected timeout error, got success")
+	}
+
+	if ns != nil {
+		t.Error("Expected nil namespace, got non-nil")
+	}
+
+	// Should be context deadline exceeded
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected context deadline exceeded error, got: %v", err)
+	}
+}
+
+func TestWaitForNamespaceAvailableMaxAttemptsReached(t *testing.T) {
+	callCount := 0
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		callCount++
+		// Always return permission denied
+		return nil, status.Error(codes.PermissionDenied, "permission denied")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	config := waitForNamespaceAvailableConfig{
+		retryInterval: 10 * time.Millisecond,
+		maxAttempts:   3, // Small number for fast testing
+	}
+
+	ns, err := waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, "test-namespace-id", config)
+
+	if err == nil {
+		t.Fatal("Expected max attempts error, got success")
+	}
+
+	if ns != nil {
+		t.Error("Expected nil namespace, got non-nil")
+	}
+
+	// Should hit the max attempts limit
+	if callCount != 3 {
+		t.Errorf("Expected exactly 3 attempts, got %d", callCount)
+	}
+
+	// Check error message indicates max attempts reached
+	if !strings.Contains(err.Error(), "not available after") && !strings.Contains(err.Error(), "attempts") {
+		t.Errorf("Expected error message to indicate max attempts reached, got: %v", err)
+	}
 }

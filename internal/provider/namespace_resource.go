@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"time"
@@ -183,10 +184,17 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 		Description: "Provisions a Temporal Cloud namespace. \n\nRegions available in Temporal Cloud: https://docs.temporal.io/cloud/regions. \n\nNote that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1)",
 		Attributes: map[string]schema.Attribute{
 			"name": schema.StringAttribute{
-				Description: "The name of the namespace.",
+				Description: "The name of the namespace. Must be 2-64 characters, start with a letter, contain only lowercase letters, numbers, and hyphens, and not end with a hyphen.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
+				},
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(2, 64),
+					stringvalidator.RegexMatches(
+						regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$`),
+						"must start with a lowercase letter, contain only lowercase letters, numbers, and hyphens, and end with a letter or number",
+					),
 				},
 			},
 			"id": schema.StringAttribute{
@@ -456,15 +464,13 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
-		Namespace: svcResp.Namespace,
-	})
+	ns, err := waitForNamespaceAvailable(ctx, r.client, svcResp.Namespace)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace after creation", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(updateModelFromSpec(ctx, &plan, ns.Namespace)...)
+	resp.Diagnostics.Append(updateModelFromSpec(ctx, &plan, ns)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -717,6 +723,79 @@ func (r *namespaceResource) Delete(ctx context.Context, req resource.DeleteReque
 
 func (r *namespaceResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// waitForNamespaceAvailableConfig contains configuration for polling behavior.
+type waitForNamespaceAvailableConfig struct {
+	retryInterval time.Duration
+	maxAttempts   int
+}
+
+// defaultWaitForNamespaceAvailableConfig returns the default polling configuration.
+func defaultWaitForNamespaceAvailableConfig() waitForNamespaceAvailableConfig {
+	return waitForNamespaceAvailableConfig{
+		retryInterval: 10 * time.Second,
+		maxAttempts:   12,
+	}
+}
+
+func waitForNamespaceAvailable(ctx context.Context, client *client.Client, namespaceID string) (*namespacev1.Namespace, error) {
+	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
+		return client.CloudService().GetNamespace(ctx, req)
+	}
+	return waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, namespaceID, defaultWaitForNamespaceAvailableConfig())
+}
+
+func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc func(context.Context, *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error), namespaceID string, config waitForNamespaceAvailableConfig) (*namespacev1.Namespace, error) {
+	ctx = tflog.SetField(ctx, "namespace_id", namespaceID)
+
+	retryInterval := config.retryInterval
+	maxAttempts := config.maxAttempts
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		tflog.Debug(ctx, "attempting to get namespace", map[string]any{
+			"attempt": attempt,
+		})
+
+		ns, err := getNamespaceFunc(ctx, &cloudservicev1.GetNamespaceRequest{
+			Namespace: namespaceID,
+		})
+
+		if err == nil {
+			tflog.Debug(ctx, "namespace successfully retrieved")
+			return ns.Namespace, nil
+		}
+
+		// Check if it's a PermissionDenied error that we should retry, or a different error we should fail on
+		if status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.NotFound {
+			tflog.Debug(ctx, "namespace not yet accessible, retrying", map[string]any{
+				"attempt":  attempt,
+				"retry_in": retryInterval.String(),
+				"error":    err.Error(),
+			})
+		} else {
+			// For non-PermissionDenied errors, fail immediately
+			tflog.Error(ctx, "failed to get namespace with non-retryable error", map[string]any{
+				"attempt": attempt,
+				"error":   err.Error(),
+			})
+			return nil, fmt.Errorf("failed to get namespace: %w", err)
+		}
+
+		// Check if we have more attempts left
+		if attempt >= maxAttempts {
+			break
+		}
+
+		// Wait before next retry, respecting context cancellation
+		select {
+		case <-time.After(retryInterval):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	return nil, fmt.Errorf("namespace %s not available after %d attempts", namespaceID, maxAttempts)
 }
 
 func getRegionsFromModel(ctx context.Context, plan *namespaceResourceModel) ([]string, diag.Diagnostics) {
