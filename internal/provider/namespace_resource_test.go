@@ -163,6 +163,49 @@ PEM
 
 }
 
+// TestAccNamespaceEndpointsStableOnUpdate verifies that the endpoints attribute
+// values are preserved during updates (not marked "known after apply").
+// This tests the fix for https://github.com/temporalio/terraform-provider-temporalcloud/issues/357
+func TestAccNamespaceEndpointsStableOnUpdate(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-endpoints-stable", randomString(10))
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["aws-us-east-1"]
+  api_key_auth       = true
+  retention_days     = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Create namespace with retention of 7
+				Config: config(name, 7),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "endpoints.grpc_address"),
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "endpoints.web_address"),
+				),
+			},
+			{
+				// Update retention to 14 - endpoints should remain stable
+				Config: config(name, 14),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "endpoints.grpc_address"),
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "endpoints.web_address"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
