@@ -163,6 +163,56 @@ PEM
 
 }
 
+func TestAccNamespaceInvalidRegion(t *testing.T) {
+	config := `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "tf-invalid-region"
+  regions            = ["invalid-region"]
+  api_key_auth       = true
+  retention_days     = 7
+}`
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				ExpectError: regexp.MustCompile(`Invalid Region Format`),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceInvalidRegionAPIValidation(t *testing.T) {
+	config := `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "tf-invalid-api-region"
+  regions            = ["aws-us-fake-99"]
+  api_key_auth       = true
+  retention_days     = 7
+}`
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				ExpectError: regexp.MustCompile(`Invalid Region`),
+			},
+		},
+	})
+}
+
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {

@@ -58,6 +58,7 @@ import (
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/validators"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
@@ -121,6 +122,7 @@ var (
 	_ resource.Resource                = (*namespaceResource)(nil)
 	_ resource.ResourceWithConfigure   = (*namespaceResource)(nil)
 	_ resource.ResourceWithImportState = (*namespaceResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*namespaceResource)(nil)
 
 	namespaceCertificateFilterAttrs = map[string]attr.Type{
 		"common_name":              types.StringType,
@@ -210,6 +212,9 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(validators.RegionFormat()),
 				},
 			},
 			"accepted_client_ca": schema.StringAttribute{
@@ -347,6 +352,63 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Delete: true,
 			}),
 		},
+	}
+}
+
+// ModifyPlan validates configured regions against the Temporal Cloud API.
+func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip on destroy.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	// Skip if the client is not configured (e.g., during early validation or provider config errors).
+	if r.client == nil {
+		return
+	}
+
+	var plan namespaceResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Skip if regions are unknown (computed values not yet resolved).
+	if plan.Regions.IsUnknown() {
+		return
+	}
+
+	configuredRegions, d := getRegionsFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if len(configuredRegions) == 0 {
+		return
+	}
+
+	regionsResp, err := r.client.CloudService().GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
+	if err != nil {
+		resp.Diagnostics.AddWarning(
+			"Unable to Validate Regions",
+			fmt.Sprintf("Failed to fetch available regions from Temporal Cloud API: %s. Region validation will be skipped.", err.Error()),
+		)
+		return
+	}
+
+	validRegions := make(map[string]bool, len(regionsResp.GetRegions()))
+	for _, region := range regionsResp.GetRegions() {
+		validRegions[region.GetId()] = true
+	}
+
+	for _, region := range configuredRegions {
+		if !validRegions[region] {
+			resp.Diagnostics.AddError(
+				"Invalid Region",
+				fmt.Sprintf("Region %q is not a valid Temporal Cloud region. Use the temporalcloud_regions data source or see https://docs.temporal.io/cloud/regions for the list of available regions.", region),
+			)
+		}
 	}
 }
 
