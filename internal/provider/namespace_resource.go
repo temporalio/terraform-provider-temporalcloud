@@ -63,7 +63,7 @@ import (
 )
 
 const (
-	defaultCreateTimeout time.Duration = 5 * time.Minute
+	defaultCreateTimeout time.Duration = 10 * time.Minute
 	defaultDeleteTimeout time.Duration = 5 * time.Minute
 )
 
