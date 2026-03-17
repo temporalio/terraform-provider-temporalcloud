@@ -530,31 +530,33 @@ PEM
 					return nil
 				},
 			},
-			{
-				// both auth methods
-				Config: config(configArgs{
-					Name:          name,
-					RetentionDays: 7,
-					ApiKeyAuth:    true,
-					TLSAuth:       true,
-				}),
-				Check: func(s *terraform.State) error {
-					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
-					conn := newConnection(t)
-					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
-						Namespace: id,
-					})
-					if err != nil {
-						return fmt.Errorf("failed to get namespace: %v", err)
-					}
-
-					spec := ns.Namespace.GetSpec()
-					if spec.GetCodecServer().GetEndpoint() != "" {
-						return fmt.Errorf("unexpected endpoint: %s", spec.GetCodecServer().GetEndpoint())
-					}
-					return nil
-				},
-			},
+			// TODO: re-enable once namespace endpoints support optional mTLS, making it safe for API key
+			// and mTLS clients to coexist on the same endpoint. The server currently rejects transitions
+			// from api_key_auth-only to both auth methods to avoid locking out API key clients.
+			// {
+			// 	// both auth methods
+			// 	Config: config(configArgs{
+			// 		Name:          name,
+			// 		RetentionDays: 7,
+			// 		ApiKeyAuth:    true,
+			// 		TLSAuth:       true,
+			// 	}),
+			// 	Check: func(s *terraform.State) error {
+			// 		id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+			// 		conn := newConnection(t)
+			// 		ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+			// 			Namespace: id,
+			// 		})
+			// 		if err != nil {
+			// 			return fmt.Errorf("failed to get namespace: %v", err)
+			// 		}
+			// 		spec := ns.Namespace.GetSpec()
+			// 		if spec.GetCodecServer().GetEndpoint() != "" {
+			// 			return fmt.Errorf("unexpected endpoint: %s", spec.GetCodecServer().GetEndpoint())
+			// 		}
+			// 		return nil
+			// 	},
+			// },
 			// Delete testing automatically occurs in TestCase
 		},
 	})
