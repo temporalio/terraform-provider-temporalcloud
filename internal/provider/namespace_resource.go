@@ -385,6 +385,22 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
+	// On update (state exists), reject removing capacity once set.
+	if !req.State.Raw.IsNull() {
+		var state namespaceResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !state.Capacity.IsNull() && (plan.Capacity.IsNull() || plan.Capacity.IsZero(ctx)) {
+			resp.Diagnostics.AddError(
+				"capacity cannot be removed once set",
+				`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
+			)
+			return
+		}
+	}
+
 	// Skip if regions are unknown (computed values not yet resolved).
 	if plan.Regions.IsUnknown() {
 		return
@@ -487,16 +503,22 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	if !plan.Capacity.IsNull() {
-		resp.Diagnostics.AddError("Capacity on namespace creation is not supported", "capacity should be null or not set when creating a namespace")
-		return
-		// This will be enabled when capacity on namespace creation is supported
-		// var d diag.Diagnostics
-		// capacitySpec, d := getCapacityFromModel(ctx, &plan)
-		// resp.Diagnostics.Append(d...)
-		// if resp.Diagnostics.HasError() {
-		// 	return
-		// }
-		// spec.CapacitySpec = capacitySpec
+		var capacity capacityModel
+		resp.Diagnostics.Append(plan.Capacity.As(ctx, &capacity, basetypes.ObjectAsOptions{})...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if capacity.Mode.ValueString() != "on_demand" {
+			resp.Diagnostics.AddError("Invalid capacity mode for namespace creation", "only 'on_demand' capacity mode is supported when creating a namespace")
+			return
+		}
+		var d diag.Diagnostics
+		capacitySpec, d := getCapacityFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.CapacitySpec = capacitySpec
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -608,6 +630,20 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	var plan namespaceResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	var state namespaceResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if !state.Capacity.IsNull() && (plan.Capacity.IsNull() || plan.Capacity.IsZero(ctx)) {
+		resp.Diagnostics.AddError(
+			"capacity cannot be removed once set",
+			`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
+		)
 		return
 	}
 
