@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -246,6 +247,15 @@ func (r *userResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
+	// Performance optimization: compare API response with existing state to avoid
+	// expensive types.Set reconstruction. The Terraform plugin framework has O(n²)
+	// complexity when walking SetNestedAttribute elements (see hashicorp/terraform-plugin-framework#775).
+	// By skipping the Set rebuild when nothing changed, we avoid this overhead entirely
+	// for the common case during refresh.
+	if userMatchesState(ctx, &state, user.User) {
+		return
+	}
+
 	resp.Diagnostics.Append(updateUserModelFromSpec(ctx, &state, user.User)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -479,4 +489,67 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 	state.NamespaceAccesses = namespaceAccesses
 
 	return diags
+}
+
+// userMatchesState compares the API response with the existing Terraform state
+// using plain Go maps (O(n)) instead of rebuilding the types.Set (O(n²)).
+// Returns true if the state is already up-to-date, allowing Read to skip
+// the expensive Set reconstruction.
+func userMatchesState(ctx context.Context, state *userResourceModel, user *identityv1.User) bool {
+	// Compare scalar fields.
+	if state.ID.ValueString() != user.GetId() {
+		return false
+	}
+	stateStr, err := enums.FromResourceState(user.GetState())
+	if err != nil || state.State.ValueString() != stateStr {
+		return false
+	}
+	if state.Email.ValueString() != user.GetSpec().GetEmail() {
+		return false
+	}
+	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil || !strings.EqualFold(state.AccountAccess.ValueString(), role) {
+		return false
+	}
+
+	// Compare namespace accesses: extract current state set into a Go map, then
+	// compare with the API response map. Both operations are O(n).
+	apiAccesses := user.GetSpec().GetAccess().GetNamespaceAccesses()
+
+	if state.NamespaceAccesses.IsNull() || state.NamespaceAccesses.IsUnknown() {
+		return len(apiAccesses) == 0
+	}
+
+	elements := make([]types.Object, 0, len(state.NamespaceAccesses.Elements()))
+	if diags := state.NamespaceAccesses.ElementsAs(ctx, &elements, false); diags.HasError() {
+		return false
+	}
+
+	if len(elements) != len(apiAccesses) {
+		return false
+	}
+
+	// Build a map from the existing state set elements.
+	stateMap := make(map[string]string, len(elements))
+	for _, elem := range elements {
+		var model userNamespaceAccessModel
+		if diags := elem.As(ctx, &model, basetypes.ObjectAsOptions{}); diags.HasError() {
+			return false
+		}
+		stateMap[model.NamespaceID.ValueString()] = model.Permission.ValueString()
+	}
+
+	// Compare against API response.
+	for ns, access := range apiAccesses {
+		apiPermission, err := enums.FromNamespaceAccessPermission(access.GetPermission())
+		if err != nil {
+			return false
+		}
+		statePermission, ok := stateMap[ns]
+		if !ok || !strings.EqualFold(statePermission, apiPermission) {
+			return false
+		}
+	}
+
+	return true
 }

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -272,6 +273,12 @@ func (r *serviceAccountResource) Read(ctx context.Context, req resource.ReadRequ
 		}
 
 		resp.Diagnostics.AddError("Failed to get Service Account", err.Error())
+		return
+	}
+
+	// Performance optimization: skip expensive Set reconstruction when state is unchanged.
+	// See hashicorp/terraform-plugin-framework#775 for the O(n²) SetNestedAttribute issue.
+	if serviceAccountMatchesState(ctx, &state, serviceAccount.ServiceAccount) {
 		return
 	}
 
@@ -581,4 +588,84 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 	}
 
 	return nil
+}
+
+// serviceAccountMatchesState compares the API response with existing state using
+// plain Go maps (O(n)) to avoid expensive types.Set reconstruction (O(n²)).
+func serviceAccountMatchesState(ctx context.Context, state *serviceAccountResourceModel, sa *identityv1.ServiceAccount) bool {
+	if state.ID.ValueString() != sa.GetId() {
+		return false
+	}
+	stateStr, err := enums.FromResourceState(sa.GetState())
+	if err != nil || state.State.ValueString() != stateStr {
+		return false
+	}
+	if state.Name.ValueString() != sa.GetSpec().GetName() {
+		return false
+	}
+	if state.Description.ValueString() != sa.GetSpec().GetDescription() {
+		return false
+	}
+
+	// Handle namespace-scoped access.
+	if sa.GetSpec().GetNamespaceScopedAccess() != nil {
+		if state.NamespaceScopedAccess.IsNull() {
+			return false
+		}
+		var nsModel serviceAccountNamespaceAccessModel
+		if diags := state.NamespaceScopedAccess.As(ctx, &nsModel, basetypes.ObjectAsOptions{}); diags.HasError() {
+			return false
+		}
+		nsa := sa.GetSpec().GetNamespaceScopedAccess()
+		if nsModel.NamespaceID.ValueString() != nsa.GetNamespace() {
+			return false
+		}
+		apiPerm, err := enums.FromNamespaceAccessPermission(nsa.GetAccess().GetPermission())
+		if err != nil || !strings.EqualFold(nsModel.Permission.ValueString(), apiPerm) {
+			return false
+		}
+		return true
+	}
+
+	// Handle account-scoped access.
+	role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil || !strings.EqualFold(state.AccountAccess.ValueString(), role) {
+		return false
+	}
+
+	apiAccesses := sa.GetSpec().GetAccess().GetNamespaceAccesses()
+	if state.NamespaceAccesses.IsNull() || state.NamespaceAccesses.IsUnknown() {
+		return len(apiAccesses) == 0
+	}
+
+	elements := make([]types.Object, 0, len(state.NamespaceAccesses.Elements()))
+	if diags := state.NamespaceAccesses.ElementsAs(ctx, &elements, false); diags.HasError() {
+		return false
+	}
+
+	if len(elements) != len(apiAccesses) {
+		return false
+	}
+
+	stateMap := make(map[string]string, len(elements))
+	for _, elem := range elements {
+		var model serviceAccountNamespaceAccessModel
+		if diags := elem.As(ctx, &model, basetypes.ObjectAsOptions{}); diags.HasError() {
+			return false
+		}
+		stateMap[model.NamespaceID.ValueString()] = model.Permission.ValueString()
+	}
+
+	for ns, access := range apiAccesses {
+		apiPermission, err := enums.FromNamespaceAccessPermission(access.GetPermission())
+		if err != nil {
+			return false
+		}
+		statePermission, ok := stateMap[ns]
+		if !ok || !strings.EqualFold(statePermission, apiPermission) {
+			return false
+		}
+	}
+
+	return true
 }

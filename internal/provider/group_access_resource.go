@@ -28,6 +28,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,7 +40,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
@@ -212,6 +213,12 @@ func (r *groupAccessResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
+	// Performance optimization: skip expensive Set reconstruction when state is unchanged.
+	// See hashicorp/terraform-plugin-framework#775 for the O(n²) SetNestedAttribute issue.
+	if groupAccessMatchesState(ctx, &state, model.Group) {
+		return
+	}
+
 	resp.Diagnostics.Append(updateGroupAccessModel(ctx, &state, model.Group)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -380,4 +387,56 @@ func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel
 	state.NamespaceAccesses = namespaceAccesses
 
 	return diags
+}
+
+// groupAccessMatchesState compares the API response with existing state using
+// plain Go maps (O(n)) to avoid expensive types.Set reconstruction (O(n²)).
+func groupAccessMatchesState(ctx context.Context, state *groupAccessResourceModel, group *identityv1.UserGroup) bool {
+	if group == nil {
+		return false
+	}
+	if state.ID.ValueString() != group.Id {
+		return false
+	}
+
+	role, err := enums.FromAccountAccessRole(group.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	if err != nil || !strings.EqualFold(state.AccountAccess.ValueString(), role) {
+		return false
+	}
+
+	apiAccesses := group.GetSpec().GetAccess().GetNamespaceAccesses()
+	if state.NamespaceAccesses.IsNull() || state.NamespaceAccesses.IsUnknown() {
+		return len(apiAccesses) == 0
+	}
+
+	elements := make([]types.Object, 0, len(state.NamespaceAccesses.Elements()))
+	if diags := state.NamespaceAccesses.ElementsAs(ctx, &elements, false); diags.HasError() {
+		return false
+	}
+
+	if len(elements) != len(apiAccesses) {
+		return false
+	}
+
+	stateMap := make(map[string]string, len(elements))
+	for _, elem := range elements {
+		var model namespaceAccessModel
+		if diags := elem.As(ctx, &model, basetypes.ObjectAsOptions{}); diags.HasError() {
+			return false
+		}
+		stateMap[model.NamespaceID.ValueString()] = model.Permission.ValueString()
+	}
+
+	for ns, access := range apiAccesses {
+		apiPermission, err := enums.FromNamespaceAccessPermission(access.GetPermission())
+		if err != nil {
+			return false
+		}
+		statePermission, ok := stateMap[ns]
+		if !ok || !strings.EqualFold(statePermission, apiPermission) {
+			return false
+		}
+	}
+
+	return true
 }
