@@ -1035,6 +1035,74 @@ PEM
 	})
 }
 
+func TestAccNamespaceCapacityProvisionedOnCreateErrors(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-cap-create-err", randomString(10))
+	config := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+  capacity = {
+    mode  = "provisioned"
+    value = 2
+  }
+}`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				ExpectError: regexp.MustCompile(`Provisioned capacity cannot be set on namespace creation`),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceCapacityCannotBeUnset(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-cap-unset", randomString(10))
+	withCapacity := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+  capacity = {
+    mode = "on_demand"
+  }
+}`, name)
+	withoutCapacity := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+}`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: withCapacity,
+			},
+			{
+				Config:      withoutCapacity,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`capacity cannot be removed once set`),
+			},
+		},
+	})
+}
+
 func testConfig() waitForNamespaceAvailableConfig {
 	return waitForNamespaceAvailableConfig{
 		retryInterval: 10 * time.Millisecond,
