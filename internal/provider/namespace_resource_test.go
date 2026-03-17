@@ -1059,7 +1059,7 @@ resource "temporalcloud_namespace" "test" {
 		Steps: []resource.TestStep{
 			{
 				Config:      config,
-				ExpectError: regexp.MustCompile(`Provisioned capacity cannot be set on namespace creation`),
+				ExpectError: regexp.MustCompile(`Invalid capacity mode for namespace creation`),
 			},
 		},
 	})

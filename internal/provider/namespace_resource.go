@@ -497,7 +497,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 		if capacity.Mode.ValueString() != "on_demand" {
-			resp.Diagnostics.AddError("Provisioned capacity cannot be set on namespace creation", "capacity mode must be 'on_demand' when setting capacity during namespace creation")
+			resp.Diagnostics.AddError("Invalid capacity mode for namespace creation", "only 'on_demand' capacity mode is supported when creating a namespace")
 			return
 		}
 		var d diag.Diagnostics
