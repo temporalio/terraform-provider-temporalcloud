@@ -380,7 +380,7 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		if !state.Capacity.IsNull() && plan.Capacity.IsNull() {
+		if !state.Capacity.IsNull() && (plan.Capacity.IsNull() || plan.Capacity.IsZero(ctx)) {
 			resp.Diagnostics.AddError(
 				"capacity cannot be removed once set",
 				`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
@@ -627,7 +627,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if !state.Capacity.IsNull() && plan.Capacity.IsNull() {
+	if !state.Capacity.IsNull() && (plan.Capacity.IsNull() || plan.Capacity.IsZero(ctx)) {
 		resp.Diagnostics.AddError(
 			"capacity cannot be removed once set",
 			`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
