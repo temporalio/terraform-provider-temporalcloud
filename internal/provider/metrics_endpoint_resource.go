@@ -73,6 +73,10 @@ func (r *metricsEndpointResource) Metadata(_ context.Context, req resource.Metad
 func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Description: "Configures a Temporal Cloud account's metrics",
+		MarkdownDescription: "Configures a Temporal Cloud account's metrics endpoint for the PromQL query API.\n\n" +
+			"-> **Consider using [OpenMetrics](https://docs.temporal.io/cloud/metrics/openmetrics) instead.** " +
+			"See the [`temporalcloud_service_account`](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account) " +
+			"resource for an example of setting up OpenMetrics with Terraform.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "A unique identifier for the account's metrics configuration. Always `account-ACCOUNT_ID-metrics`.",
