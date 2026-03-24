@@ -104,6 +104,8 @@ type (
 		Endpoint                      types.String `tfsdk:"endpoint"`
 		PassAccessToken               types.Bool   `tfsdk:"pass_access_token"`
 		IncludeCrossOriginCredentials types.Bool   `tfsdk:"include_cross_origin_credentials"`
+		CustomErrorMessage            types.String `tfsdk:"custom_error_message"`
+		CustomErrorLink               types.String `tfsdk:"custom_error_link"`
 	}
 
 	endpointsModel struct {
@@ -135,6 +137,8 @@ var (
 		"endpoint":                         types.StringType,
 		"pass_access_token":                types.BoolType,
 		"include_cross_origin_credentials": types.BoolType,
+		"custom_error_message":             types.StringType,
+		"custom_error_link":                types.StringType,
 	}
 
 	lifecycleAttrs = map[string]attr.Type{
@@ -278,6 +282,14 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Description: "If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.",
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
+						Optional:    true,
+					},
+					"custom_error_message": schema.StringAttribute{
+						Description: "A custom error message to display when the codec server returns an error.",
+						Optional:    true,
+					},
+					"custom_error_link": schema.StringAttribute{
+						Description: "A link displayed alongside the custom error message for the codec server.",
 						Optional:    true,
 					},
 				},
@@ -996,6 +1008,8 @@ func updateModelFromSpec(
 			Endpoint:                      stringOrNull(ns.GetSpec().GetCodecServer().GetEndpoint()),
 			PassAccessToken:               types.BoolValue(ns.GetSpec().GetCodecServer().GetPassAccessToken()),
 			IncludeCrossOriginCredentials: types.BoolValue(ns.GetSpec().GetCodecServer().GetIncludeCrossOriginCredentials()),
+			CustomErrorMessage:            stringOrNull(ns.GetSpec().GetCodecServer().GetCustomErrorMessage().GetDefault().GetMessage()),
+			CustomErrorLink:               stringOrNull(ns.GetSpec().GetCodecServer().GetCustomErrorMessage().GetDefault().GetLink()),
 		}
 
 		state, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, codecServer)
@@ -1129,11 +1143,20 @@ func getCodecServerFromModel(ctx context.Context, model *namespaceResourceModel)
 	if diags.HasError() {
 		return nil, diags
 	}
-	return &namespacev1.CodecServerSpec{
+	spec := &namespacev1.CodecServerSpec{
 		Endpoint:                      codecServer.Endpoint.ValueString(),
 		PassAccessToken:               codecServer.PassAccessToken.ValueBool(),
 		IncludeCrossOriginCredentials: codecServer.IncludeCrossOriginCredentials.ValueBool(),
-	}, diags
+	}
+	if !codecServer.CustomErrorMessage.IsNull() || !codecServer.CustomErrorLink.IsNull() {
+		spec.CustomErrorMessage = &namespacev1.CodecServerSpec_CustomErrorMessage{
+			Default: &namespacev1.CodecServerSpec_CustomErrorMessage_ErrorMessage{
+				Message: codecServer.CustomErrorMessage.ValueString(),
+				Link:    codecServer.CustomErrorLink.ValueString(),
+			},
+		}
+	}
+	return spec, diags
 }
 
 func getLifecycleFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.LifecycleSpec, diag.Diagnostics) {

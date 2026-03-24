@@ -209,6 +209,14 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 					Computed:    true,
 					Description: "If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.",
 				},
+				"custom_error_message": schema.StringAttribute{
+					Computed:    true,
+					Description: "A custom error message to display when the codec server returns an error.",
+				},
+				"custom_error_link": schema.StringAttribute{
+					Computed:    true,
+					Description: "A link displayed alongside the custom error message for the codec server.",
+				},
 			},
 		},
 		"endpoints": schema.SingleNestedAttribute{
@@ -435,6 +443,8 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 			Endpoint:                      stringOrNull(ns.GetSpec().GetCodecServer().GetEndpoint()),
 			PassAccessToken:               types.BoolValue(ns.GetSpec().GetCodecServer().GetPassAccessToken()),
 			IncludeCrossOriginCredentials: types.BoolValue(ns.GetSpec().GetCodecServer().GetIncludeCrossOriginCredentials()),
+			CustomErrorMessage:            stringOrNull(ns.GetSpec().GetCodecServer().GetCustomErrorMessage().GetDefault().GetMessage()),
+			CustomErrorLink:               stringOrNull(ns.GetSpec().GetCodecServer().GetCustomErrorMessage().GetDefault().GetLink()),
 		}
 		s, objectDiags := types.ObjectValueFrom(ctx, codecServerAttrs, csModel)
 		diags.Append(objectDiags...)
