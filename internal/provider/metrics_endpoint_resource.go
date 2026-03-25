@@ -74,7 +74,8 @@ func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaR
 	resp.Schema = schema.Schema{
 		Description: "Configures a Temporal Cloud account's metrics",
 		MarkdownDescription: "Configures a Temporal Cloud account's metrics endpoint for the PromQL query API.\n\n" +
-			"-> **Consider using [OpenMetrics](https://docs.temporal.io/cloud/metrics/openmetrics) instead.** " +
+			"!> **Deprecated.** The PromQL metrics endpoint was deprecated on April 2, 2026 and is no longer accepting new users. " +
+			"It will be disabled on October 5, 2026. Migrate to the [OpenMetrics endpoint](https://docs.temporal.io/cloud/metrics/openmetrics/migration-guide) instead. " +
 			"See the [`temporalcloud_service_account`](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account) " +
 			"resource for an example of setting up OpenMetrics with Terraform.",
 		Attributes: map[string]schema.Attribute{

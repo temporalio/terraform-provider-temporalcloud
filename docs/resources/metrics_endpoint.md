@@ -4,14 +4,14 @@ page_title: "temporalcloud_metrics_endpoint Resource - terraform-provider-tempor
 subcategory: ""
 description: |-
   Configures a Temporal Cloud account's metrics endpoint for the PromQL query API.
-  -> Consider using OpenMetrics https://docs.temporal.io/cloud/metrics/openmetrics instead. See the temporalcloud_service_account https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account resource for an example of setting up OpenMetrics with Terraform.
+  !> Deprecated. The PromQL metrics endpoint was deprecated on April 2, 2026 and is no longer accepting new users. It will be disabled on October 5, 2026. Migrate to the OpenMetrics endpoint https://docs.temporal.io/cloud/metrics/openmetrics/migration-guide instead. See the temporalcloud_service_account https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account resource for an example of setting up OpenMetrics with Terraform.
 ---
 
 # temporalcloud_metrics_endpoint (Resource)
 
 Configures a Temporal Cloud account's metrics endpoint for the PromQL query API.
 
--> **Consider using [OpenMetrics](https://docs.temporal.io/cloud/metrics/openmetrics) instead.** See the [`temporalcloud_service_account`](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account) resource for an example of setting up OpenMetrics with Terraform.
+!> **Deprecated.** The PromQL metrics endpoint was deprecated on April 2, 2026 and is no longer accepting new users. It will be disabled on October 5, 2026. Migrate to the [OpenMetrics endpoint](https://docs.temporal.io/cloud/metrics/openmetrics/migration-guide) instead. See the [`temporalcloud_service_account`](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account) resource for an example of setting up OpenMetrics with Terraform.
 
 ## Example Usage
 
