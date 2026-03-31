@@ -81,6 +81,8 @@ Read-Only:
 
 Read-Only:
 
+- `custom_error_link` (String) A link displayed alongside the custom error message for the codec server.
+- `custom_error_message` (String) A custom error message to display when the codec server returns an error.
 - `endpoint` (String) The endpoint of the codec server.
 - `include_cross_origin_credentials` (Boolean) If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.
 - `pass_access_token` (Boolean) If true, Temporal Cloud will pass the access token to the codec server upon each request.

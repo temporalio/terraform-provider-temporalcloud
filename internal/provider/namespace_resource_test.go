@@ -14,6 +14,7 @@ import (
 	"time"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
@@ -316,6 +317,8 @@ func TestAccNamespaceWithCodecServer(t *testing.T) {
 			Endpoint                      string
 			PassAccessToken               bool
 			IncludeCrossOriginCredentials bool
+			CustomErrorMessage            string
+			CustomErrorLink               string
 		}
 
 		configArgs struct {
@@ -371,6 +374,12 @@ PEM
     endpoint                         = "{{ .Endpoint }}"
     pass_access_token                = {{ .PassAccessToken }}
     include_cross_origin_credentials = {{ .IncludeCrossOriginCredentials }}
+    {{ if .CustomErrorMessage }}
+    custom_error_message             = "{{ .CustomErrorMessage }}"
+    {{ end }}
+    {{ if .CustomErrorLink }}
+    custom_error_link                = "{{ .CustomErrorLink }}"
+    {{ end }}
   }
   {{ end }}
 }`))
@@ -438,6 +447,45 @@ PEM
 					}
 					if !spec.GetCodecServer().GetIncludeCrossOriginCredentials() {
 						return errors.New("expected include_cross_origin_credentials to be true")
+					}
+					return nil
+				},
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.test",
+			},
+			{
+				Config: config(configArgs{
+					Name:          name,
+					RetentionDays: 7,
+					TLSAuth:       true,
+					CodecServer: &codecServer{
+						Endpoint:                      "https://example.com",
+						PassAccessToken:               true,
+						IncludeCrossOriginCredentials: true,
+						CustomErrorMessage:            "Contact support for codec issues",
+						CustomErrorLink:               "https://docs.example.com/troubleshooting",
+					},
+				}),
+				Check: func(s *terraform.State) error {
+					id := s.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					conn := newConnection(t)
+					ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+
+					spec := ns.Namespace.GetSpec()
+					customErr := spec.GetCodecServer().GetCustomErrorMessage().GetDefault()
+					if customErr.GetMessage() != "Contact support for codec issues" {
+						return fmt.Errorf("unexpected custom error message: %s", customErr.GetMessage())
+					}
+					if customErr.GetLink() != "https://docs.example.com/troubleshooting" {
+						return fmt.Errorf("unexpected custom error link: %s", customErr.GetLink())
 					}
 					return nil
 				},
@@ -1319,5 +1367,236 @@ func TestWaitForNamespaceAvailableMaxAttemptsReached(t *testing.T) {
 	// Check error message indicates max attempts reached
 	if !strings.Contains(err.Error(), "not available after") && !strings.Contains(err.Error(), "attempts") {
 		t.Errorf("Expected error message to indicate max attempts reached, got: %v", err)
+	}
+}
+
+func TestUpdateModelFromSpec_CodecServerCustomErrorMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name                string
+		codecServer         *namespace.CodecServerSpec
+		expectNull          bool
+		expectMessage       string
+		expectLink          string
+		expectMessageIsNull bool
+		expectLinkIsNull    bool
+	}{
+		{
+			name:       "no codec server",
+			expectNull: true,
+		},
+		{
+			name: "codec server without custom error",
+			codecServer: &namespace.CodecServerSpec{
+				Endpoint:        "https://example.com",
+				PassAccessToken: true,
+			},
+			expectMessageIsNull: true,
+			expectLinkIsNull:    true,
+		},
+		{
+			name: "codec server with custom error message and link",
+			codecServer: &namespace.CodecServerSpec{
+				Endpoint: "https://example.com",
+				CustomErrorMessage: &namespace.CodecServerSpec_CustomErrorMessage{
+					Default: &namespace.CodecServerSpec_CustomErrorMessage_ErrorMessage{
+						Message: "Contact support",
+						Link:    "https://support.example.com",
+					},
+				},
+			},
+			expectMessage: "Contact support",
+			expectLink:    "https://support.example.com",
+		},
+		{
+			name: "codec server with only custom error message",
+			codecServer: &namespace.CodecServerSpec{
+				Endpoint: "https://example.com",
+				CustomErrorMessage: &namespace.CodecServerSpec_CustomErrorMessage{
+					Default: &namespace.CodecServerSpec_CustomErrorMessage_ErrorMessage{
+						Message: "Something went wrong",
+					},
+				},
+			},
+			expectMessage:    "Something went wrong",
+			expectLinkIsNull: true,
+		},
+		{
+			name: "codec server with only custom error link",
+			codecServer: &namespace.CodecServerSpec{
+				Endpoint: "https://example.com",
+				CustomErrorMessage: &namespace.CodecServerSpec_CustomErrorMessage{
+					Default: &namespace.CodecServerSpec_CustomErrorMessage_ErrorMessage{
+						Link: "https://docs.example.com",
+					},
+				},
+			},
+			expectMessageIsNull: true,
+			expectLink:          "https://docs.example.com",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ns := &namespace.Namespace{
+				Namespace: "test-ns",
+				Spec: &namespace.NamespaceSpec{
+					Name:          "test-ns",
+					Regions:       []string{"aws-us-east-1"},
+					RetentionDays: 7,
+					CodecServer:   tc.codecServer,
+				},
+				Endpoints: &namespace.Endpoints{},
+			}
+
+			state := &namespaceResourceModel{}
+			diags := updateModelFromSpec(ctx, state, ns)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+
+			if tc.expectNull {
+				if !state.CodecServer.IsNull() {
+					t.Fatal("expected codec server to be null")
+				}
+				return
+			}
+
+			if state.CodecServer.IsNull() {
+				t.Fatal("expected codec server to be non-null")
+			}
+
+			attrs := state.CodecServer.Attributes()
+			msg := attrs["custom_error_message"]
+			link := attrs["custom_error_link"]
+
+			if tc.expectMessageIsNull {
+				if !msg.IsNull() {
+					t.Errorf("expected custom_error_message to be null, got %v", msg)
+				}
+			} else {
+				if msg.IsNull() {
+					t.Error("expected custom_error_message to be non-null")
+				} else if msg.String() != fmt.Sprintf("%q", tc.expectMessage) {
+					t.Errorf("expected custom_error_message %q, got %s", tc.expectMessage, msg.String())
+				}
+			}
+
+			if tc.expectLinkIsNull {
+				if !link.IsNull() {
+					t.Errorf("expected custom_error_link to be null, got %v", link)
+				}
+			} else {
+				if link.IsNull() {
+					t.Error("expected custom_error_link to be non-null")
+				} else if link.String() != fmt.Sprintf("%q", tc.expectLink) {
+					t.Errorf("expected custom_error_link %q, got %s", tc.expectLink, link.String())
+				}
+			}
+		})
+	}
+}
+
+func TestGetCodecServerFromModel_CustomErrorMessage(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		message       string
+		messageIsNull bool
+		link          string
+		linkIsNull    bool
+		expectNilCEM  bool
+		expectMessage string
+		expectLink    string
+	}{
+		{
+			name:          "both null - no custom error message",
+			messageIsNull: true,
+			linkIsNull:    true,
+			expectNilCEM:  true,
+		},
+		{
+			name:          "both set",
+			message:       "Contact support",
+			link:          "https://support.example.com",
+			expectMessage: "Contact support",
+			expectLink:    "https://support.example.com",
+		},
+		{
+			name:          "only message set",
+			message:       "Something went wrong",
+			linkIsNull:    true,
+			expectMessage: "Something went wrong",
+			expectLink:    "",
+		},
+		{
+			name:          "only link set",
+			messageIsNull: true,
+			link:          "https://docs.example.com",
+			expectMessage: "",
+			expectLink:    "https://docs.example.com",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var msgVal, linkVal types.String
+			if tc.messageIsNull {
+				msgVal = types.StringNull()
+			} else {
+				msgVal = types.StringValue(tc.message)
+			}
+			if tc.linkIsNull {
+				linkVal = types.StringNull()
+			} else {
+				linkVal = types.StringValue(tc.link)
+			}
+
+			csModel := &codecServerModel{
+				Endpoint:                      types.StringValue("https://example.com"),
+				PassAccessToken:               types.BoolValue(false),
+				IncludeCrossOriginCredentials: types.BoolValue(false),
+				CustomErrorMessage:            msgVal,
+				CustomErrorLink:               linkVal,
+			}
+
+			objVal, objDiags := types.ObjectValueFrom(ctx, codecServerAttrs, csModel)
+			if objDiags.HasError() {
+				t.Fatalf("failed to build codec server object: %+v", objDiags)
+			}
+
+			model := &namespaceResourceModel{
+				CodecServer: objVal,
+			}
+
+			spec, diags := getCodecServerFromModel(ctx, model)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+
+			if tc.expectNilCEM {
+				if spec.CustomErrorMessage != nil {
+					t.Errorf("expected nil CustomErrorMessage, got %+v", spec.CustomErrorMessage)
+				}
+				return
+			}
+
+			if spec.CustomErrorMessage == nil {
+				t.Fatal("expected non-nil CustomErrorMessage")
+			}
+			if spec.CustomErrorMessage.Default == nil {
+				t.Fatal("expected non-nil CustomErrorMessage.Default")
+			}
+			if spec.CustomErrorMessage.Default.Message != tc.expectMessage {
+				t.Errorf("expected message %q, got %q", tc.expectMessage, spec.CustomErrorMessage.Default.Message)
+			}
+			if spec.CustomErrorMessage.Default.Link != tc.expectLink {
+				t.Errorf("expected link %q, got %q", tc.expectLink, spec.CustomErrorMessage.Default.Link)
+			}
+		})
 	}
 }
