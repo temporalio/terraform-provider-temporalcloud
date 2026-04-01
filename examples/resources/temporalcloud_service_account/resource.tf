@@ -32,3 +32,19 @@ resource "temporalcloud_service_account" "namespace_admin" {
     }
   ]
 }
+
+// the following example demonstrates how to create a service account for scraping the OpenMetrics endpoint
+// for more information see https://docs.temporal.io/cloud/metrics/openmetrics
+
+resource "temporalcloud_service_account" "metrics" {
+  name           = "metrics-scraper"
+  account_access = "metricsread"
+}
+
+resource "temporalcloud_apikey" "metrics" {
+  display_name = "metrics-scraper"
+  owner_type   = "service-account"
+  owner_id     = temporalcloud_service_account.metrics.id
+  expiry_time  = "2027-11-01T00:00:00Z"
+  disabled     = false
+}
