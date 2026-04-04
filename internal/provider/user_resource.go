@@ -38,7 +38,7 @@ type (
 	userResourceModel struct {
 		ID                types.String                             `tfsdk:"id"`
 		State             types.String                             `tfsdk:"state"`
-		Email             types.String                             `tfsdk:"email"`
+		Email             internaltypes.CaseInsensitiveStringValue `tfsdk:"email"`
 		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 
@@ -107,6 +107,7 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"email": schema.StringAttribute{
+				CustomType:  internaltypes.CaseInsensitiveStringType{},
 				Description: "The email address for the user.",
 				Required:    true,
 				PlanModifiers: []planmodifier.String{
@@ -439,7 +440,7 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 		return diags
 	}
 	state.State = types.StringValue(stateStr)
-	state.Email = types.StringValue(user.GetSpec().GetEmail())
+	state.Email = internaltypes.CaseInsensitiveString(user.GetSpec().GetEmail())
 	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
