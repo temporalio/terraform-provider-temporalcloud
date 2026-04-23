@@ -24,6 +24,8 @@ type namespaceAccessModel struct {
 	Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
 }
 
+const accountAccessCustomRolesDescription = "The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead."
+
 var namespaceAccessAttrs = map[string]attr.Type{
 	"namespace_id": types.StringType,
 	"permission":   internaltypes.CaseInsensitiveStringType{},
@@ -36,6 +38,15 @@ func addAccessSchemaAttrs(s schema.Schema) {
 		Required:    true,
 		Validators: []validator.String{
 			stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read", "none"),
+		},
+	}
+
+	s.Attributes["account_access_custom_roles"] = schema.SetAttribute{
+		Description: accountAccessCustomRolesDescription,
+		Optional:    true,
+		ElementType: types.StringType,
+		Validators: []validator.Set{
+			setvalidator.SizeAtLeast(1),
 		},
 	}
 
@@ -100,6 +111,67 @@ func getNamespaceAccessesFromSet(ctx context.Context, set types.Set) (map[string
 	}
 
 	return namespaceAccesses, diags
+}
+
+func getCustomRolesFromSet(ctx context.Context, set types.Set) ([]string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if set.IsNull() || set.IsUnknown() {
+		return nil, diags
+	}
+
+	var customRoles []string
+	diags.Append(set.ElementsAs(ctx, &customRoles, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	if len(customRoles) == 0 {
+		return nil, diags
+	}
+
+	return customRoles, diags
+}
+
+func getCustomRolesSet(ctx context.Context, customRoles []string) (types.Set, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if len(customRoles) == 0 {
+		return types.SetNull(types.StringType), diags
+	}
+
+	customRolesSet, d := types.SetValueFrom(ctx, types.StringType, customRoles)
+	diags.Append(d...)
+	if diags.HasError() {
+		return types.SetNull(types.StringType), diags
+	}
+
+	return customRolesSet, diags
+}
+
+func getAccountAccessFromModel(ctx context.Context, accountAccess string, accountAccessCustomRolesSet types.Set) (*identityv1.AccountAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	role, err := enums.ToAccountAccessRole(accountAccess)
+	if err != nil {
+		diags.AddError("Failed to convert account access role", err.Error())
+		return nil, diags
+	}
+
+	accountAccessCustomRoles, d := getCustomRolesFromSet(ctx, accountAccessCustomRolesSet)
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED && len(accountAccessCustomRoles) == 0 {
+		return nil, diags
+	}
+
+	return &identityv1.AccountAccess{
+		Role:        role,
+		CustomRoles: accountAccessCustomRoles,
+	}, diags
 }
 
 func getNamespaceSetFromSpec(ctx context.Context, spec *identityv1.Access) (types.Set, diag.Diagnostics) {
