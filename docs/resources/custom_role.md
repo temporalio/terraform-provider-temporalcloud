@@ -80,6 +80,8 @@ Optional:
 
 - `allow_all` (Boolean) Whether this permission applies to all resources of the given type.
 
+
+
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`
 
@@ -88,11 +90,3 @@ Optional:
 - `create` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
 - `delete` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours). Setting a timeout for a Delete operation is only applicable if changes are saved into state before the destroy operation occurs.
 - `update` (String) A string that can be [parsed as a duration](https://pkg.go.dev/time#ParseDuration) consisting of numbers and unit suffixes, such as "30s" or "2h45m". Valid time units are "s" (seconds), "m" (minutes), "h" (hours).
-
-## Import
-
-Import is supported using the following syntax:
-
-```shell
-terraform import temporalcloud_custom_role.example_custom_role <custom-role-id>
-```
