@@ -738,6 +738,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.CapacitySpec = capacitySpec
 	}
 
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
 		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
 		return
@@ -953,6 +954,7 @@ func updateModelFromSpec(
 
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
