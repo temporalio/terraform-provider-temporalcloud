@@ -1153,6 +1153,97 @@ resource "temporalcloud_namespace" "test" {
 	})
 }
 
+func TestAccNamespaceWithFairness(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-fairness", randomString(10))
+	config := func(name string, enabled bool) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "fairnesstest" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = %t
+  }
+}`, name, enabled)
+	}
+
+	checkFairness := func(want bool) func(state *terraform.State) error {
+		return func(state *terraform.State) error {
+			id := state.RootModule().Resources["temporalcloud_namespace.fairnesstest"].Primary.Attributes["id"]
+			conn := newConnection(t)
+			ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+				Namespace: id,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %v", err)
+			}
+			got := ns.GetNamespace().GetSpec().GetFairness().GetTaskQueueFairnessEnabled()
+			if got != want {
+				return fmt.Errorf("expected task_queue_fairness_enabled=%t, got %t", want, got)
+			}
+			return nil
+		}
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(name, true),
+				Check:  checkFairness(true),
+			},
+			{
+				Config: config(name, false),
+				Check:  checkFairness(false),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceFairnessCannotBeUnset(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-fairness-unset", randomString(10))
+	withFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = true
+  }
+}`, name)
+	withoutFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+}`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: withFairness,
+			},
+			{
+				Config:      withoutFairness,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`fairness cannot be removed once set`),
+			},
+		},
+	})
+}
+
 func testConfig() waitForNamespaceAvailableConfig {
 	return waitForNamespaceAvailableConfig{
 		retryInterval: 10 * time.Millisecond,

@@ -87,6 +87,7 @@ type (
 		ConnectivityRuleIds types.Set                              `tfsdk:"connectivity_rule_ids"`
 		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
 		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
+		Fairness            internaltypes.ZeroObjectValue          `tfsdk:"fairness"`
 	}
 
 	lifecycleModel struct {
@@ -117,6 +118,10 @@ type (
 	capacityModel struct {
 		Mode  types.String  `tfsdk:"mode"`
 		Value types.Float64 `tfsdk:"value"`
+	}
+
+	fairnessModel struct {
+		TaskQueueFairnessEnabled types.Bool `tfsdk:"task_queue_fairness_enabled"`
 	}
 )
 
@@ -154,6 +159,10 @@ var (
 	capacityAttrs = map[string]attr.Type{
 		"mode":  types.StringType,
 		"value": types.Float64Type,
+	}
+
+	fairnessAttrs = map[string]attr.Type{
+		"task_queue_fairness_enabled": types.BoolType,
 	}
 )
 
@@ -357,6 +366,21 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
+			"fairness": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "The fairness configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: fairnessAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"task_queue_fairness_enabled": schema.BoolAttribute{
+						Description: "Flag to enable task queue fairness for the namespace. Defaults to disabled.",
+						Optional:    true,
+					},
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -385,7 +409,7 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	// On update (state exists), reject removing capacity once set.
+	// On update (state exists), reject removing capacity or fairness once set.
 	if !req.State.Raw.IsNull() {
 		var state namespaceResourceModel
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -396,6 +420,13 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			resp.Diagnostics.AddError(
 				"capacity cannot be removed once set",
 				`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
+			)
+			return
+		}
+		if !state.Fairness.IsNull() && (plan.Fairness.IsNull() || plan.Fairness.IsZero(ctx)) {
+			resp.Diagnostics.AddError(
+				"fairness cannot be removed once set",
+				`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
 			)
 			return
 		}
@@ -519,6 +550,15 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 		spec.CapacitySpec = capacitySpec
+	}
+
+	if !plan.Fairness.IsNull() {
+		fairnessSpec, d := getFairnessFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.Fairness = fairnessSpec
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -647,6 +687,14 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	if !state.Fairness.IsNull() && (plan.Fairness.IsNull() || plan.Fairness.IsZero(ctx)) {
+		resp.Diagnostics.AddError(
+			"fairness cannot be removed once set",
+			`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
+		)
+		return
+	}
+
 	regions, d := getRegionsFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -738,6 +786,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.CapacitySpec = capacitySpec
 	}
 
+	if !plan.Fairness.IsNull() {
+		fairnessSpec, d := getFairnessFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.Fairness = fairnessSpec
+	}
+
+	//lint:ignore SA1019 regions is deprecated in favor of replicas; migration tracked as follow-up
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
 		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
 		return
@@ -953,6 +1011,7 @@ func updateModelFromSpec(
 
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
+	//lint:ignore SA1019 regions is deprecated in favor of replicas; migration tracked as follow-up
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
@@ -1095,6 +1154,20 @@ func updateModelFromSpec(
 		state.Capacity = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(capacityAttrs)}
 	}
 
+	fairnessSpec := ns.GetSpec().GetFairness()
+	if fairnessSpec != nil {
+		fp, objectDiags := types.ObjectValueFrom(ctx, fairnessAttrs, &fairnessModel{
+			TaskQueueFairnessEnabled: types.BoolValue(fairnessSpec.GetTaskQueueFairnessEnabled()),
+		})
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: fp}
+	} else {
+		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(fairnessAttrs)}
+	}
+
 	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
@@ -1201,6 +1274,18 @@ func getCapacityFromModel(ctx context.Context, model *namespaceResourceModel) (*
 		diags.Append(diag.NewErrorDiagnostic("Invalid capacity mode", "Invalid capacity mode: "+capacity.Mode.ValueString()))
 		return nil, diags
 	}
+}
+
+func getFairnessFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.FairnessSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var fairness fairnessModel
+	diags.Append(model.Fairness.As(ctx, &fairness, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &namespacev1.FairnessSpec{
+		TaskQueueFairnessEnabled: fairness.TaskQueueFairnessEnabled.ValueBool(),
+	}, diags
 }
 
 func stringOrNull(s string) types.String {
