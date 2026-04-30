@@ -423,10 +423,18 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			)
 			return
 		}
-		// Unlike capacity, the fairness guard does not use IsZero: task_queue_fairness_enabled = false
-		// is the zero value of types.Bool, so IsZero would reject the very disable form the error
-		// below recommends.
-		if !state.Fairness.IsNull() && plan.Fairness.IsNull() {
+		// Read fairness from Config (raw HCL), not Plan: ZeroObjectValue.ObjectSemanticEquals
+		// treats {task_queue_fairness_enabled = false} as semantically equal to null because
+		// both IsZero, and the framework substitutes Plan with State when those are equal.
+		// That substitution would mask block removal in Plan after an explicit disable, so the
+		// guard must inspect the user's actual config. Capacity does not need this because
+		// its non-null state (mode = "on_demand") is non-zero and never collapses to null.
+		var config namespaceResourceModel
+		resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !state.Fairness.IsNull() && config.Fairness.IsNull() {
 			resp.Diagnostics.AddError(
 				"fairness cannot be removed once set",
 				`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
@@ -690,7 +698,13 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if !state.Fairness.IsNull() && plan.Fairness.IsNull() {
+	// See ModifyPlan for why fairness is checked against Config rather than Plan.
+	var config namespaceResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !state.Fairness.IsNull() && config.Fairness.IsNull() {
 		resp.Diagnostics.AddError(
 			"fairness cannot be removed once set",
 			`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
