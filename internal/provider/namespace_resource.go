@@ -423,7 +423,10 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			)
 			return
 		}
-		if !state.Fairness.IsNull() && (plan.Fairness.IsNull() || plan.Fairness.IsZero(ctx)) {
+		// Unlike capacity, the fairness guard does not use IsZero: task_queue_fairness_enabled = false
+		// is the zero value of types.Bool, so IsZero would reject the very disable form the error
+		// below recommends.
+		if !state.Fairness.IsNull() && plan.Fairness.IsNull() {
 			resp.Diagnostics.AddError(
 				"fairness cannot be removed once set",
 				`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
