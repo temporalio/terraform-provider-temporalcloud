@@ -1218,6 +1218,18 @@ resource "temporalcloud_namespace" "test" {
     task_queue_fairness_enabled = true
   }
 }`, name)
+	disabledFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = false
+  }
+}`, name)
 	withoutFairness := fmt.Sprintf(`
 provider "temporalcloud" {}
 
@@ -1234,6 +1246,12 @@ resource "temporalcloud_namespace" "test" {
 		Steps: []resource.TestStep{
 			{
 				Config: withFairness,
+			},
+			{
+				// Explicit disable must succeed (regression guard:
+				// task_queue_fairness_enabled = false is the zero value of types.Bool,
+				// so a naive IsZero check in ModifyPlan would reject this).
+				Config: disabledFairness,
 			},
 			{
 				Config:      withoutFairness,
