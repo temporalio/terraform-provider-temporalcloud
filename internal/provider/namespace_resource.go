@@ -690,7 +690,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	if !state.Fairness.IsNull() && (plan.Fairness.IsNull() || plan.Fairness.IsZero(ctx)) {
+	if !state.Fairness.IsNull() && plan.Fairness.IsNull() {
 		resp.Diagnostics.AddError(
 			"fairness cannot be removed once set",
 			`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
