@@ -73,12 +73,12 @@ Required:
 
 Required:
 
-- `resource_ids` (Set of String) The resource IDs this permission applies to. Can be empty when allow_all is true.
+- `resource_ids` (Set of String) The resource IDs this permission applies to. If empty, allow_all must be true.
 - `resource_type` (String) The resource type this permission applies to.
 
 Optional:
 
-- `allow_all` (Boolean) Whether this permission applies to all resources of the given type.
+- `allow_all` (Boolean) Whether this permission applies to all resources of the given type. If true, resource_ids must be empty.
 
 
 

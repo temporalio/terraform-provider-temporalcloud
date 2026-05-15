@@ -58,9 +58,10 @@ type (
 )
 
 var (
-	_ resource.Resource                = (*customRoleResource)(nil)
-	_ resource.ResourceWithConfigure   = (*customRoleResource)(nil)
-	_ resource.ResourceWithImportState = (*customRoleResource)(nil)
+	_ resource.Resource                   = (*customRoleResource)(nil)
+	_ resource.ResourceWithConfigure      = (*customRoleResource)(nil)
+	_ resource.ResourceWithImportState    = (*customRoleResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*customRoleResource)(nil)
 
 	customRoleResourcesAttrs = map[string]attr.Type{
 		"resource_type": types.StringType,
@@ -150,12 +151,12 @@ func (r *customRoleResource) Schema(ctx context.Context, _ resource.SchemaReques
 									Required:    true,
 								},
 								"resource_ids": schema.SetAttribute{
-									Description: "The resource IDs this permission applies to. Can be empty when allow_all is true.",
+									Description: "The resource IDs this permission applies to. If empty, allow_all must be true.",
 									Required:    true,
 									ElementType: types.StringType,
 								},
 								"allow_all": schema.BoolAttribute{
-									Description: "Whether this permission applies to all resources of the given type.",
+									Description: "Whether this permission applies to all resources of the given type. If true, resource_ids must be empty.",
 									Optional:    true,
 									Computed:    true,
 									Default:     booldefault.StaticBool(false),
@@ -177,6 +178,16 @@ func (r *customRoleResource) Schema(ctx context.Context, _ resource.SchemaReques
 			}),
 		},
 	}
+}
+
+func (r *customRoleResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var config customRoleResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(validateCustomRolePermissions(ctx, config.Permissions)...)
 }
 
 func (r *customRoleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -377,6 +388,11 @@ func (r *customRoleResource) ImportState(ctx context.Context, req resource.Impor
 func getCustomRoleSpecFromModel(ctx context.Context, model *customRoleResourceModel) (*identityv1.CustomRoleSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
+	diags.Append(validateCustomRolePermissions(ctx, model.Permissions)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
 	permissions := make([]types.Object, 0, len(model.Permissions.Elements()))
 	diags.Append(model.Permissions.ElementsAs(ctx, &permissions, false)...)
 	if diags.HasError() {
@@ -409,12 +425,17 @@ func getCustomRoleSpecFromModel(ctx context.Context, model *customRoleResourceMo
 			return nil, diags
 		}
 
+		allowAll := false
+		if !resourcesModel.AllowAll.IsNull() && !resourcesModel.AllowAll.IsUnknown() {
+			allowAll = resourcesModel.AllowAll.ValueBool()
+		}
+
 		specPermissions = append(specPermissions, &identityv1.CustomRoleSpec_Permission{
 			Actions: actions,
 			Resources: &identityv1.CustomRoleSpec_Resources{
 				ResourceType: resourcesModel.ResourceType.ValueString(),
 				ResourceIds:  resourceIDs,
-				AllowAll:     resourcesModel.AllowAll.ValueBool(),
+				AllowAll:     allowAll,
 			},
 		})
 	}
@@ -429,6 +450,70 @@ func getCustomRoleSpecFromModel(ctx context.Context, model *customRoleResourceMo
 		Description: description,
 		Permissions: specPermissions,
 	}, diags
+}
+
+func validateCustomRolePermissions(ctx context.Context, permissions types.List) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if permissions.IsNull() || permissions.IsUnknown() {
+		return diags
+	}
+
+	permissionObjects := make([]types.Object, 0, len(permissions.Elements()))
+	diags.Append(permissions.ElementsAs(ctx, &permissionObjects, false)...)
+	if diags.HasError() {
+		return diags
+	}
+
+	for i, permission := range permissionObjects {
+		var permissionModel customRolePermissionModel
+		diags.Append(permission.As(ctx, &permissionModel, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return diags
+		}
+
+		var resourcesModel customRoleResourcesModel
+		diags.Append(permissionModel.Resources.As(ctx, &resourcesModel, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return diags
+		}
+
+		if resourcesModel.ResourceIDs.IsUnknown() || resourcesModel.AllowAll.IsUnknown() {
+			continue
+		}
+
+		resourceIDsCount := len(resourcesModel.ResourceIDs.Elements())
+
+		allowAll := false
+		if !resourcesModel.AllowAll.IsNull() {
+			allowAll = resourcesModel.AllowAll.ValueBool()
+		}
+
+		resourceIDsPath := path.Root("permissions").AtListIndex(i).AtName("resources").AtName("resource_ids")
+		allowAllPath := path.Root("permissions").AtListIndex(i).AtName("resources").AtName("allow_all")
+
+		switch {
+		case allowAll && resourceIDsCount > 0:
+			diags.AddAttributeError(
+				resourceIDsPath,
+				"Invalid permission resources configuration",
+				"resource_ids must be empty when allow_all is true.",
+			)
+			diags.AddAttributeError(
+				allowAllPath,
+				"Invalid permission resources configuration",
+				"allow_all cannot be true when resource_ids contains values.",
+			)
+		case !allowAll && resourceIDsCount == 0:
+			diags.AddAttributeError(
+				resourceIDsPath,
+				"Invalid permission resources configuration",
+				"allow_all must be true when resource_ids is empty.",
+			)
+		}
+	}
+
+	return diags
 }
 
 func updateCustomRoleModelFromSpec(ctx context.Context, state *customRoleResourceModel, customRole *identityv1.CustomRole) diag.Diagnostics {
