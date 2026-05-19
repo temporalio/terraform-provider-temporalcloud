@@ -36,11 +36,12 @@ type (
 	}
 
 	userResourceModel struct {
-		ID                types.String                             `tfsdk:"id"`
-		State             types.String                             `tfsdk:"state"`
-		Email             types.String                             `tfsdk:"email"`
-		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
+		ID                       types.String                             `tfsdk:"id"`
+		State                    types.String                             `tfsdk:"state"`
+		Email                    types.String                             `tfsdk:"email"`
+		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
+		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -121,6 +122,14 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),
 				},
 			},
+			"account_access_custom_roles": schema.SetAttribute{
+				Description: accountAccessCustomRolesDescription,
+				Optional:    true,
+				ElementType: types.StringType,
+				Validators: []validator.Set{
+					setvalidator.SizeAtLeast(1),
+				},
+			},
 			"namespace_accesses": schema.SetNestedAttribute{
 				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
 				Optional:    true,
@@ -178,9 +187,9 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		diags.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -188,9 +197,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
+				AccountAccess:     accountAccess,
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
@@ -275,20 +282,14 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	access := &identityv1.Access{
-		AccountAccess: &identityv1.AccountAccess{
-			Role: role,
-		},
+		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
-	}
-	// If the role is unspecified (i.e. none), remove the account access from the spec.
-	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
-		access.AccountAccess = nil
 	}
 
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
@@ -446,6 +447,12 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 		return diags
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
+	accountAccessCustomRoles, d := getCustomRolesSet(ctx, user.GetSpec().GetAccess().GetAccountAccess().GetCustomRoles())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.AccountAccessCustomRoles = accountAccessCustomRoles
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {

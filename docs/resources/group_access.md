@@ -60,6 +60,7 @@ resource "temporalcloud_group_access" "my_group_access" {
 
 ### Optional
 
+- `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 
 <a id="nestedatt--namespace_accesses"></a>

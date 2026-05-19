@@ -27,15 +27,16 @@ type (
 	}
 
 	serviceAccountDataModel struct {
-		ID                    types.String                             `tfsdk:"id"`
-		Name                  types.String                             `tfsdk:"name"`
-		Description           types.String                             `tfsdk:"description"`
-		State                 types.String                             `tfsdk:"state"`
-		AccountAccess         internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses     types.Set                                `tfsdk:"namespace_accesses"`
-		NamespaceScopedAccess types.Object                             `tfsdk:"namespace_scoped_access"`
-		CreatedAt             types.String                             `tfsdk:"created_at"`
-		UpdatedAt             types.String                             `tfsdk:"updated_at"`
+		ID                       types.String                             `tfsdk:"id"`
+		Name                     types.String                             `tfsdk:"name"`
+		Description              types.String                             `tfsdk:"description"`
+		State                    types.String                             `tfsdk:"state"`
+		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
+		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		NamespaceScopedAccess    types.Object                             `tfsdk:"namespace_scoped_access"`
+		CreatedAt                types.String                             `tfsdk:"created_at"`
+		UpdatedAt                types.String                             `tfsdk:"updated_at"`
 	}
 
 	serviceAccountNSAccessModel struct {
@@ -104,6 +105,11 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 			CustomType:  internaltypes.CaseInsensitiveStringType{},
 			Description: "The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).",
 			Computed:    true,
+		},
+		"account_access_custom_roles": schema.SetAttribute{
+			Description: accountAccessCustomRolesDescription,
+			Computed:    true,
+			ElementType: types.StringType,
 		},
 		"namespace_accesses": schema.SetNestedAttribute{
 			Description: "The set of namespace permissions for this service account, including each namespace and its role.",
@@ -249,6 +255,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 
 		serviceAccountModel.NamespaceScopedAccess = obj
 		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
+		serviceAccountModel.AccountAccessCustomRoles = types.SetNull(types.StringType)
 		serviceAccountModel.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	} else {
 		// Handle account-scoped service account
@@ -259,6 +266,12 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 		}
 
 		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
+		accountAccessCustomRoles, d := getCustomRolesSet(ctx, sa.GetSpec().GetAccess().GetAccountAccess().GetCustomRoles())
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		serviceAccountModel.AccountAccessCustomRoles = accountAccessCustomRoles
 
 		namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 
