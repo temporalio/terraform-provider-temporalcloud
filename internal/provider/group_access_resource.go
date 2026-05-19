@@ -54,8 +54,9 @@ type groupAccessResource struct {
 type groupAccessResourceModel struct {
 	ID types.String `tfsdk:"id"`
 
-	AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-	NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
+	AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+	AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
+	NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
 }
 
 var (
@@ -130,20 +131,14 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	access := &identityv1.Access{
-		AccountAccess: &identityv1.AccountAccess{
-			Role: role,
-		},
+		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
-	}
-	// If the role is unspecified (i.e. none), remove the account access from the spec.
-	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
-		access.AccountAccess = nil
 	}
 
 	// Use the current group spec to update the access.
@@ -240,20 +235,14 @@ func (r *groupAccessResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	access := &identityv1.Access{
-		AccountAccess: &identityv1.AccountAccess{
-			Role: role,
-		},
+		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
-	}
-	// If the role is unspecified (i.e. none), remove the account access from the spec.
-	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
-		access.AccountAccess = nil
 	}
 
 	// Use the current group spec to update the access.
@@ -371,6 +360,12 @@ func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel
 		return diags
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
+	accountAccessCustomRoles, d := getCustomRolesSet(ctx, group.GetSpec().GetAccess().GetAccountAccess().GetCustomRoles())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.AccountAccessCustomRoles = accountAccessCustomRoles
 
 	namespaceAccesses, d := getNamespaceSetFromSpec(ctx, group.GetSpec().GetAccess())
 	diags.Append(d...)
