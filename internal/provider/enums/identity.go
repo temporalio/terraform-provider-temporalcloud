@@ -89,6 +89,29 @@ func FromAccountAccessRole(r identity.AccountAccess_Role) (string, error) {
 	}
 }
 
+// FromAccountAccess extracts the role string from an AccountAccess object.
+// It first checks the Role enum field, and if that is UNSPECIFIED, falls back
+// to the deprecated RoleDeprecated string field. This handles the case where
+// the API returns the role in the deprecated field for some account types.
+func FromAccountAccess(access *identity.AccountAccess) (string, error) {
+	if access == nil {
+		return "none", nil
+	}
+
+	// First try the enum field
+	if access.GetRole() != identity.AccountAccess_ROLE_UNSPECIFIED {
+		return FromAccountAccessRole(access.GetRole())
+	}
+
+	// Fall back to the deprecated string field if the enum is unspecified.
+	//nolint:staticcheck // SA1019: RoleDeprecated still used by older Temporal Cloud accounts.
+	if deprecated := access.GetRoleDeprecated(); deprecated != "" {
+		return strings.ToLower(deprecated), nil
+	}
+
+	return "none", nil
+}
+
 func ToNamespaceAccessPermission(s string) (identity.NamespaceAccess_Permission, error) {
 	switch strings.ToLower(s) {
 	case "admin":
