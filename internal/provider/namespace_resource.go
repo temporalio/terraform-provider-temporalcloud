@@ -1181,7 +1181,10 @@ func updateModelFromSpec(
 			return diags
 		}
 		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: fp}
-	} else {
+	} else if !state.Fairness.IsZero(ctx) {
+		// Preserve a zero-but-non-null state (e.g. {task_queue_fairness_enabled = false})
+		// so the ModifyPlan guard at "fairness cannot be removed once set" stays armed
+		// even if the API normalizes a default-disabled spec to nil on read.
 		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(fairnessAttrs)}
 	}
 
