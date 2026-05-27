@@ -30,6 +30,12 @@ resource "temporalcloud_connectivity_rule" "public_rule" {
   connectivity_type = "public"
 }
 
+// Create Public Connectivity Rule with stable IPs enabled
+resource "temporalcloud_connectivity_rule" "public_rule_stable_ips" {
+  connectivity_type = "public"
+  enable_stable_ips = true
+}
+
 // Create Private Connectivity Rule for AWS
 resource "temporalcloud_connectivity_rule" "private_aws" {
   connectivity_type = "private"
@@ -67,6 +73,7 @@ resource "temporalcloud_namespace" "ns-with-cr" {
 ### Optional
 
 - `connection_id` (String) The connection ID of the private connection.
+- `enable_stable_ips` (Boolean) If true, namespaces attached to this public connectivity rule will be reachable via a predictable set of public IPs. Only applies when connectivity_type is 'public'.
 - `gcp_project_id` (String) The GCP project ID. Required when cloud_provider is 'gcp'.
 - `region` (String) The region of the connection. Example: 'aws-us-west-2'.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))

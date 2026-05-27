@@ -15,6 +15,12 @@ resource "temporalcloud_connectivity_rule" "public_rule" {
   connectivity_type = "public"
 }
 
+// Create Public Connectivity Rule with stable IPs enabled
+resource "temporalcloud_connectivity_rule" "public_rule_stable_ips" {
+  connectivity_type = "public"
+  enable_stable_ips = true
+}
+
 // Create Private Connectivity Rule for AWS
 resource "temporalcloud_connectivity_rule" "private_aws" {
   connectivity_type = "private"

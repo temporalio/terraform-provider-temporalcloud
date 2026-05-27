@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -42,6 +43,7 @@ type (
 		ConnectionID     types.String   `tfsdk:"connection_id"`
 		Region           types.String   `tfsdk:"region"`
 		GcpProjectID     types.String   `tfsdk:"gcp_project_id"`
+		EnableStableIps  types.Bool     `tfsdk:"enable_stable_ips"`
 		Timeouts         timeouts.Value `tfsdk:"timeouts"`
 	}
 )
@@ -110,6 +112,12 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 			"region": schema.StringAttribute{
 				Description: "The region of the connection. Example: 'aws-us-west-2'.",
 				Optional:    true,
+			},
+			"enable_stable_ips": schema.BoolAttribute{
+				Description: "If true, namespaces attached to this public connectivity rule will be reachable via a predictable set of public IPs. Only applies when connectivity_type is 'public'.",
+				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -278,11 +286,17 @@ func getConnectivityRuleSpecFromModel(model *connectivityRuleResourceModel) (*co
 	case connectivityRuleTypePublic:
 		return &connectivityrulev1.ConnectivityRuleSpec{
 			ConnectionType: &connectivityrulev1.ConnectivityRuleSpec_PublicRule{
-				PublicRule: &connectivityrulev1.PublicConnectivityRule{},
+				PublicRule: &connectivityrulev1.PublicConnectivityRule{
+					EnableStableIps: model.EnableStableIps.ValueBool(),
+				},
 			},
 		}, diags
 
 	case connectivityRuleTypePrivate:
+		if model.EnableStableIps.ValueBool() {
+			diags.AddError("Invalid attribute for private connectivity rule", "enable_stable_ips can only be set when connectivity_type is 'public'")
+			return nil, diags
+		}
 		if model.ConnectionID.IsNull() {
 			diags.AddError("Connection ID is required", "connection_id must be specified when connectivity_type is 'private'")
 			return nil, diags
@@ -324,6 +338,7 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
 		model.ConnectionID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetConnectionId())
 		model.Region = types.StringValue(connectivityRule.Spec.GetPrivateRule().GetRegion())
+		model.EnableStableIps = types.BoolValue(false)
 
 		// Only set gcp_project_id if it's not empty, otherwise keep it as null
 		gcpProjectId := connectivityRule.Spec.GetPrivateRule().GetGcpProjectId()
@@ -337,6 +352,7 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 		model.ConnectionID = types.StringNull()
 		model.Region = types.StringNull()
 		model.GcpProjectID = types.StringNull()
+		model.EnableStableIps = types.BoolValue(connectivityRule.Spec.GetPublicRule().GetEnableStableIps())
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
 		return diags
