@@ -473,8 +473,8 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 	}
 
-	getRegionsFn := func(ctx context.Context, req *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
-		return r.client.CloudService().GetRegions(ctx, req)
+	getRegionsFn := func(ctx context.Context, regionsReq *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return r.client.CloudService().GetRegions(ctx, regionsReq)
 	}
 	resp.Diagnostics.Append(validateRegionsWithConfig(ctx, stateRegions, configuredRegions, getRegionsFn)...)
 }

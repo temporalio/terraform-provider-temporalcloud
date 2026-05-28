@@ -230,6 +230,17 @@ func TestValidateRegionsSkippedWhenUnchanged(t *testing.T) {
 	if diags.HasError() {
 		t.Errorf("expected no errors, got: %+v", diags)
 	}
+
+	// Same regions in different order — comparison is order-insensitive so validation must still be skipped.
+	called = false
+	diags = validateRegionsWithConfig(context.Background(), []string{"aws-us-east-1", "aws-us-west-2"}, []string{"aws-us-west-2", "aws-us-east-1"}, getRegionsFn)
+
+	if called {
+		t.Error("expected GetRegions to be skipped when regions are unchanged (different order), but it was called")
+	}
+	if diags.HasError() {
+		t.Errorf("expected no errors, got: %+v", diags)
+	}
 }
 
 func TestValidateRegionsAPIError(t *testing.T) {
