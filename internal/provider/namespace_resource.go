@@ -458,28 +458,63 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	regionsResp, err := r.client.CloudService().GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
+	var stateRegions []string
+	if !req.State.Raw.IsNull() {
+		var state namespaceResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		var d diag.Diagnostics
+		stateRegions, d = getRegionsFromModel(ctx, &state)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	getRegionsFn := func(ctx context.Context, req *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return r.client.CloudService().GetRegions(ctx, req)
+	}
+	resp.Diagnostics.Append(validateRegionsWithConfig(ctx, stateRegions, configuredRegions, getRegionsFn)...)
+}
+
+// validateRegionsWithConfig checks that every region in configuredRegions is valid by calling the
+// getRegionsFn.
+//
+// It skips validation when stateRegions equals configuredRegions to avoid blocking Terraform operations
+// on a namespace whose region is no longer supported for new placement.
+func validateRegionsWithConfig(
+	ctx context.Context,
+	stateRegions []string,
+	configuredRegions []string,
+	getRegionsFn func(context.Context, *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error),
+) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if areRegionsEqual(stateRegions, configuredRegions) {
+		return diags
+	}
+	regionsResp, err := getRegionsFn(ctx, &cloudservicev1.GetRegionsRequest{})
 	if err != nil {
-		resp.Diagnostics.AddWarning(
+		diags.AddWarning(
 			"Unable to Validate Regions",
 			fmt.Sprintf("Failed to fetch available regions from Temporal Cloud API: %s. Region validation will be skipped.", err.Error()),
 		)
-		return
+		return diags
 	}
-
 	validRegions := make(map[string]bool, len(regionsResp.GetRegions()))
 	for _, region := range regionsResp.GetRegions() {
 		validRegions[region.GetId()] = true
 	}
-
 	for _, region := range configuredRegions {
 		if !validRegions[region] {
-			resp.Diagnostics.AddError(
+			diags.AddError(
 				"Invalid Region",
 				fmt.Sprintf("Region %q is not a valid Temporal Cloud region. Use the temporalcloud_regions data source or see https://docs.temporal.io/cloud/regions for the list of available regions.", region),
 			)
 		}
 	}
+	return diags
 }
 
 // Create creates the resource and sets the initial Terraform state.

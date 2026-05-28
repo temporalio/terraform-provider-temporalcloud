@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	regionv1 "go.temporal.io/cloud-sdk/api/region/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -212,6 +213,66 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 		},
 	})
+}
+
+func TestValidateRegionsSkippedWhenUnchanged(t *testing.T) {
+	called := false
+	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		called = true
+		return nil, errors.New("should not be called")
+	}
+
+	diags := validateRegionsWithConfig(context.Background(), []string{"aws-us-east-1"}, []string{"aws-us-east-1"}, getRegionsFn)
+
+	if called {
+		t.Error("expected GetRegions to be skipped when regions are unchanged, but it was called")
+	}
+	if diags.HasError() {
+		t.Errorf("expected no errors, got: %+v", diags)
+	}
+}
+
+func TestValidateRegionsAPIError(t *testing.T) {
+	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return nil, errors.New("connection refused")
+	}
+
+	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-east-1"}, getRegionsFn)
+
+	if diags.HasError() {
+		t.Errorf("expected warning only (not error), got errors: %+v", diags)
+	}
+	if len(diags) == 0 {
+		t.Error("expected a warning diagnostic, got none")
+	}
+}
+
+func TestValidateRegionsValidRegion(t *testing.T) {
+	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return &cloudservicev1.GetRegionsResponse{
+			Regions: []*regionv1.Region{{Id: "aws-us-east-1"}},
+		}, nil
+	}
+
+	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-east-1"}, getRegionsFn)
+
+	if diags.HasError() {
+		t.Errorf("expected no errors for a valid region, got: %+v", diags)
+	}
+}
+
+func TestValidateRegionsInvalidRegion(t *testing.T) {
+	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return &cloudservicev1.GetRegionsResponse{
+			Regions: []*regionv1.Region{{Id: "aws-us-east-1"}},
+		}, nil
+	}
+
+	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-fake-99"}, getRegionsFn)
+
+	if !diags.HasError() {
+		t.Error("expected an error for an invalid region, got none")
+	}
 }
 
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
