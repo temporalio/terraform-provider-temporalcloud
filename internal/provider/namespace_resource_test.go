@@ -215,74 +215,94 @@ resource "temporalcloud_namespace" "terraform" {
 	})
 }
 
-func TestValidateRegionsSkippedWhenUnchanged(t *testing.T) {
-	called := false
-	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
-		called = true
-		return nil, errors.New("should not be called")
+func TestValidateRegionsWithConfig(t *testing.T) {
+	t.Parallel()
+
+	availableRegions := []*regionv1.Region{{Id: "aws-us-east-1"}, {Id: "aws-us-west-2"}}
+
+	testCases := []struct {
+		name              string
+		stateRegions      []string
+		configuredRegions []string
+		getRegionsFn      func(context.Context, *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error)
+		wantAPICall       bool
+		wantError         bool
+		wantWarning       bool
+	}{
+		{
+			name:              "skip validation when regions are unchanged",
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "skip validation when regions are unchanged (different order)",
+			stateRegions:      []string{"aws-us-east-1", "aws-us-west-2"},
+			configuredRegions: []string{"aws-us-west-2", "aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "API error produces warning, not error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("connection refused")
+			},
+			wantAPICall: true,
+			wantWarning: true,
+		},
+		{
+			name:              "valid region passes validation",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+		},
+		{
+			name:              "invalid region produces error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-fake-99"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+			wantError:   true,
+		},
 	}
 
-	diags := validateRegionsWithConfig(context.Background(), []string{"aws-us-east-1"}, []string{"aws-us-east-1"}, getRegionsFn)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	if called {
-		t.Error("expected GetRegions to be skipped when regions are unchanged, but it was called")
-	}
-	if diags.HasError() {
-		t.Errorf("expected no errors, got: %+v", diags)
-	}
+			called := false
+			wrappedFn := func(ctx context.Context, req *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				called = true
+				return tc.getRegionsFn(ctx, req)
+			}
 
-	// Same regions in different order — comparison is order-insensitive so validation must still be skipped.
-	called = false
-	diags = validateRegionsWithConfig(context.Background(), []string{"aws-us-east-1", "aws-us-west-2"}, []string{"aws-us-west-2", "aws-us-east-1"}, getRegionsFn)
+			diags := validateRegionsWithConfig(context.Background(), tc.stateRegions, tc.configuredRegions, wrappedFn)
 
-	if called {
-		t.Error("expected GetRegions to be skipped when regions are unchanged (different order), but it was called")
-	}
-	if diags.HasError() {
-		t.Errorf("expected no errors, got: %+v", diags)
-	}
-}
-
-func TestValidateRegionsAPIError(t *testing.T) {
-	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
-		return nil, errors.New("connection refused")
-	}
-
-	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-east-1"}, getRegionsFn)
-
-	if diags.HasError() {
-		t.Errorf("expected warning only (not error), got errors: %+v", diags)
-	}
-	if len(diags) == 0 {
-		t.Error("expected a warning diagnostic, got none")
-	}
-}
-
-func TestValidateRegionsValidRegion(t *testing.T) {
-	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
-		return &cloudservicev1.GetRegionsResponse{
-			Regions: []*regionv1.Region{{Id: "aws-us-east-1"}},
-		}, nil
-	}
-
-	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-east-1"}, getRegionsFn)
-
-	if diags.HasError() {
-		t.Errorf("expected no errors for a valid region, got: %+v", diags)
-	}
-}
-
-func TestValidateRegionsInvalidRegion(t *testing.T) {
-	getRegionsFn := func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
-		return &cloudservicev1.GetRegionsResponse{
-			Regions: []*regionv1.Region{{Id: "aws-us-east-1"}},
-		}, nil
-	}
-
-	diags := validateRegionsWithConfig(context.Background(), nil, []string{"aws-us-fake-99"}, getRegionsFn)
-
-	if !diags.HasError() {
-		t.Error("expected an error for an invalid region, got none")
+			if called != tc.wantAPICall {
+				t.Errorf("API called = %v, want %v", called, tc.wantAPICall)
+			}
+			if tc.wantError && !diags.HasError() {
+				t.Error("expected error diagnostic, got none")
+			}
+			if !tc.wantError && diags.HasError() {
+				t.Errorf("unexpected error diagnostics: %+v", diags)
+			}
+			if tc.wantWarning && len(diags) == 0 {
+				t.Error("expected warning diagnostic, got none")
+			}
+		})
 	}
 }
 
