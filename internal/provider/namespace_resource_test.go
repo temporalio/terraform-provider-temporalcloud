@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	regionv1 "go.temporal.io/cloud-sdk/api/region/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -212,6 +213,97 @@ resource "temporalcloud_namespace" "terraform" {
 			},
 		},
 	})
+}
+
+func TestValidateRegionsWithConfig(t *testing.T) {
+	t.Parallel()
+
+	availableRegions := []*regionv1.Region{{Id: "aws-us-east-1"}, {Id: "aws-us-west-2"}}
+
+	testCases := []struct {
+		name              string
+		stateRegions      []string
+		configuredRegions []string
+		getRegionsFn      func(context.Context, *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error)
+		wantAPICall       bool
+		wantError         bool
+		wantWarning       bool
+	}{
+		{
+			name:              "skip validation when regions are unchanged",
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "skip validation when regions are unchanged (different order)",
+			stateRegions:      []string{"aws-us-east-1", "aws-us-west-2"},
+			configuredRegions: []string{"aws-us-west-2", "aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "API error produces warning, not error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("connection refused")
+			},
+			wantAPICall: true,
+			wantWarning: true,
+		},
+		{
+			name:              "valid region passes validation",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+		},
+		{
+			name:              "invalid region produces error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-fake-99"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+			wantError:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			called := false
+			wrappedFn := func(ctx context.Context, req *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				called = true
+				return tc.getRegionsFn(ctx, req)
+			}
+
+			diags := validateRegionsWithConfig(context.Background(), tc.stateRegions, tc.configuredRegions, wrappedFn)
+
+			if called != tc.wantAPICall {
+				t.Errorf("API called = %v, want %v", called, tc.wantAPICall)
+			}
+			if tc.wantError && !diags.HasError() {
+				t.Error("expected error diagnostic, got none")
+			}
+			if !tc.wantError && diags.HasError() {
+				t.Errorf("unexpected error diagnostics: %+v", diags)
+			}
+			if tc.wantWarning && len(diags) == 0 {
+				t.Error("expected warning diagnostic, got none")
+			}
+		})
+	}
 }
 
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
