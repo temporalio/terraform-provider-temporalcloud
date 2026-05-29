@@ -156,7 +156,7 @@ func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 			{
 				Config: testAccConnectivityRuleResourceConfig_PrivateWithStableIps(),
 				// Should fail because enable_stable_ips is only valid for public rules
-				ExpectError: regexp.MustCompile("enable_stable_ips can only be set when connectivity_type is 'public'"),
+				ExpectError: regexp.MustCompile("enable_stable_ips can only be true when connectivity_type is 'public'"),
 			},
 		},
 	})
