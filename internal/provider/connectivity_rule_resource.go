@@ -298,7 +298,7 @@ func getConnectivityRuleSpecFromModel(model *connectivityRuleResourceModel) (*co
 
 	case connectivityRuleTypePrivate:
 		if model.EnableStableIps.ValueBool() {
-			diags.AddError("Invalid attribute for private connectivity rule", "enable_stable_ips can only be set when connectivity_type is 'public'")
+			diags.AddError("Invalid attribute for private connectivity rule", "enable_stable_ips can only be true when connectivity_type is 'public'")
 			return nil, diags
 		}
 		if model.ConnectionID.IsNull() {
