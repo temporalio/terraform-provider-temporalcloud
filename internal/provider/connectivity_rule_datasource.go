@@ -35,6 +35,7 @@ type (
 		ConnectionID     types.String `tfsdk:"connection_id"`
 		Region           types.String `tfsdk:"region"`
 		GcpProjectID     types.String `tfsdk:"gcp_project_id"`
+		EnableStableIps  types.Bool   `tfsdk:"enable_stable_ips"`
 
 		State     types.String `tfsdk:"state"`
 		CreatedAt types.String `tfsdk:"created_at"`
@@ -70,6 +71,10 @@ func connectivityRuleDataSourceSchema(idRequired bool) map[string]schema.Attribu
 		"gcp_project_id": schema.StringAttribute{
 			Computed:    true,
 			Description: "The GCP project ID of the connectivity rule.",
+		},
+		"enable_stable_ips": schema.BoolAttribute{
+			Computed:    true,
+			Description: "If true, namespaces attached to this public connectivity rule are reachable via a predictable set of public IPs. Only set for public connectivity rules.",
 		},
 		"state": schema.StringAttribute{
 			Computed:    true,
@@ -159,6 +164,7 @@ func connectivityRuleToConnectivityRuleDataModel(connectivityRule *connectivityr
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
 		model.ConnectionID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetConnectionId())
 		model.Region = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetRegion())
+		model.EnableStableIps = types.BoolValue(false)
 		if connectivityRule.GetSpec().GetPrivateRule().GetGcpProjectId() != "" {
 			model.GcpProjectID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetGcpProjectId())
 		} else {
@@ -169,6 +175,7 @@ func connectivityRuleToConnectivityRuleDataModel(connectivityRule *connectivityr
 		model.ConnectionID = types.StringNull()
 		model.Region = types.StringNull()
 		model.GcpProjectID = types.StringNull()
+		model.EnableStableIps = types.BoolValue(connectivityRule.GetSpec().GetPublicRule().GetEnableStableIps())
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
 		return nil, diags
