@@ -441,7 +441,7 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 	}
 	state.State = types.StringValue(stateStr)
 	state.Email = types.StringValue(user.GetSpec().GetEmail())
-	role, err := enums.FromAccountAccessRole(user.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	role, err := enums.FromAccountAccess(user.GetSpec().GetAccess().GetAccountAccess())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
 		return diags
