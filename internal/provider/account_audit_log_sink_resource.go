@@ -131,7 +131,7 @@ func (r *accountAuditLogSinkResource) Schema(ctx context.Context, req resource.S
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"role_name": schema.StringAttribute{
-						Description: "The IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.",
+						Description: "The name of the IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.",
 						Required:    true,
 					},
 					"destination_uri": schema.StringAttribute{
