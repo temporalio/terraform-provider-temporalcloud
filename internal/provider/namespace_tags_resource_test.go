@@ -79,7 +79,7 @@ func testAccNamespaceConfig(name string) string {
 	return fmt.Sprintf(`
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   retention_days = 1
   api_key_auth   = true
 }
