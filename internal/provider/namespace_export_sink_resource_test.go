@@ -32,7 +32,7 @@ func TestNamespaceExportSinkResource_Schema(t *testing.T) {
 func TestAccNamespaceExportSink_S3(t *testing.T) {
 
 	namespaceName := fmt.Sprintf("tf-test-ns-export-aws-%s", randomString(8))
-	sinkRegion := "us-east-1"
+	sinkRegion := "ca-central-1"
 	namespaceRegion := fmt.Sprintf("aws-%s", sinkRegion)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -67,7 +67,7 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-updated-role"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789013"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", "arn:aws:kms:ca-central-1:123456789013:key/test-updated-key"),
 				),
 			},
 			// Delete testing
@@ -209,7 +209,7 @@ resource "temporalcloud_namespace_export_sink" "test" {
     region         = %[4]q
     role_name      = "test-updated-role"
     aws_account_id = "123456789013"
-    kms_arn        = "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"
+    kms_arn        = "arn:aws:kms:ca-central-1:123456789013:key/test-updated-key"
   }
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)
