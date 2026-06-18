@@ -225,7 +225,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["azure-eastus"]
+  regions            = ["azure-centralus"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
