@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 )
 
-var regionFormatPattern = regexp.MustCompile(`^(aws|gcp)-[a-z0-9-]+$`)
+var regionFormatPattern = regexp.MustCompile(`^(aws|gcp|azure)-[a-z0-9-]+$`)
 
 type regionFormatValidator struct{}
 
@@ -21,11 +21,11 @@ func RegionFormat() validator.String {
 }
 
 func (v *regionFormatValidator) Description(ctx context.Context) string {
-	return "must be a valid Temporal Cloud region format (e.g., aws-us-east-1, gcp-us-central1)"
+	return "must be a valid Temporal Cloud region format (e.g., aws-us-east-1, gcp-us-central1, azure-eastus)"
 }
 
 func (v *regionFormatValidator) MarkdownDescription(ctx context.Context) string {
-	return "must be a valid Temporal Cloud region format (e.g., `aws-us-east-1`, `gcp-us-central1`). See [available regions](https://docs.temporal.io/cloud/regions)."
+	return "must be a valid Temporal Cloud region format (e.g., `aws-us-east-1`, `gcp-us-central1`, `azure-eastus`). See [available regions](https://docs.temporal.io/cloud/regions)."
 }
 
 func (v *regionFormatValidator) ValidateString(ctx context.Context, req validator.StringRequest, resp *validator.StringResponse) {
@@ -39,7 +39,7 @@ func (v *regionFormatValidator) ValidateString(ctx context.Context, req validato
 		resp.Diagnostics.AddAttributeError(
 			req.Path,
 			"Invalid Region Format",
-			fmt.Sprintf("Region %q does not match expected format. Regions must be prefixed with cloud provider (e.g., aws-us-east-1, gcp-us-central1). See https://docs.temporal.io/cloud/regions", value),
+			fmt.Sprintf("Region %q does not match expected format. Regions must be prefixed with cloud provider (e.g., aws-us-east-1, gcp-us-central1, azure-eastus). See https://docs.temporal.io/cloud/regions", value),
 		)
 	}
 }
