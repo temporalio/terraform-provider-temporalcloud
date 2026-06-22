@@ -354,7 +354,7 @@ func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel
 
 	state.ID = types.StringValue(group.Id)
 
-	role, err := enums.FromAccountAccessRole(group.GetSpec().GetAccess().GetAccountAccess().GetRole())
+	role, err := enums.FromAccountAccess(group.GetSpec().GetAccess().GetAccountAccess())
 	if err != nil {
 		diags.AddError("Failed to convert account access role", err.Error())
 		return diags

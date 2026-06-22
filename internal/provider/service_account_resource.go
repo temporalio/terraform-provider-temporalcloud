@@ -549,7 +549,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 		state.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 	} else {
 		// Handle account-scoped service account
-		role, err := enums.FromAccountAccessRole(serviceAccount.GetSpec().GetAccess().GetAccountAccess().GetRole())
+		role, err := enums.FromAccountAccess(serviceAccount.GetSpec().GetAccess().GetAccountAccess())
 		if err != nil {
 			diags.AddError("Failed to convert account access role", err.Error())
 		}
