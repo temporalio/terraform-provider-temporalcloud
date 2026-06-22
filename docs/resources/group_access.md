@@ -55,7 +55,7 @@ resource "temporalcloud_group_access" "my_group_access" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships or for group access resources.
+- `account_access` (String) The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `none` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support. `none` is only valid for users managed via SCIM that derive their roles from group memberships or for group access resources.
 - `id` (String) The unique identifier of the group access across all Temporal Cloud tenants.
 
 ### Optional

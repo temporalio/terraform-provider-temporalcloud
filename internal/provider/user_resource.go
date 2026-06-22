@@ -6,8 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -15,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -27,7 +24,6 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 )
 
 type (
@@ -90,7 +86,7 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 }
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{
+	s := schema.Schema{
 		Description: "Provisions a Temporal Cloud user.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -114,47 +110,6 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"account_access": schema.StringAttribute{
-				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `metricsread` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support. `none` is only valid for users managed via SCIM that derive their roles from group memberships.",
-				Required:    true,
-				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),
-				},
-			},
-			"account_access_custom_roles": schema.SetAttribute{
-				Description: accountAccessCustomRolesDescription,
-				Optional:    true,
-				ElementType: types.StringType,
-				Validators: []validator.Set{
-					setvalidator.SizeAtLeast(1),
-				},
-			},
-			"namespace_accesses": schema.SetNestedAttribute{
-				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
-				Optional:    true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"namespace_id": schema.StringAttribute{
-							Description: "The namespace to assign permissions to.",
-							Required:    true,
-						},
-						"permission": schema.StringAttribute{
-							CustomType:  internaltypes.CaseInsensitiveStringType{},
-							Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
-							Required:    true,
-							Validators: []validator.String{
-								stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),
-							},
-						},
-					},
-				},
-				Validators: []validator.Set{
-					setvalidator.SizeAtLeast(1),
-					validation.NewNamespaceAccessValidator("account_access"),
-					validation.SetNestedAttributeMustBeUnique("namespace_id"),
-				},
-			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -163,6 +118,8 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			}),
 		},
 	}
+	addAccessSchemaAttrs(s)
+	resp.Schema = s
 }
 
 func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {

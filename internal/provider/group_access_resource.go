@@ -179,7 +179,6 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-
 }
 
 func (r *groupAccessResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -322,7 +321,6 @@ func (r *groupAccessResource) Delete(ctx context.Context, req resource.DeleteReq
 		ResourceVersion:  currentGroup.GetGroup().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
-
 	if err != nil {
 		switch status.Code(err) {
 		case codes.NotFound:
