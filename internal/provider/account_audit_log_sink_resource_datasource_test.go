@@ -90,6 +90,11 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
+	// The audit log sink is an account-level singleton, so this test fails with
+	// "an audit log sink already exists on the account" when another run on the
+	// shared CI account leaves one behind. Skipped until test isolation is fixed.
+	t.Skip("flaky: account-level audit log sink contention on shared CI account")
+
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
