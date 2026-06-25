@@ -53,7 +53,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth       = true
   retention_days     = 7
 }

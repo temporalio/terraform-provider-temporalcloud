@@ -32,7 +32,7 @@ func TestNamespaceExportSinkResource_Schema(t *testing.T) {
 func TestAccNamespaceExportSink_S3(t *testing.T) {
 
 	namespaceName := fmt.Sprintf("tf-test-ns-export-aws-%s", randomString(8))
-	sinkRegion := "us-east-1"
+	sinkRegion := "ca-central-1"
 	namespaceRegion := fmt.Sprintf("aws-%s", sinkRegion)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
@@ -46,10 +46,10 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "test-bucket"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "cloud-cicd-export-prod-cacentral1"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-role"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789012"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "cloud-cicd-export-external-trust-prod-cacentral1"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "471170916252"),
 				),
 			},
 			// ImportState testing
@@ -63,11 +63,10 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 				Config: testAccNamespaceExportSinkS3ConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "updated-bucket"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "test-updated-role"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.bucket_name", "cloud-cicd-export-prod-cacentral1-updated"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.role_name", "cloud-cicd-export-external-trust-prod-cacentral1"),
 					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.region", sinkRegion),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "123456789013"),
-					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.kms_arn", "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "s3.aws_account_id", "471170916252"),
 				),
 			},
 			// Delete testing
@@ -91,18 +90,18 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 	creationGCSCheckFun := resource.ComposeAggregateTestCheckFunc(
 		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
 		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "test-bucket"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "prod-export-saas-cicd"),
 		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-sa"),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-project"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "export-prod"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "prod-t44kcfvuqwuazy9s3vuc2syu7"),
 	)
 
 	updateGCSCheckFun := resource.ComposeAggregateTestCheckFunc(
 		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "updated-bucket"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.bucket_name", "prod-export-saas-cicd-updated"),
 		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.region", sinkRegion),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "test-updated-sa"),
-		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "test-updated-project"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.service_account_id", "export-prod"),
+		resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "gcs.gcp_project_id", "prod-t44kcfvuqwuazy9s3vuc2syu7"),
 	)
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -181,10 +180,10 @@ resource "temporalcloud_namespace_export_sink" "test" {
   sink_name    = %[3]q
   enabled = true
   s3 = {
-    bucket_name    = "test-bucket"
+    bucket_name    = "cloud-cicd-export-prod-cacentral1"
     region         = %[4]q
-    role_name      = "test-role"
-    aws_account_id = "123456789012"
+    role_name      = "cloud-cicd-export-external-trust-prod-cacentral1"
+    aws_account_id = "471170916252"
   }
 
 }
@@ -205,11 +204,10 @@ resource "temporalcloud_namespace_export_sink" "test" {
   sink_name    = %[3]q
   enabled = false
   s3 = {
-    bucket_name    = "updated-bucket"
+    bucket_name    = "cloud-cicd-export-prod-cacentral1-updated"
     region         = %[4]q
-    role_name      = "test-updated-role"
-    aws_account_id = "123456789013"
-    kms_arn        = "arn:aws:kms:us-east-1:123456789013:key/test-updated-key"
+    role_name      = "cloud-cicd-export-external-trust-prod-cacentral1"
+    aws_account_id = "471170916252"
   }
 }
 `, namespaceName, namespaceRegion, sinkName, sinkRegion)
@@ -220,18 +218,18 @@ func testAccNamespaceExportSinkGCSConfig(namespaceName, namespaceRegion, sinkNam
 	if !isSAEmail {
 		export_config = fmt.Sprintf(`
   gcs = {
-    bucket_name         = "test-bucket"
+    bucket_name         = "prod-export-saas-cicd"
     region              = %[1]q
-    service_account_id  = "test-sa"
-    gcp_project_id      = "test-project"
+    service_account_id  = "export-prod"
+    gcp_project_id      = "prod-t44kcfvuqwuazy9s3vuc2syu7"
   }	
 `, sinkRegion)
 	} else {
 		export_config = fmt.Sprintf(`
   gcs = {
-    bucket_name     = "test-bucket"
+    bucket_name     = "prod-export-saas-cicd"
     region          = %[1]q
-    service_account_email = "test-sa@test-project.iam.gserviceaccount.com"
+    service_account_email = "export-prod@prod-t44kcfvuqwuazy9s3vuc2syu7.iam.gserviceaccount.com"
   }
 `, sinkRegion)
 	}
@@ -262,18 +260,18 @@ func testAccNamespaceExportSinkGCSConfigUpdate(namespaceName, namespaceRegion, s
 	if !isSAEmail {
 		export_config = fmt.Sprintf(`
   gcs = {
-    bucket_name         = "updated-bucket"
+    bucket_name         = "prod-export-saas-cicd-updated"
     region              = %[1]q
-    service_account_id  = "test-updated-sa"
-    gcp_project_id      = "test-updated-project"
+    service_account_id  = "export-prod"
+    gcp_project_id      = "prod-t44kcfvuqwuazy9s3vuc2syu7"
   }
 `, sinkRegion)
 	} else {
 		export_config = fmt.Sprintf(`
   gcs = {
-    bucket_name     = "updated-bucket"
+    bucket_name     = "prod-export-saas-cicd-updated"
     region          = %[1]q
-    service_account_email = "test-updated-sa@test-updated-project.iam.gserviceaccount.com"
+    service_account_email = "export-prod@prod-t44kcfvuqwuazy9s3vuc2syu7.iam.gserviceaccount.com"
   }
 `, sinkRegion)
 	}

@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"testing"
 	"text/template"
+
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -93,7 +94,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth       = true
   retention_days     = 7
 }

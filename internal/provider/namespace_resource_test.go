@@ -57,7 +57,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth       = true
   retention_days     = 7
 }`, name)
@@ -116,7 +116,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -210,6 +210,55 @@ resource "temporalcloud_namespace" "terraform" {
 			{
 				Config:      config,
 				ExpectError: regexp.MustCompile(`Invalid Region`),
+			},
+		},
+	})
+}
+
+func TestAccBasicAzureNamespace(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-azure-namespace", randomString(10))
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["azure-centralus"]
+  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNTA4MjAxNDAwMzNaFw0yNjA4MjAxNDAxMzNa
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAATRWwv2
+nVfToOR59QuRHk5jAVhu991AQWXwLFSzHzjmZ8XIkiVzh3EhPwybsnm+uV6XN/xe
+1+KJ/0NyiVL91KFwS0y5xLKqdvy/mOv0eSUy/blJpLR66diTqPDMlYntuBmjZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTNvOjx
+e/IC/jxLZvXGQT4fmj0eMTAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LjJ5cU4wCgYIKoZIzj0EAwMDaQAwZgIxALwxPDblJQ9R65G9/M7Tyx1H/7EUTeo9
+ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
+5hWHcfGvGFFkZn3TkJIX3kdJslSDmxOXhn7D/w==
+-----END CERTIFICATE-----
+PEM
+)
+  retention_days = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(name, 7),
+			},
+			{
+				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
 			},
 		},
 	})
@@ -316,7 +365,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth 	 = true
   retention_days     = %d
 }`, name, retention)
@@ -353,7 +402,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -431,7 +480,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .Name }}-{{ .ApiKeyAuth }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
 
 	  {{ if .ApiKeyAuth }}
 	  api_key_auth = true
@@ -711,7 +760,7 @@ provider "temporalcloud" {
 }
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -754,7 +803,7 @@ provider "temporalcloud" {
 }
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -801,7 +850,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -883,7 +932,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 	resource "temporalcloud_connectivity_rule" "%s" {
 	  connectivity_type = "private"
 	  connection_id     = "vpce-tftest%s"
-	  region            = "aws-us-east-1"
+	  region            = "aws-ca-central-1"
 	}
 	`, ruleName, ruleName)
 		}
@@ -903,7 +952,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 		
 	resource "temporalcloud_namespace" "test" {
 	  name               = "%s"
-	  regions            = ["aws-us-east-1"]
+	  regions            = ["aws-ca-central-1"]
 	  accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIBxzCCAU2gAwIBAgIRAnkbVL6hHp218oB9UlQtN7wwCgYIKoZIzj0EAwMwEjEQ
@@ -1077,7 +1126,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "capacitytest" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -1184,7 +1233,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   capacity = {
@@ -1212,7 +1261,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   capacity = {
@@ -1224,7 +1273,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
 }`, name)
@@ -1253,7 +1302,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "fairnesstest" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   fairness = {
@@ -1303,7 +1352,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   fairness = {
@@ -1315,7 +1364,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   fairness = {
@@ -1327,7 +1376,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
 }`, name)
