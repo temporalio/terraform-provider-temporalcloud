@@ -97,9 +97,10 @@ func traceUnaryInterceptor(ctx context.Context, method string, req, reply any, c
 	elapsed := time.Since(start)
 
 	v, _ := traceStats.LoadOrStore(method, &methodStat{})
-	st := v.(*methodStat)
-	st.calls.Add(1)
-	st.totalNs.Add(int64(elapsed))
+	if st, ok := v.(*methodStat); ok {
+		st.calls.Add(1)
+		st.totalNs.Add(int64(elapsed))
+	}
 
 	status := "ok"
 	if err != nil {
@@ -117,8 +118,14 @@ func LogTraceSummary() {
 	}
 	log.Printf("[temporalcloud-trace] ===== gRPC call summary =====")
 	traceStats.Range(func(k, v any) bool {
-		method := k.(string)
-		st := v.(*methodStat)
+		method, ok := k.(string)
+		if !ok {
+			return true
+		}
+		st, ok := v.(*methodStat)
+		if !ok {
+			return true
+		}
 		calls := st.calls.Load()
 		total := time.Duration(st.totalNs.Load())
 		avg := time.Duration(0)
