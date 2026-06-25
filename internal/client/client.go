@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -40,13 +39,24 @@ import (
 	"go.temporal.io/cloud-sdk/cloudclient"
 )
 
-// traceEnabled reports whether gRPC call instrumentation is turned on via the
+// TraceEnabled reports whether gRPC call instrumentation is turned on via the
 // TEMPORALCLOUD_TRACE environment variable. It is primarily intended to profile
 // slow acceptance tests, where almost all wall-clock time is spent in
 // server-side provisioning observed through these gRPC calls.
 func TraceEnabled() bool {
 	v := os.Getenv("TEMPORALCLOUD_TRACE")
 	return v != "" && v != "0" && v != "false"
+}
+
+// Tracef writes a trace line to stderr, prefixed for easy grepping. It writes
+// directly to os.Stderr rather than via the standard log package because the
+// acceptance-test harness redirects the std logger to a TF_LOG-gated sink,
+// which would otherwise swallow this output. It is a no-op when tracing is off.
+func Tracef(format string, args ...any) {
+	if !TraceEnabled() {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[temporalcloud-trace] "+format+"\n", args...)
 }
 
 // Client is a cloudclient for the Temporal Cloud API.
@@ -106,7 +116,7 @@ func traceUnaryInterceptor(ctx context.Context, method string, req, reply any, c
 	if err != nil {
 		status = "err"
 	}
-	log.Printf("[temporalcloud-trace] grpc %-55s %8.3fs %s", method, elapsed.Seconds(), status)
+	Tracef("grpc %-55s %8.3fs %s", method, elapsed.Seconds(), status)
 	return err
 }
 
@@ -116,7 +126,7 @@ func LogTraceSummary() {
 	if !TraceEnabled() {
 		return
 	}
-	log.Printf("[temporalcloud-trace] ===== gRPC call summary =====")
+	Tracef("===== gRPC call summary =====")
 	traceStats.Range(func(k, v any) bool {
 		method, ok := k.(string)
 		if !ok {
@@ -132,7 +142,7 @@ func LogTraceSummary() {
 		if calls > 0 {
 			avg = total / time.Duration(calls)
 		}
-		log.Printf("[temporalcloud-trace] %-55s calls=%-5d total=%9.3fs avg=%7.3fs", method, calls, total.Seconds(), avg.Seconds())
+		Tracef("%-55s calls=%-5d total=%9.3fs avg=%7.3fs", method, calls, total.Seconds(), avg.Seconds())
 		return true
 	})
 }
@@ -151,9 +161,7 @@ func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operation
 	// traceAwait logs how long the operation took and how many times it was
 	// polled, attributing wall-clock time to a specific operation type.
 	traceAwait := func(outcome string) {
-		if TraceEnabled() {
-			log.Printf("[temporalcloud-trace] await op %-12s %s polls=%d elapsed=%.3fs", outcome, op.GetOperationType(), polls, time.Since(start).Seconds())
-		}
+		Tracef("await op %-12s %s polls=%d elapsed=%.3fs", outcome, op.GetOperationType(), polls, time.Since(start).Seconds())
 	}
 
 	for {

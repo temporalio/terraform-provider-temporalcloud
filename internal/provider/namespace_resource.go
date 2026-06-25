@@ -26,7 +26,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"regexp"
 	"slices"
 	"sort"
@@ -978,9 +977,7 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 	// reachable, broken out from the async-operation wait, when
 	// TEMPORALCLOUD_TRACE is set.
 	traceWait := func(outcome string, attempt int) {
-		if client.TraceEnabled() {
-			log.Printf("[temporalcloud-trace] wait namespace %-12s id=%s attempts=%d elapsed=%.3fs", outcome, namespaceID, attempt, time.Since(start).Seconds())
-		}
+		client.Tracef("wait namespace %-12s id=%s attempts=%d elapsed=%.3fs", outcome, namespaceID, attempt, time.Since(start).Seconds())
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
