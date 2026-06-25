@@ -86,4 +86,8 @@ jobs:
       - env:
           TF_ACC: "1"
           TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
+          # Enable provider instrumentation so slow tests can be profiled from CI
+          # logs: per-gRPC-call timings, per-operation await summaries, and an
+          # aggregated gRPC call summary at the end of the run.
+          TEMPORALCLOUD_TRACE: "1"
         run: go test -timeout 60m -parallel 12 -v -cover ./internal/provider/

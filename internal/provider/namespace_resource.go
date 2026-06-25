@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"regexp"
 	"slices"
 	"sort"
@@ -972,6 +973,16 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 	retryInterval := config.retryInterval
 	maxAttempts := config.maxAttempts
 
+	start := time.Now()
+	// traceWait attributes time spent waiting for a namespace to become
+	// reachable, broken out from the async-operation wait, when
+	// TEMPORALCLOUD_TRACE is set.
+	traceWait := func(outcome string, attempt int) {
+		if client.TraceEnabled() {
+			log.Printf("[temporalcloud-trace] wait namespace %-12s id=%s attempts=%d elapsed=%.3fs", outcome, namespaceID, attempt, time.Since(start).Seconds())
+		}
+	}
+
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		tflog.Debug(ctx, "attempting to get namespace", map[string]any{
 			"attempt": attempt,
@@ -983,6 +994,7 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 
 		if err == nil {
 			tflog.Debug(ctx, "namespace successfully retrieved")
+			traceWait("available", attempt)
 			return ns.Namespace, nil
 		}
 
@@ -999,6 +1011,7 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 				"attempt": attempt,
 				"error":   err.Error(),
 			})
+			traceWait("error", attempt)
 			return nil, fmt.Errorf("failed to get namespace: %w", err)
 		}
 
@@ -1011,10 +1024,12 @@ func waitForNamespaceAvailableWithConfig(ctx context.Context, getNamespaceFunc f
 		select {
 		case <-time.After(retryInterval):
 		case <-ctx.Done():
+			traceWait("ctx-done", attempt)
 			return nil, ctx.Err()
 		}
 	}
 
+	traceWait("timeout", maxAttempts)
 	return nil, fmt.Errorf("namespace %s not available after %d attempts", namespaceID, maxAttempts)
 }
 

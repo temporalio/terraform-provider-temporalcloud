@@ -2,13 +2,25 @@ package provider
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
+
+// TestMain runs the test suite and, when TEMPORALCLOUD_TRACE is set, prints an
+// aggregated summary of all gRPC calls made during the run. This is useful for
+// profiling why acceptance tests are slow.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	client.LogTraceSummary()
+	os.Exit(code)
+}
 
 // testAccProtoV6ProviderFactories are used to instantiate a provider during
 // acceptance testing. The factory function will be invoked for every Terraform
