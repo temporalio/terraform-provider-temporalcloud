@@ -57,9 +57,19 @@ func ToAccountAccessRole(s string) (identity.AccountAccess_Role, error) {
 	}
 }
 
-func AllowedAccountAccessRoles() []string {
+func AllowedAccountAccessRolesForUsersAndGroups() []string {
 	return []string{
 		"owner",
+		"admin",
+		"developer",
+		"read",
+		"financeadmin",
+		"none",
+	}
+}
+
+func AllowedAccountAccessRolesForServiceAccounts() []string {
+	return []string{
 		"admin",
 		"developer",
 		"read",

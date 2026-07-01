@@ -31,13 +31,13 @@ var namespaceAccessAttrs = map[string]attr.Type{
 	"permission":   internaltypes.CaseInsensitiveStringType{},
 }
 
-func addAccessSchemaAttrs(s schema.Schema) {
+func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 	s.Attributes["account_access"] = schema.StringAttribute{
 		CustomType:  internaltypes.CaseInsensitiveStringType{},
-		Description: "The role on the account. Must be one of owner, admin, developer, none, or read (case-insensitive). owner is only valid for import and cannot be created, updated or deleted without Temporal support. none is only valid for users managed via SCIM that derive their roles from group memberships or for group access resources.",
+		Description: "The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `none` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support." + accountDescriptionSuffix,
 		Required:    true,
 		Validators: []validator.String{
-			stringvalidator.OneOfCaseInsensitive("owner", "admin", "developer", "read", "none"),
+			stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRolesForUsersAndGroups()...),
 		},
 	}
 
