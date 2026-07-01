@@ -106,7 +106,7 @@ func (r *groupAccessResource) Schema(_ context.Context, _ resource.SchemaRequest
 		},
 	}
 
-	addAccessSchemaAttrs(s)
+	addAccessSchemaAttrs(&s, "")
 	resp.Schema = s
 }
 
