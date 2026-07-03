@@ -95,7 +95,6 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
-	t.Parallel()
 	const (
 		pubsubServiceAccount   = "audit-log-cicd-prod"
 		pubsubTopicName        = "cloud-cicd-audit-log-prod"
