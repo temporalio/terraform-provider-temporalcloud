@@ -31,7 +31,12 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	t.Parallel()
-	sinkRegion := "ca-central-1"
+	const (
+		kinesisRoleName          = "cloud-cicd-audit-log-external-trust-prod"
+		kinesisStreamArn         = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod"
+		kinesisStreamArnUpdated  = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod-updated"
+		kinesisRegion            = "us-west-2"
+	)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
@@ -40,20 +45,20 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read testing
 			{
-				Config: testAccAccountAuditLogSinkKinesisConfig(sinkName, sinkRegion),
+				Config: testAccAccountAuditLogSinkKinesisConfig(sinkName, kinesisRoleName, kinesisStreamArn, kinesisRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-role"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-uri"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", kinesisRoleName),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", kinesisStreamArn),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", kinesisRegion),
 					// Verify datasource
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
 					resource.TestCheckResourceAttrSet("data.temporalcloud_account_audit_log_sink.test", "state"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-role"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-uri"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", kinesisRoleName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", kinesisStreamArn),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", kinesisRegion),
 				),
 			},
 			// ImportState testing
@@ -62,20 +67,20 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
-			// Update testing
+			// Update testing - only the Kinesis stream ARN changes
 			{
-				Config: testAccAccountAuditLogSinkKinesisConfigUpdate(sinkName, sinkRegion),
+				Config: testAccAccountAuditLogSinkKinesisConfigUpdate(sinkName, kinesisRoleName, kinesisStreamArnUpdated, kinesisRegion),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-updated-role"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-updated-uri"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.role_name", kinesisRoleName),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", kinesisStreamArnUpdated),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "kinesis.region", kinesisRegion),
 					// Verify datasource reflects updates
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", "test-updated-role"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", "test-updated-uri"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", sinkRegion),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.role_name", kinesisRoleName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.destination_uri", kinesisStreamArnUpdated),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "kinesis.region", kinesisRegion),
 				),
 			},
 			// Delete testing
@@ -90,6 +95,13 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 }
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
+	t.Parallel()
+	const (
+		pubsubServiceAccount   = "audit-log-cicd-prod"
+		pubsubTopicName        = "cloud-cicd-audit-log-prod"
+		pubsubTopicNameUpdated = "cloud-cicd-audit-log-prod-updated"
+		pubsubGCPProjectID     = "prod-t44kcfvuqwuazy9s3vuc2syu7"
+	)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
@@ -98,20 +110,20 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 		Steps: []resource.TestStep{
 			// Create and Read testing
 			{
-				Config: testAccAccountAuditLogSinkPubSubConfig(sinkName),
+				Config: testAccAccountAuditLogSinkPubSubConfig(sinkName, pubsubServiceAccount, pubsubTopicName, pubsubGCPProjectID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-topic"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-project"),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", pubsubServiceAccount),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", pubsubTopicName),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", pubsubGCPProjectID),
 					// Verify datasource
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
 					resource.TestCheckResourceAttrSet("data.temporalcloud_account_audit_log_sink.test", "state"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-sa"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-topic"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-project"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", pubsubServiceAccount),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", pubsubTopicName),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", pubsubGCPProjectID),
 				),
 			},
 			// ImportState testing
@@ -120,20 +132,20 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 				ImportState:       true,
 				ImportStateVerify: true,
 			},
-			// Update testing
+			// Update testing - only the topic name changes
 			{
-				Config: testAccAccountAuditLogSinkPubSubConfigUpdate(sinkName),
+				Config: testAccAccountAuditLogSinkPubSubConfigUpdate(sinkName, pubsubServiceAccount, pubsubTopicNameUpdated, pubsubGCPProjectID),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-updated-sa"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-updated-topic"),
-					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-updated-project"),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", pubsubServiceAccount),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", pubsubTopicNameUpdated),
+					resource.TestCheckResourceAttr("temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", pubsubGCPProjectID),
 					// Verify datasource reflects updates
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "sink_name", sinkName),
 					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "enabled", "true"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", "test-updated-sa"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", "test-updated-topic"),
-					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", "test-updated-project"),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.service_account_id", pubsubServiceAccount),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.topic_name", pubsubTopicNameUpdated),
+					resource.TestCheckResourceAttr("data.temporalcloud_account_audit_log_sink.test", "pubsub.gcp_project_id", pubsubGCPProjectID),
 				),
 			},
 			// Delete testing
@@ -147,46 +159,46 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 	})
 }
 
-func testAccAccountAuditLogSinkKinesisConfig(sinkName, sinkRegion string) string {
+func testAccAccountAuditLogSinkKinesisConfig(sinkName, roleName, streamArn, region string) string {
 	return fmt.Sprintf(`
 provider "temporalcloud" {
 }
 
 resource "temporalcloud_account_audit_log_sink" "test" {
-  sink_name    = %[1]q
-  enabled = true
+  sink_name = %[1]q
+  enabled   = true
   kinesis = {
-    role_name      = "test-role"
-    destination_uri = "test-uri"
-    region         = %[2]q
+    role_name       = %[2]q
+    destination_uri = %[3]q
+    region          = %[4]q
   }
 }
 
 data "temporalcloud_account_audit_log_sink" "test" {
   sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
-`, sinkName, sinkRegion)
+`, sinkName, roleName, streamArn, region)
 }
 
-func testAccAccountAuditLogSinkKinesisConfigUpdate(sinkName, sinkRegion string) string {
+func testAccAccountAuditLogSinkKinesisConfigUpdate(sinkName, roleName, streamArn, region string) string {
 	return fmt.Sprintf(`
 resource "temporalcloud_account_audit_log_sink" "test" {
-  sink_name    = %[1]q
-  enabled = true
+  sink_name = %[1]q
+  enabled   = true
   kinesis = {
-    role_name      = "test-updated-role"
-    destination_uri = "test-updated-uri"
-    region         = %[2]q
+    role_name       = %[2]q
+    destination_uri = %[3]q
+    region          = %[4]q
   }
 }
 
 data "temporalcloud_account_audit_log_sink" "test" {
   sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
-`, sinkName, sinkRegion)
+`, sinkName, roleName, streamArn, region)
 }
 
-func testAccAccountAuditLogSinkPubSubConfig(sinkName string) string {
+func testAccAccountAuditLogSinkPubSubConfig(sinkName, serviceAccountID, topicName, gcpProjectID string) string {
 	return fmt.Sprintf(`
 provider "temporalcloud" {
 }
@@ -195,32 +207,32 @@ resource "temporalcloud_account_audit_log_sink" "test" {
   sink_name = %[1]q
   enabled   = true
   pubsub = {
-    service_account_id = "test-sa"
-    topic_name         = "test-topic"
-    gcp_project_id     = "test-project"
+    service_account_id = %[2]q
+    topic_name         = %[3]q
+    gcp_project_id     = %[4]q
   }
 }
 
 data "temporalcloud_account_audit_log_sink" "test" {
   sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
-`, sinkName)
+`, sinkName, serviceAccountID, topicName, gcpProjectID)
 }
 
-func testAccAccountAuditLogSinkPubSubConfigUpdate(sinkName string) string {
+func testAccAccountAuditLogSinkPubSubConfigUpdate(sinkName, serviceAccountID, topicName, gcpProjectID string) string {
 	return fmt.Sprintf(`
 resource "temporalcloud_account_audit_log_sink" "test" {
   sink_name = %[1]q
   enabled   = true
   pubsub = {
-    service_account_id = "test-updated-sa"
-    topic_name         = "test-updated-topic"
-    gcp_project_id     = "test-updated-project"
+    service_account_id = %[2]q
+    topic_name         = %[3]q
+    gcp_project_id     = %[4]q
   }
 }
 
 data "temporalcloud_account_audit_log_sink" "test" {
   sink_name = temporalcloud_account_audit_log_sink.test.sink_name
 }
-`, sinkName)
+`, sinkName, serviceAccountID, topicName, gcpProjectID)
 }
