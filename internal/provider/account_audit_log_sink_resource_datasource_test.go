@@ -32,10 +32,10 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	t.Parallel()
 	const (
-		kinesisRoleName          = "cloud-cicd-audit-log-external-trust-prod"
-		kinesisStreamArn         = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod"
-		kinesisStreamArnUpdated  = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod-updated"
-		kinesisRegion            = "us-west-2"
+		kinesisRoleName         = "cloud-cicd-audit-log-external-trust-prod"
+		kinesisStreamArn        = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod"
+		kinesisStreamArnUpdated = "arn:aws:kinesis:us-west-2:471170916252:stream/cloud-cicd-audit-log-prod-updated"
+		kinesisRegion           = "us-west-2"
 	)
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
