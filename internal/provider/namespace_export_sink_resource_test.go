@@ -32,9 +32,6 @@ func TestNamespaceExportSinkResource_Schema(t *testing.T) {
 
 func TestAccNamespaceExportSink_S3(t *testing.T) {
 	awsAccountID := os.Getenv("INTEGRATION_TEST_AWS_ACCOUNT_ID")
-	if awsAccountID == "" {
-		t.Fatal("INTEGRATION_TEST_AWS_ACCOUNT_ID must be set for S3 export sink tests")
-	}
 
 	namespaceName := fmt.Sprintf("tf-test-ns-export-aws-%s", randomString(8))
 	sinkRegion := "ca-central-1"
@@ -42,7 +39,12 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if awsAccountID == "" {
+				t.Fatal("INTEGRATION_TEST_AWS_ACCOUNT_ID must be set for S3 export sink tests")
+			}
+		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing
@@ -87,9 +89,6 @@ func TestAccNamespaceExportSink_S3(t *testing.T) {
 
 func TestAccNamespaceExportSink_GCS(t *testing.T) {
 	gcpProjectID := os.Getenv("INTEGRATION_TEST_GCP_PROJECT_ID")
-	if gcpProjectID == "" {
-		t.Fatal("INTEGRATION_TEST_GCP_PROJECT_ID must be set for GCS export sink tests")
-	}
 
 	namespaceName := fmt.Sprintf("tf-test-ns-export-gcp-%s", randomString(8))
 	sinkRegion := "us-central1"
@@ -115,7 +114,12 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 	)
 
 	resource.ParallelTest(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if gcpProjectID == "" {
+				t.Fatal("INTEGRATION_TEST_GCP_PROJECT_ID must be set for GCS export sink tests")
+			}
+		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing

@@ -33,9 +33,6 @@ func TestAccountAuditLogSinkResource_Schema(t *testing.T) {
 func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	t.Parallel()
 	awsAccountID := os.Getenv("INTEGRATION_TEST_AWS_ACCOUNT_ID")
-	if awsAccountID == "" {
-		t.Fatal("INTEGRATION_TEST_AWS_ACCOUNT_ID must be set for Kinesis audit log sink tests")
-	}
 	const (
 		kinesisRoleName = "cloud-cicd-audit-log-external-trust-prod"
 		kinesisRegion   = "us-west-2"
@@ -45,7 +42,12 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if awsAccountID == "" {
+				t.Fatal("INTEGRATION_TEST_AWS_ACCOUNT_ID must be set for Kinesis audit log sink tests")
+			}
+		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing
@@ -101,9 +103,6 @@ func TestAccAccountAuditLogSink_Kinesis(t *testing.T) {
 
 func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 	gcpProjectID := os.Getenv("INTEGRATION_TEST_GCP_PROJECT_ID")
-	if gcpProjectID == "" {
-		t.Fatal("INTEGRATION_TEST_GCP_PROJECT_ID must be set for PubSub audit log sink tests")
-	}
 	const (
 		pubsubServiceAccount   = "audit-log-cicd-prod"
 		pubsubTopicName        = "cloud-cicd-audit-log-prod"
@@ -112,7 +111,12 @@ func TestAccAccountAuditLogSink_PubSub(t *testing.T) {
 	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
 
 	resource.Test(t, resource.TestCase{
-		PreCheck:                 func() { testAccPreCheck(t) },
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if gcpProjectID == "" {
+				t.Fatal("INTEGRATION_TEST_GCP_PROJECT_ID must be set for PubSub audit log sink tests")
+			}
+		},
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing
