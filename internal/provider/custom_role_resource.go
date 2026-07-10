@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -147,8 +148,11 @@ func (r *customRoleResource) Schema(ctx context.Context, _ resource.SchemaReques
 							Required:    true,
 							Attributes: map[string]schema.Attribute{
 								"resource_type": schema.StringAttribute{
-									Description: "The resource type this permission applies to.",
+									Description: "The resource type this permission applies to. Must be one of: accounts, projects, namespaces, nexus-endpoints, connectivity-rules, custom-roles.",
 									Required:    true,
+									Validators: []validator.String{
+										stringvalidator.OneOf(enums.CustomRoleResourceTypes...),
+									},
 								},
 								"resource_ids": schema.SetAttribute{
 									Description: "The resource IDs this permission applies to. If empty, allow_all must be true.",

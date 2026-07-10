@@ -33,7 +33,7 @@ resource "temporalcloud_custom_role" "example_custom_role" {
     {
       actions = ["cloud.account.get"]
       resources = {
-        resource_type = "account"
+        resource_type = "accounts"
         resource_ids  = []
         allow_all     = true
       }
@@ -74,7 +74,7 @@ Required:
 Required:
 
 - `resource_ids` (Set of String) The resource IDs this permission applies to. If empty, allow_all must be true.
-- `resource_type` (String) The resource type this permission applies to.
+- `resource_type` (String) The resource type this permission applies to. Must be one of: accounts, projects, namespaces, nexus-endpoints, connectivity-rules, custom-roles.
 
 Optional:
 

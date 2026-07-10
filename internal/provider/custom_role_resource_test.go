@@ -49,7 +49,7 @@ func TestUpdateCustomRoleModelFromSpecPreservesEmptyResourceIDs(t *testing.T) {
 				{
 					Actions: []string{"cloud.account.get"},
 					Resources: &identityv1.CustomRoleSpec_Resources{
-						ResourceType: "account",
+						ResourceType: "accounts",
 						ResourceIds:  nil,
 						AllowAll:     true,
 					},
@@ -147,7 +147,7 @@ func TestValidateCustomRolePermissions(t *testing.T) {
 					types.ObjectValueMust(customRolePermissionAttrs, map[string]attr.Value{
 						"actions": types.SetValueMust(types.StringType, []attr.Value{types.StringValue("cloud.account.get")}),
 						"resources": types.ObjectValueMust(customRoleResourcesAttrs, map[string]attr.Value{
-							"resource_type": types.StringValue("account"),
+							"resource_type": types.StringValue("accounts"),
 							"resource_ids":  tc.resourceIDs,
 							"allow_all":     tc.allowAll,
 						}),

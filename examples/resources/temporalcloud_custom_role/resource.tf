@@ -18,7 +18,7 @@ resource "temporalcloud_custom_role" "example_custom_role" {
     {
       actions = ["cloud.account.get"]
       resources = {
-        resource_type = "account"
+        resource_type = "accounts"
         resource_ids  = []
         allow_all     = true
       }
