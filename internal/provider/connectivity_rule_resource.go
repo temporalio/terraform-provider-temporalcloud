@@ -113,7 +113,7 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 				Optional:    true,
 			},
 			"azure_pe_resource_id": schema.StringAttribute{
-				Description: "The ARM resource ID of the customer's Azure Private Endpoint. Required when region is 'azure'. Example: '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateEndpoints/{name}'.",
+				Description: "The ARM resource ID of the customer's Azure Private Endpoint. Required when region starts with 'azure'. Example: '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateEndpoints/{name}'.",
 				Optional:    true,
 			},
 			"region": schema.StringAttribute{
@@ -362,6 +362,7 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(connectivityRule.GetId())
+	model.AzurePeResourceID = types.StringNull()
 
 	if connectivityRule.Spec.GetPrivateRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
@@ -378,18 +379,14 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 		}
 
 		// Only set azure_pe_resource_id if it's not empty, otherwise keep it as null
-		azurePeResourceId := connectivityRule.Spec.GetPrivateRule().GetAzurePeResourceId()
-		if azurePeResourceId != "" {
+		if azurePeResourceId := connectivityRule.Spec.GetPrivateRule().GetAzurePeResourceId(); azurePeResourceId != "" {
 			model.AzurePeResourceID = types.StringValue(azurePeResourceId)
-		} else {
-			model.AzurePeResourceID = types.StringNull()
 		}
 	} else if connectivityRule.Spec.GetPublicRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePublic)
 		model.ConnectionID = types.StringNull()
 		model.Region = types.StringNull()
 		model.GcpProjectID = types.StringNull()
-		model.AzurePeResourceID = types.StringNull()
 		model.EnableStableIps = types.BoolValue(connectivityRule.Spec.GetPublicRule().GetEnableStableIps())
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
