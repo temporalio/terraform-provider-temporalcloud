@@ -335,7 +335,7 @@ func getConnectivityRuleSpecFromModel(model *connectivityRuleResourceModel) (*co
 			return nil, diags
 		}
 
-		if isAzure && model.AzurePeResourceID.IsNull() {
+		if isAzure && (model.AzurePeResourceID.IsNull() || model.AzurePeResourceID.ValueString() == "") {
 			diags.AddError("Azure Private Endpoint Resource ID is required", "azure_pe_resource_id must be specified when region is azure")
 			return nil, diags
 		}
