@@ -54,7 +54,7 @@ resource "temporalcloud_connectivity_rule" "private_gcp" {
 // Create Private Connectivity Rule for Azure
 resource "temporalcloud_connectivity_rule" "private_azure" {
   connectivity_type    = "private"
-  region               = "azure-eastus"
+  region               = "azure-centralus"
   azure_pe_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/my-rg/providers/Microsoft.Network/privateEndpoints/my-pe"
 }
 
@@ -79,11 +79,11 @@ resource "temporalcloud_namespace" "ns-with-cr" {
 
 ### Optional
 
-- `azure_pe_resource_id` (String) The ARM resource ID of the customer's Azure Private Endpoint. Required when region is 'azure'. Example: '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateEndpoints/{name}'.
+- `azure_pe_resource_id` (String) The ARM resource ID of the Azure Private Endpoint. Required when region is 'azure'. Example: '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateEndpoints/{name}'.
 - `connection_id` (String) The connection ID of the private connection. Not applicable for Azure, where this is populated automatically after the Private Endpoint connection is approved.
 - `enable_stable_ips` (Boolean) If true, namespaces attached to this public connectivity rule will be reachable via a predictable set of public IPs. Only applies when connectivity_type is 'public'.
 - `gcp_project_id` (String) The GCP project ID. Required when region is 'gcp'.
-- `region` (String) The region of the connection. Example: 'aws-us-west-2', 'gcp-us-central1', 'azure-eastus'.
+- `region` (String) The region of the connection. Example: 'aws-us-west-2', 'gcp-us-central1', 'azure-centralus'.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only

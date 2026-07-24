@@ -39,7 +39,7 @@ resource "temporalcloud_connectivity_rule" "private_gcp" {
 // Create Private Connectivity Rule for Azure
 resource "temporalcloud_connectivity_rule" "private_azure" {
   connectivity_type    = "private"
-  region               = "azure-eastus"
+  region               = "azure-centralus"
   azure_pe_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/my-rg/providers/Microsoft.Network/privateEndpoints/my-pe"
 }
 
