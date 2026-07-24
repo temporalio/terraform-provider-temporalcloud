@@ -21,6 +21,7 @@ Fetches details about a connectivity rule.
 
 ### Read-Only
 
+- `azure_pe_resource_id` (String) The ARM resource ID of the Azure Private Endpoint for the connectivity rule.
 - `connection_id` (String) The ID of the connection to the connectivity rule.
 - `connectivity_type` (String) The type of connectivity.
 - `created_at` (String) The time the connectivity rule was created.

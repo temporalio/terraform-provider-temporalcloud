@@ -36,6 +36,13 @@ resource "temporalcloud_connectivity_rule" "private_gcp" {
   gcp_project_id    = "my-gcp-project-id"
 }
 
+// Create Private Connectivity Rule for Azure
+resource "temporalcloud_connectivity_rule" "private_azure" {
+  connectivity_type    = "private"
+  region               = "azure-eastus"
+  azure_pe_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/my-rg/providers/Microsoft.Network/privateEndpoints/my-pe"
+}
+
 // Attaching connectivity rules to a namespace
 resource "temporalcloud_namespace" "ns-with-cr" {
   name           = "ns-with-cr"
