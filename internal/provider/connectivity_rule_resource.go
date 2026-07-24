@@ -39,13 +39,14 @@ type (
 	}
 
 	connectivityRuleResourceModel struct {
-		ID               types.String   `tfsdk:"id"`
-		ConnectivityType types.String   `tfsdk:"connectivity_type"`
-		ConnectionID     types.String   `tfsdk:"connection_id"`
-		Region           types.String   `tfsdk:"region"`
-		GcpProjectID     types.String   `tfsdk:"gcp_project_id"`
-		EnableStableIps  types.Bool     `tfsdk:"enable_stable_ips"`
-		Timeouts         timeouts.Value `tfsdk:"timeouts"`
+		ID                types.String   `tfsdk:"id"`
+		ConnectivityType  types.String   `tfsdk:"connectivity_type"`
+		ConnectionID      types.String   `tfsdk:"connection_id"`
+		Region            types.String   `tfsdk:"region"`
+		GcpProjectID      types.String   `tfsdk:"gcp_project_id"`
+		AzurePeResourceID types.String   `tfsdk:"azure_pe_resource_id"`
+		EnableStableIps   types.Bool     `tfsdk:"enable_stable_ips"`
+		Timeouts          timeouts.Value `tfsdk:"timeouts"`
 	}
 )
 
@@ -103,15 +104,20 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 				},
 			},
 			"connection_id": schema.StringAttribute{
-				Description: "The connection ID of the private connection.",
+				Description: "The connection ID of the private connection. Not applicable for Azure, where this is populated automatically after the Private Endpoint connection is approved.",
 				Optional:    true,
+				Computed:    true,
 			},
 			"gcp_project_id": schema.StringAttribute{
-				Description: "The GCP project ID. Required when cloud_provider is 'gcp'.",
+				Description: "The GCP project ID. Required when region is 'gcp'.",
+				Optional:    true,
+			},
+			"azure_pe_resource_id": schema.StringAttribute{
+				Description: "The ARM resource ID of the customer's Azure Private Endpoint. Required when region starts with 'azure'. Example: '/subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/privateEndpoints/{name}'.",
 				Optional:    true,
 			},
 			"region": schema.StringAttribute{
-				Description: "The region of the connection. Example: 'aws-us-west-2'.",
+				Description: "The region of the connection. Example: 'aws-us-west-2', 'gcp-us-central1', 'azure-centralus'.",
 				Optional:    true,
 			},
 			"enable_stable_ips": schema.BoolAttribute{
@@ -301,25 +307,44 @@ func getConnectivityRuleSpecFromModel(model *connectivityRuleResourceModel) (*co
 			diags.AddError("Invalid attribute for private connectivity rule", "enable_stable_ips can only be true when connectivity_type is 'public'")
 			return nil, diags
 		}
-		if model.ConnectionID.IsNull() {
-			diags.AddError("Connection ID is required", "connection_id must be specified when connectivity_type is 'private'")
-			return nil, diags
-		}
 
 		if model.Region.IsNull() {
 			diags.AddError("Region is required", "region must be specified when connectivity_type is 'private'")
 			return nil, diags
 		}
+		region := model.Region.ValueString()
+		isAzure := strings.HasPrefix(region, "azure")
 
-		if strings.HasPrefix(model.Region.ValueString(), "gcp") && model.GcpProjectID.IsNull() {
+		// connection_id is Optional+Computed (Azure populates it automatically), so an
+		// unconfigured value surfaces as Unknown rather than Null in the plan. Treat both
+		// as "not provided by the user".
+		connectionIDProvided := !model.ConnectionID.IsNull() && !model.ConnectionID.IsUnknown()
+
+		if !isAzure && !connectionIDProvided {
+			diags.AddError("Connection ID is required", "connection_id must be specified when connectivity_type is 'private'")
+			return nil, diags
+		}
+
+		if isAzure && connectionIDProvided {
+			diags.AddError("Invalid attribute for Azure connectivity rule", "connection_id must not be specified when region is azure; it is populated automatically after the Private Endpoint connection is approved")
+			return nil, diags
+		}
+
+		if strings.HasPrefix(region, "gcp") && model.GcpProjectID.IsNull() {
 			diags.AddError("GCP Project ID is required", "gcp_project_id must be specified when region is gcp")
 			return nil, diags
 		}
 
+		if isAzure && (model.AzurePeResourceID.IsNull() || model.AzurePeResourceID.ValueString() == "") {
+			diags.AddError("Azure Private Endpoint Resource ID is required", "azure_pe_resource_id must be specified when region is azure")
+			return nil, diags
+		}
+
 		privateRule := &connectivityrulev1.PrivateConnectivityRule{
-			ConnectionId: model.ConnectionID.ValueString(),
-			Region:       model.Region.ValueString(),
-			GcpProjectId: model.GcpProjectID.ValueString(),
+			ConnectionId:      model.ConnectionID.ValueString(),
+			Region:            region,
+			GcpProjectId:      model.GcpProjectID.ValueString(),
+			AzurePeResourceId: model.AzurePeResourceID.ValueString(),
 		}
 		return &connectivityrulev1.ConnectivityRuleSpec{
 			ConnectionType: &connectivityrulev1.ConnectivityRuleSpec_PrivateRule{
@@ -337,6 +362,7 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(connectivityRule.GetId())
+	model.AzurePeResourceID = types.StringNull()
 
 	if connectivityRule.Spec.GetPrivateRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
@@ -350,6 +376,11 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 			model.GcpProjectID = types.StringValue(gcpProjectId)
 		} else {
 			model.GcpProjectID = types.StringNull()
+		}
+
+		// Only set azure_pe_resource_id if it's not empty, otherwise keep it as null
+		if azurePeResourceId := connectivityRule.Spec.GetPrivateRule().GetAzurePeResourceId(); azurePeResourceId != "" {
+			model.AzurePeResourceID = types.StringValue(azurePeResourceId)
 		}
 	} else if connectivityRule.Spec.GetPublicRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePublic)

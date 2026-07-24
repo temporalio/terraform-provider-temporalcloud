@@ -2,6 +2,7 @@ package provider
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
@@ -177,6 +178,95 @@ output "connectivity_rule" {
 					// For AWS private connectivity rules, gcp_project_id should be null
 					if gcpProjectID, exists := outputValue["gcp_project_id"]; exists && gcpProjectID != nil {
 						return fmt.Errorf("expected gcp_project_id to be null for AWS private connectivity rule")
+					}
+
+					// For AWS private connectivity rules, azure_pe_resource_id should be null
+					if azurePeResourceID, exists := outputValue["azure_pe_resource_id"]; exists && azurePeResourceID != nil {
+						return fmt.Errorf("expected azure_pe_resource_id to be null for AWS private connectivity rule")
+					}
+
+					return nil
+				},
+			},
+		},
+	})
+}
+
+func TestAccDataSource_ConnectivityRule_Azure_Private(t *testing.T) {
+	subscriptionID := os.Getenv("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID")
+	azurePeResourceID := fmt.Sprintf("/subscriptions/%s/resourceGroups/rg-saas-cicd-prod/providers/Microsoft.Network/privateEndpoints/temporal-pe", subscriptionID)
+
+	config := func() string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test_azure_private" {
+  connectivity_type    = "private"
+  region               = "azure-centralus"
+  azure_pe_resource_id = %[1]q
+}
+
+data "temporalcloud_connectivity_rule" "test_azure_private" {
+  id = temporalcloud_connectivity_rule.test_azure_private.id
+}
+
+output "connectivity_rule" {
+  value = data.temporalcloud_connectivity_rule.test_azure_private
+}
+`, azurePeResourceID)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if subscriptionID == "" {
+				t.Fatal("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID must be set for Azure connectivity rule tests")
+			}
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(),
+				Check: func(s *terraform.State) error {
+					output, ok := s.RootModule().Outputs["connectivity_rule"]
+					if !ok {
+						return fmt.Errorf("missing expected output")
+					}
+
+					outputValue, ok := output.Value.(map[string]interface{})
+					if !ok {
+						return fmt.Errorf("expected value to be map")
+					}
+
+					outputConnectivityType, ok := outputValue["connectivity_type"].(string)
+					if !ok {
+						return fmt.Errorf("expected connectivity_type to be a string")
+					}
+					if outputConnectivityType != "private" {
+						return fmt.Errorf("expected connectivity_type to be 'private', got: %s", outputConnectivityType)
+					}
+
+					outputRegion, ok := outputValue["region"].(string)
+					if !ok {
+						return fmt.Errorf("expected region to be a string")
+					}
+					if outputRegion != "azure-centralus" {
+						return fmt.Errorf("expected region to be 'azure-centralus', got: %s", outputRegion)
+					}
+
+					outputAzurePeResourceID, ok := outputValue["azure_pe_resource_id"].(string)
+					if !ok {
+						return fmt.Errorf("expected azure_pe_resource_id to be a string")
+					}
+					if outputAzurePeResourceID != azurePeResourceID {
+						return fmt.Errorf("expected azure_pe_resource_id to match, got: %s", outputAzurePeResourceID)
+					}
+
+					// For Azure private connectivity rules, gcp_project_id should be null
+					if gcpProjectID, exists := outputValue["gcp_project_id"]; exists && gcpProjectID != nil {
+						return fmt.Errorf("expected gcp_project_id to be null for Azure private connectivity rule")
 					}
 
 					return nil

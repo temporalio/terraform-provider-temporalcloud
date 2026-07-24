@@ -88,4 +88,5 @@ jobs:
           TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
           INTEGRATION_TEST_AWS_ACCOUNT_ID: ${{ secrets.INTEGRATION_TEST_AWS_ACCOUNT_ID }}
           INTEGRATION_TEST_GCP_PROJECT_ID: ${{ secrets.INTEGRATION_TEST_GCP_PROJECT_ID }}
+          INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID: ${{ secrets.INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID }}
         run: go test -timeout 60m -parallel 12 -v -cover ./internal/provider/
