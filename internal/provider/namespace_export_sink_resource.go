@@ -65,6 +65,7 @@ type (
 		Enabled   types.Bool     `tfsdk:"enabled"`
 		S3        types.Object   `tfsdk:"s3"`
 		Gcs       types.Object   `tfsdk:"gcs"`
+		Azure     types.Object   `tfsdk:"azure"`
 		Timeouts  timeouts.Value `tfsdk:"timeouts"`
 	}
 )
@@ -156,6 +157,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Validators: []validator.Object{
 					objectvalidator.ExactlyOneOf(path.Expressions{
 						path.MatchRoot("gcs"),
+						path.MatchRoot("azure"),
 					}...),
 				},
 			},
@@ -196,6 +198,43 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Validators: []validator.Object{
 					objectvalidator.ExactlyOneOf(path.Expressions{
 						path.MatchRoot("s3"),
+						path.MatchRoot("azure"),
+					}...),
+				},
+			},
+			"azure": schema.SingleNestedAttribute{
+				Description: "The Azure Blob configuration details when destination_type is Azure Blob.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"tenant_id": schema.StringAttribute{
+						Description: "The customer's Azure tenant ID where the storage account exists and where Temporal's app registration is consented/granted access.",
+						Required:    true,
+					},
+					"storage_account": schema.StringAttribute{
+						Description: "The name of the destination Azure storage account where Temporal will send data.",
+						Required:    true,
+					},
+					"container_name": schema.StringAttribute{
+						Description: "The name of the destination Azure Blob container where Temporal will send data.",
+						Required:    true,
+					},
+					"region": schema.StringAttribute{
+						Description: "The region where the Azure storage account is located.",
+						Required:    true,
+					},
+					"subscription_id": schema.StringAttribute{
+						Description: "The Azure subscription ID that contains the storage account.",
+						Required:    true,
+					},
+					"resource_group": schema.StringAttribute{
+						Description: "The Azure resource group that contains the storage account.",
+						Required:    true,
+					},
+				},
+				Validators: []validator.Object{
+					objectvalidator.ExactlyOneOf(path.Expressions{
+						path.MatchRoot("s3"),
+						path.MatchRoot("gcs"),
 					}...),
 				},
 			},
@@ -306,10 +345,29 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 		}
 	}
 
+	azureObj := types.ObjectNull(internaltypes.AzureSpecModelAttrTypes)
+	if sink.GetSpec().GetAzureBlob() != nil {
+		azureSpec := internaltypes.AzureSpecModel{
+			TenantId:       types.StringValue(sink.GetSpec().GetAzureBlob().GetTenantId()),
+			StorageAccount: types.StringValue(sink.GetSpec().GetAzureBlob().GetStorageAccount()),
+			ContainerName:  types.StringValue(sink.GetSpec().GetAzureBlob().GetContainerName()),
+			Region:         types.StringValue(sink.GetSpec().GetAzureBlob().GetRegion()),
+			SubscriptionId: types.StringValue(sink.GetSpec().GetAzureBlob().GetSubscriptionId()),
+			ResourceGroup:  types.StringValue(sink.GetSpec().GetAzureBlob().GetResourceGroup()),
+		}
+
+		azureObj, diags = types.ObjectValueFrom(ctx, internaltypes.AzureSpecModelAttrTypes, azureSpec)
+		diags.Append(diags...)
+		if diags.HasError() {
+			return diags
+		}
+	}
+
 	state.SinkName = types.StringValue(sink.GetName())
 	state.Enabled = types.BoolValue(sink.GetSpec().GetEnabled())
 	state.S3 = s3Obj
 	state.Gcs = gcsObj
+	state.Azure = azureObj
 	state.Namespace = types.StringValue(namespace)
 	state.ID = types.StringValue(fmt.Sprintf("%s,%s", namespace, sink.GetName()))
 
@@ -402,9 +460,15 @@ func parseSAPrincipal(saPrincipal string) (string, string) {
 func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResourceModel) (*namespacev1.ExportSinkSpec, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
-	// Check that only one of S3 or GCS is set
-	if !plan.S3.IsNull() && !plan.Gcs.IsNull() {
-		diags.AddError("Invalid sink configuration", "Only one of S3 or GCS can be configured")
+	// Check that only one of S3, GCS, or Azure is set
+	numConfigured := 0
+	for _, isNull := range []bool{plan.S3.IsNull(), plan.Gcs.IsNull(), plan.Azure.IsNull()} {
+		if !isNull {
+			numConfigured++
+		}
+	}
+	if numConfigured > 1 {
+		diags.AddError("Invalid sink configuration", "Only one of S3, GCS, or Azure can be configured")
 		return nil, diags
 	}
 
@@ -462,6 +526,25 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 				BucketName:   gcsSpec.BucketName.ValueString(),
 				GcpProjectId: gcpProjectId,
 				Region:       gcsSpec.Region.ValueString(),
+			},
+		}, nil
+	} else if !plan.Azure.IsNull() {
+		var azureSpec internaltypes.AzureSpecModel
+		diags.Append(plan.Azure.As(ctx, &azureSpec, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		return &namespacev1.ExportSinkSpec{
+			Name:    plan.SinkName.ValueString(),
+			Enabled: plan.Enabled.ValueBool(),
+			AzureBlob: &sinkv1.AzureBlobSpec{
+				TenantId:       azureSpec.TenantId.ValueString(),
+				StorageAccount: azureSpec.StorageAccount.ValueString(),
+				ContainerName:  azureSpec.ContainerName.ValueString(),
+				Region:         azureSpec.Region.ValueString(),
+				SubscriptionId: azureSpec.SubscriptionId.ValueString(),
+				ResourceGroup:  azureSpec.ResourceGroup.ValueString(),
 			},
 		}, nil
 	}

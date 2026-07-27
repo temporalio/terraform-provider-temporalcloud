@@ -22,6 +22,15 @@ var (
 		"service_account_email": types.StringType,
 	}
 
+	AzureSpecModelAttrTypes = map[string]attr.Type{
+		"tenant_id":       types.StringType,
+		"storage_account": types.StringType,
+		"container_name":  types.StringType,
+		"region":          types.StringType,
+		"subscription_id": types.StringType,
+		"resource_group":  types.StringType,
+	}
+
 	KinesisSpecModelAttrTypes = map[string]attr.Type{
 		"role_name":       types.StringType,
 		"destination_uri": types.StringType,
@@ -68,6 +77,26 @@ type GCSSpecModel struct {
 
 	// The service account email associated with the GCS bucket and service account
 	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
+}
+
+type AzureSpecModel struct {
+	// The customer's Azure tenant ID where the storage account exists and where Temporal's app registration is consented/granted access
+	TenantId types.String `tfsdk:"tenant_id"`
+
+	// The name of the destination Azure storage account where Temporal will send data
+	StorageAccount types.String `tfsdk:"storage_account"`
+
+	// The name of the destination Azure Blob container where Temporal will send data
+	ContainerName types.String `tfsdk:"container_name"`
+
+	// The region where the Azure storage account is located
+	Region types.String `tfsdk:"region"`
+
+	// The Azure subscription ID that contains the storage account
+	SubscriptionId types.String `tfsdk:"subscription_id"`
+
+	// The Azure resource group that contains the storage account
+	ResourceGroup types.String `tfsdk:"resource_group"`
 }
 
 type KinesisSpecModel struct {
