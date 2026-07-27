@@ -65,7 +65,7 @@ type (
 		Enabled   types.Bool     `tfsdk:"enabled"`
 		S3        types.Object   `tfsdk:"s3"`
 		Gcs       types.Object   `tfsdk:"gcs"`
-		Azure     types.Object   `tfsdk:"azure"`
+		AzureBlob types.Object   `tfsdk:"azure_blob"`
 		Timeouts  timeouts.Value `tfsdk:"timeouts"`
 	}
 )
@@ -157,7 +157,7 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Validators: []validator.Object{
 					objectvalidator.ExactlyOneOf(path.Expressions{
 						path.MatchRoot("gcs"),
-						path.MatchRoot("azure"),
+						path.MatchRoot("azure_blob"),
 					}...),
 				},
 			},
@@ -198,11 +198,11 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Validators: []validator.Object{
 					objectvalidator.ExactlyOneOf(path.Expressions{
 						path.MatchRoot("s3"),
-						path.MatchRoot("azure"),
+						path.MatchRoot("azure_blob"),
 					}...),
 				},
 			},
-			"azure": schema.SingleNestedAttribute{
+			"azure_blob": schema.SingleNestedAttribute{
 				Description: "The Azure Blob configuration details when destination_type is Azure Blob.",
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
@@ -345,9 +345,9 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 		}
 	}
 
-	azureObj := types.ObjectNull(internaltypes.AzureSpecModelAttrTypes)
+	azureBlobObj := types.ObjectNull(internaltypes.AzureBlobSpecModelAttrTypes)
 	if sink.GetSpec().GetAzureBlob() != nil {
-		azureSpec := internaltypes.AzureSpecModel{
+		azureBlobSpec := internaltypes.AzureBlobSpecModel{
 			TenantId:       types.StringValue(sink.GetSpec().GetAzureBlob().GetTenantId()),
 			StorageAccount: types.StringValue(sink.GetSpec().GetAzureBlob().GetStorageAccount()),
 			ContainerName:  types.StringValue(sink.GetSpec().GetAzureBlob().GetContainerName()),
@@ -356,7 +356,7 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 			ResourceGroup:  types.StringValue(sink.GetSpec().GetAzureBlob().GetResourceGroup()),
 		}
 
-		azureObj, diags = types.ObjectValueFrom(ctx, internaltypes.AzureSpecModelAttrTypes, azureSpec)
+		azureBlobObj, diags = types.ObjectValueFrom(ctx, internaltypes.AzureBlobSpecModelAttrTypes, azureBlobSpec)
 		diags.Append(diags...)
 		if diags.HasError() {
 			return diags
@@ -367,7 +367,7 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 	state.Enabled = types.BoolValue(sink.GetSpec().GetEnabled())
 	state.S3 = s3Obj
 	state.Gcs = gcsObj
-	state.Azure = azureObj
+	state.AzureBlob = azureBlobObj
 	state.Namespace = types.StringValue(namespace)
 	state.ID = types.StringValue(fmt.Sprintf("%s,%s", namespace, sink.GetName()))
 
@@ -462,17 +462,17 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 
 	// Check that only one of S3, GCS, or Azure is set
 	numConfigured := 0
-	for _, isNull := range []bool{plan.S3.IsNull(), plan.Gcs.IsNull(), plan.Azure.IsNull()} {
+	for _, isNull := range []bool{plan.S3.IsNull(), plan.Gcs.IsNull(), plan.AzureBlob.IsNull()} {
 		if !isNull {
 			numConfigured++
 		}
 	}
 	if numConfigured == 0 {
-		diags.AddError("Invalid sink configuration", "Exactly one of S3, GCS, or Azure must be configured")
+		diags.AddError("Missing sink destination", "Exactly one of S3, GCS, or Azure Blob must be configured")
 		return nil, diags
 	}
 	if numConfigured > 1 {
-		diags.AddError("Invalid sink configuration", "Only one of S3, GCS, or Azure can be configured")
+		diags.AddError("Multiple sink destinations configured", "Only one of S3, GCS, or Azure Blob can be configured")
 		return nil, diags
 	}
 
@@ -532,9 +532,9 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 				Region:       gcsSpec.Region.ValueString(),
 			},
 		}, nil
-	} else if !plan.Azure.IsNull() {
-		var azureSpec internaltypes.AzureSpecModel
-		diags.Append(plan.Azure.As(ctx, &azureSpec, basetypes.ObjectAsOptions{})...)
+	} else if !plan.AzureBlob.IsNull() {
+		var azureBlobSpec internaltypes.AzureBlobSpecModel
+		diags.Append(plan.AzureBlob.As(ctx, &azureBlobSpec, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {
 			return nil, diags
 		}
@@ -543,12 +543,12 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 			Name:    plan.SinkName.ValueString(),
 			Enabled: plan.Enabled.ValueBool(),
 			AzureBlob: &sinkv1.AzureBlobSpec{
-				TenantId:       azureSpec.TenantId.ValueString(),
-				StorageAccount: azureSpec.StorageAccount.ValueString(),
-				ContainerName:  azureSpec.ContainerName.ValueString(),
-				Region:         azureSpec.Region.ValueString(),
-				SubscriptionId: azureSpec.SubscriptionId.ValueString(),
-				ResourceGroup:  azureSpec.ResourceGroup.ValueString(),
+				TenantId:       azureBlobSpec.TenantId.ValueString(),
+				StorageAccount: azureBlobSpec.StorageAccount.ValueString(),
+				ContainerName:  azureBlobSpec.ContainerName.ValueString(),
+				Region:         azureBlobSpec.Region.ValueString(),
+				SubscriptionId: azureBlobSpec.SubscriptionId.ValueString(),
+				ResourceGroup:  azureBlobSpec.ResourceGroup.ValueString(),
 			},
 		}, nil
 	}

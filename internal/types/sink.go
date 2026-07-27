@@ -22,7 +22,7 @@ var (
 		"service_account_email": types.StringType,
 	}
 
-	AzureSpecModelAttrTypes = map[string]attr.Type{
+	AzureBlobSpecModelAttrTypes = map[string]attr.Type{
 		"tenant_id":       types.StringType,
 		"storage_account": types.StringType,
 		"container_name":  types.StringType,
@@ -79,7 +79,7 @@ type GCSSpecModel struct {
 	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
 }
 
-type AzureSpecModel struct {
+type AzureBlobSpecModel struct {
 	// The customer's Azure tenant ID where the storage account exists and where Temporal's app registration is consented/granted access
 	TenantId types.String `tfsdk:"tenant_id"`
 

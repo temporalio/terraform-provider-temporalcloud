@@ -22,7 +22,7 @@ Provisions a namespace export sink.
 
 ### Optional
 
-- `azure` (Attributes) The Azure Blob configuration details when destination_type is Azure Blob. (see [below for nested schema](#nestedatt--azure))
+- `azure_blob` (Attributes) The Azure Blob configuration details when destination_type is Azure Blob. (see [below for nested schema](#nestedatt--azure_blob))
 - `enabled` (Boolean) A flag indicating whether the export sink is enabled or not.
 - `gcs` (Attributes) The GCS configuration details when destination_type is GCS. (see [below for nested schema](#nestedatt--gcs))
 - `s3` (Attributes) The S3 configuration details when destination_type is S3. (see [below for nested schema](#nestedatt--s3))
@@ -32,8 +32,8 @@ Provisions a namespace export sink.
 
 - `id` (String) The unique identifier of the namespace export sink.
 
-<a id="nestedatt--azure"></a>
-### Nested Schema for `azure`
+<a id="nestedatt--azure_blob"></a>
+### Nested Schema for `azure_blob`
 
 Required:
 
