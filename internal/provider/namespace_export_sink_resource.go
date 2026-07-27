@@ -467,6 +467,10 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 			numConfigured++
 		}
 	}
+	if numConfigured == 0 {
+		diags.AddError("Invalid sink configuration", "Exactly one of S3, GCS, or Azure must be configured")
+		return nil, diags
+	}
 	if numConfigured > 1 {
 		diags.AddError("Invalid sink configuration", "Only one of S3, GCS, or Azure can be configured")
 		return nil, diags
