@@ -177,6 +177,122 @@ func TestAccNamespaceExportSink_GCS(t *testing.T) {
 	})
 }
 
+func TestAccNamespaceExportSink_Azure(t *testing.T) {
+	subscriptionID := os.Getenv("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID")
+	tenantID := os.Getenv("INTEGRATION_TEST_AZURE_TENANT_ID")
+
+	namespaceName := fmt.Sprintf("tf-test-ns-export-azure-%s", randomString(8))
+	sinkRegion := "centralus"
+	namespaceRegion := fmt.Sprintf("azure-%s", sinkRegion)
+	sinkName := fmt.Sprintf("tf-test-sink-%s", randomString(8))
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if subscriptionID == "" || tenantID == "" {
+				t.Fatal("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID and INTEGRATION_TEST_AZURE_TENANT_ID must be set for Azure export sink tests")
+			}
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read testing
+			{
+				Config: testAccNamespaceExportSinkAzureConfig(namespaceName, sinkName, namespaceRegion, sinkRegion, subscriptionID, tenantID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "sink_name", sinkName),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "true"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.storage_account", "saascicdexportprod"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.container_name", "saas-cicd-export-prod"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.subscription_id", subscriptionID),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.tenant_id", tenantID),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.resource_group", "rg-saas-cicd-export-prod"),
+				),
+			},
+			// ImportState testing
+			{
+				ResourceName:      "temporalcloud_namespace_export_sink.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// Update testing
+			{
+				Config: testAccNamespaceExportSinkAzureConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, subscriptionID, tenantID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "enabled", "false"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.storage_account", "saascicdexportprod"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.container_name", "saas-cicd-export-prod-updated"),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.region", sinkRegion),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.subscription_id", subscriptionID),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.tenant_id", tenantID),
+					resource.TestCheckResourceAttr("temporalcloud_namespace_export_sink.test", "azure_blob.resource_group", "rg-saas-cicd-export-prod"),
+				),
+			},
+			// Delete testing
+			{
+				ResourceName:      "temporalcloud_namespace_export_sink.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+				Destroy:           true,
+			},
+		},
+	})
+}
+
+func testAccNamespaceExportSinkAzureConfig(namespaceName, sinkName, namespaceRegion, sinkRegion, subscriptionID, tenantID string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = %[1]q
+  regions            = [%[2]q]
+  api_key_auth 	 	 = true
+  retention_days     = 1
+}
+
+resource "temporalcloud_namespace_export_sink" "test" {
+  namespace = temporalcloud_namespace.terraform.id
+  sink_name    = %[3]q
+  enabled = true
+  azure_blob = {
+    storage_account = "saascicdexportprod"
+    container_name  = "saas-cicd-export-prod"
+    region          = %[4]q
+    subscription_id = %[5]q
+    tenant_id       = %[6]q
+    resource_group  = "rg-saas-cicd-export-prod"
+  }
+
+}
+`, namespaceName, namespaceRegion, sinkName, sinkRegion, subscriptionID, tenantID)
+}
+
+func testAccNamespaceExportSinkAzureConfigUpdate(namespaceName, namespaceRegion, sinkName, sinkRegion, subscriptionID, tenantID string) string {
+	return fmt.Sprintf(`
+resource "temporalcloud_namespace" "terraform" {
+  name               = %[1]q
+  regions            = [%[2]q]
+  api_key_auth       = true
+  retention_days     = 1
+}
+
+resource "temporalcloud_namespace_export_sink" "test" {
+  namespace = temporalcloud_namespace.terraform.id
+  sink_name    = %[3]q
+  enabled = false
+  azure_blob = {
+    storage_account = "saascicdexportprod"
+    container_name  = "saas-cicd-export-prod-updated"
+    region          = %[4]q
+    subscription_id = %[5]q
+    tenant_id       = %[6]q
+    resource_group  = "rg-saas-cicd-export-prod"
+  }
+}
+`, namespaceName, namespaceRegion, sinkName, sinkRegion, subscriptionID, tenantID)
+}
+
 func testAccNamespaceExportSinkS3Config(namespaceName, sinkName, namespaceRegion, sinkregion, awsAccountID string) string {
 	return fmt.Sprintf(`
 provider "temporalcloud" {

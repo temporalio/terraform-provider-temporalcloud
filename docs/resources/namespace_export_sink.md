@@ -22,6 +22,7 @@ Provisions a namespace export sink.
 
 ### Optional
 
+- `azure_blob` (Attributes) The Azure Blob configuration details when destination_type is Azure Blob. (see [below for nested schema](#nestedatt--azure_blob))
 - `enabled` (Boolean) A flag indicating whether the export sink is enabled or not.
 - `gcs` (Attributes) The GCS configuration details when destination_type is GCS. (see [below for nested schema](#nestedatt--gcs))
 - `s3` (Attributes) The S3 configuration details when destination_type is S3. (see [below for nested schema](#nestedatt--s3))
@@ -30,6 +31,19 @@ Provisions a namespace export sink.
 ### Read-Only
 
 - `id` (String) The unique identifier of the namespace export sink.
+
+<a id="nestedatt--azure_blob"></a>
+### Nested Schema for `azure_blob`
+
+Required:
+
+- `container_name` (String) The name of the destination Azure Blob container where Temporal will send data.
+- `region` (String) The region where the Azure storage account is located.
+- `resource_group` (String) The Azure resource group that contains the storage account.
+- `storage_account` (String) The name of the destination Azure storage account where Temporal will send data.
+- `subscription_id` (String) The Azure subscription ID that contains the storage account.
+- `tenant_id` (String) The customer's Azure tenant ID where the storage account exists and where Temporal's app registration is consented/granted access.
+
 
 <a id="nestedatt--gcs"></a>
 ### Nested Schema for `gcs`
