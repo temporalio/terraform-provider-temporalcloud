@@ -159,6 +159,7 @@ resource "temporalcloud_namespace" "terraform4" {
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (Set of String) The IDs of the connectivity rules for this namespace.
+- `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
@@ -200,6 +201,14 @@ Optional:
 - `custom_error_message` (String) A custom error message to display when the codec server returns an error.
 - `include_cross_origin_credentials` (Boolean) If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.
 - `pass_access_token` (Boolean) If true, Temporal Cloud will pass the access token to the codec server upon each request.
+
+
+<a id="nestedatt--fairness"></a>
+### Nested Schema for `fairness`
+
+Optional:
+
+- `task_queue_fairness_enabled` (Boolean) Flag to enable task queue fairness for the namespace. Defaults to disabled.
 
 
 <a id="nestedatt--namespace_lifecycle"></a>

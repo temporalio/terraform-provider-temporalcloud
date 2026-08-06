@@ -6,8 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
-	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
-	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -15,7 +13,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -27,7 +24,6 @@ import (
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
-	"github.com/temporalio/terraform-provider-temporalcloud/internal/validation"
 )
 
 type (
@@ -36,11 +32,12 @@ type (
 	}
 
 	userResourceModel struct {
-		ID                types.String                             `tfsdk:"id"`
-		State             types.String                             `tfsdk:"state"`
-		Email             types.String                             `tfsdk:"email"`
-		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
+		ID                       types.String                             `tfsdk:"id"`
+		State                    types.String                             `tfsdk:"state"`
+		Email                    types.String                             `tfsdk:"email"`
+		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
+		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -89,7 +86,7 @@ func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest,
 }
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	resp.Schema = schema.Schema{
+	s := schema.Schema{
 		Description: "Provisions a Temporal Cloud user.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -113,39 +110,6 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					stringplanmodifier.RequiresReplace(),
 				},
 			},
-			"account_access": schema.StringAttribute{
-				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `metricsread` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support. `none` is only valid for users managed via SCIM that derive their roles from group memberships.",
-				Required:    true,
-				Validators: []validator.String{
-					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRoles()...),
-				},
-			},
-			"namespace_accesses": schema.SetNestedAttribute{
-				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces.",
-				Optional:    true,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"namespace_id": schema.StringAttribute{
-							Description: "The namespace to assign permissions to.",
-							Required:    true,
-						},
-						"permission": schema.StringAttribute{
-							CustomType:  internaltypes.CaseInsensitiveStringType{},
-							Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
-							Required:    true,
-							Validators: []validator.String{
-								stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),
-							},
-						},
-					},
-				},
-				Validators: []validator.Set{
-					setvalidator.SizeAtLeast(1),
-					validation.NewNamespaceAccessValidator("account_access"),
-					validation.SetNestedAttributeMustBeUnique("namespace_id"),
-				},
-			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -154,6 +118,8 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 			}),
 		},
 	}
+	addAccessSchemaAttrs(&s, " Users can only be set to `none` when they are managed by SCIM and derive their roles from group memberships.")
+	resp.Schema = s
 }
 
 func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -178,9 +144,9 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		diags.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -188,9 +154,7 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
-				AccountAccess: &identityv1.AccountAccess{
-					Role: role,
-				},
+				AccountAccess:     accountAccess,
 				NamespaceAccesses: namespaceAccesses,
 			},
 		},
@@ -275,20 +239,14 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		return
 	}
 
-	role, err := enums.ToAccountAccessRole(plan.AccountAccess.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to convert account access role", err.Error())
+	accountAccess, d := getAccountAccessFromModel(ctx, plan.AccountAccess.ValueString(), plan.AccountAccessCustomRoles)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 	access := &identityv1.Access{
-		AccountAccess: &identityv1.AccountAccess{
-			Role: role,
-		},
+		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
-	}
-	// If the role is unspecified (i.e. none), remove the account access from the spec.
-	if role == identityv1.AccountAccess_ROLE_UNSPECIFIED {
-		access.AccountAccess = nil
 	}
 
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
@@ -446,6 +404,12 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 		return diags
 	}
 	state.AccountAccess = internaltypes.CaseInsensitiveString(role)
+	accountAccessCustomRoles, d := getCustomRolesSet(ctx, user.GetSpec().GetAccess().GetAccountAccess().GetCustomRoles())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.AccountAccessCustomRoles = accountAccessCustomRoles
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {

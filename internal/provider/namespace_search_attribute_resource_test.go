@@ -45,7 +45,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   retention_days     = 7
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
@@ -111,7 +111,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   retention_days     = 7
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
@@ -168,7 +168,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   retention_days     = %d
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----

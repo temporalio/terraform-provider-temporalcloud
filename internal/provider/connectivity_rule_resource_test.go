@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"regexp"
 	"testing"
 
@@ -62,6 +64,38 @@ func TestAccConnectivityRuleResource_Public(t *testing.T) {
 	})
 }
 
+func TestAccConnectivityRuleResource_Public_StableIps(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create a public connectivity rule with stable IPs enabled
+			{
+				Config: testAccConnectivityRuleResourceConfig_PublicStableIps(),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public_stable_ips", "connectivity_type", "public"),
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public_stable_ips", "enable_stable_ips", "true"),
+				),
+			},
+			// Import state testing
+			{
+				ResourceName:      "temporalcloud_connectivity_rule.test_public_stable_ips",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// Delete the public connectivity rule
+			{
+				ResourceName:      "temporalcloud_connectivity_rule.test_public_stable_ips",
+				ImportState:       true,
+				ImportStateVerify: true,
+				Destroy:           true,
+			},
+		},
+	})
+}
+
 func TestAccConnectivityRuleResource_AWS_Private(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -86,6 +120,44 @@ func TestAccConnectivityRuleResource_AWS_Private(t *testing.T) {
 			// Delete the private connectivity rule
 			{
 				ResourceName:      "temporalcloud_connectivity_rule.test_aws_private",
+				ImportState:       true,
+				ImportStateVerify: true,
+				Destroy:           true,
+			},
+		},
+	})
+}
+
+func TestAccConnectivityRuleResource_Azure_Private(t *testing.T) {
+	subscriptionID := os.Getenv("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID")
+	azurePeResourceID := fmt.Sprintf("/subscriptions/%s/resourceGroups/rg-saas-cicd-prod/providers/Microsoft.Network/privateEndpoints/temporal-pe", subscriptionID)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+			if subscriptionID == "" {
+				t.Fatal("INTEGRATION_TEST_AZURE_SUBSCRIPTION_ID must be set for Azure connectivity rule tests")
+			}
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccConnectivityRuleResourceConfig_AzurePrivate(azurePeResourceID),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_azure_private", "connectivity_type", "private"),
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_azure_private", "region", "azure-centralus"),
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_azure_private", "azure_pe_resource_id", azurePeResourceID),
+				),
+			},
+			// Import state testing
+			{
+				ResourceName:      "temporalcloud_connectivity_rule.test_azure_private",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// Delete the private connectivity rule
+			{
+				ResourceName:      "temporalcloud_connectivity_rule.test_azure_private",
 				ImportState:       true,
 				ImportStateVerify: true,
 				Destroy:           true,
@@ -121,6 +193,21 @@ func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 				// Should fail at plan time due to missing required attribute
 				ExpectError: regexp.MustCompile("GCP Project ID is required"),
 			},
+			{
+				Config: testAccConnectivityRuleResourceConfig_PrivateWithStableIps(),
+				// Should fail because enable_stable_ips is only valid for public rules
+				ExpectError: regexp.MustCompile("enable_stable_ips can only be true when connectivity_type is 'public'"),
+			},
+			{
+				Config: testAccConnectivityRuleResourceConfig_PrivateWithoutAzurePeResourceId(),
+				// Should fail at plan time due to missing required attribute
+				ExpectError: regexp.MustCompile("Azure Private Endpoint Resource ID is required"),
+			},
+			{
+				Config: testAccConnectivityRuleResourceConfig_AzureWithConnectionId(),
+				// Should fail because connection_id is populated automatically for Azure
+				ExpectError: regexp.MustCompile("connection_id must not be specified when region is azure"),
+			},
 		},
 	})
 }
@@ -138,6 +225,34 @@ resource "temporalcloud_connectivity_rule" "test_public" {
 `
 }
 
+func testAccConnectivityRuleResourceConfig_PublicStableIps() string {
+	return `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test_public_stable_ips" {
+  connectivity_type = "public"
+  enable_stable_ips = true
+}
+`
+}
+
+func testAccConnectivityRuleResourceConfig_PrivateWithStableIps() string {
+	return `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test" {
+  connectivity_type = "private"
+  connection_id     = "vpce-testconnid"
+  region            = "aws-us-west-2"
+  enable_stable_ips = true
+}
+`
+}
+
 func testAccConnectivityRuleResourceConfig_Private() string {
 	return `
 provider "temporalcloud" {
@@ -148,6 +263,48 @@ resource "temporalcloud_connectivity_rule" "test_aws_private" {
   connectivity_type = "private"
   connection_id     = "vpce-testconnid"
   region           = "aws-us-west-2"
+}
+`
+}
+
+func testAccConnectivityRuleResourceConfig_AzurePrivate(azurePeResourceID string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test_azure_private" {
+  connectivity_type    = "private"
+  region               = "azure-centralus"
+  azure_pe_resource_id = %[1]q
+}
+`, azurePeResourceID)
+}
+
+func testAccConnectivityRuleResourceConfig_PrivateWithoutAzurePeResourceId() string {
+	return `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test" {
+  connectivity_type = "private"
+  region            = "azure-centralus"
+}
+`
+}
+
+func testAccConnectivityRuleResourceConfig_AzureWithConnectionId() string {
+	return `
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_connectivity_rule" "test" {
+  connectivity_type    = "private"
+  region               = "azure-centralus"
+  connection_id        = "should-not-be-set"
+  azure_pe_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-saas-cicd-prod/providers/Microsoft.Network/privateEndpoints/temporal-pe"
 }
 `
 }

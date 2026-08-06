@@ -142,7 +142,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIBxzCCAU2gAwIBAgIRAnkbVL6hHp218oB9UlQtN7wwCgYIKoZIzj0EAwMwEjEQ
@@ -361,7 +361,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth       = true
   retention_days     = 7
 }
@@ -584,14 +584,14 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .NamespaceName }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth   = true 
   retention_days = 7
 }
 
 resource "temporalcloud_namespace" "test2" {
   name               = "{{ .NamespaceName2 }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth   = true 
   retention_days = 7
 }

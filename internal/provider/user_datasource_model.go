@@ -19,13 +19,14 @@ type (
 	}
 
 	userDataModel struct {
-		ID                types.String                             `tfsdk:"id"`
-		Email             types.String                             `tfsdk:"email"`
-		State             types.String                             `tfsdk:"state"`
-		AccountAccess     internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
-		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
-		CreatedAt         types.String                             `tfsdk:"created_at"`
-		UpdatedAt         types.String                             `tfsdk:"updated_at"`
+		ID                       types.String                             `tfsdk:"id"`
+		Email                    types.String                             `tfsdk:"email"`
+		State                    types.String                             `tfsdk:"state"`
+		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
+		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
+		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		CreatedAt                types.String                             `tfsdk:"created_at"`
+		UpdatedAt                types.String                             `tfsdk:"updated_at"`
 	}
 
 	userNSAccessModel struct {
@@ -57,6 +58,12 @@ func userToUserDataModel(ctx context.Context, sa *identityv1.User) (*userDataMod
 	}
 
 	userModel.AccountAccess = internaltypes.CaseInsensitiveString(role)
+	accountAccessCustomRoles, d := getCustomRolesSet(ctx, sa.GetSpec().GetAccess().GetAccountAccess().GetCustomRoles())
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	userModel.AccountAccessCustomRoles = accountAccessCustomRoles
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 
@@ -120,6 +127,11 @@ func userSchema(idRequired bool) map[string]schema.Attribute {
 			CustomType:  internaltypes.CaseInsensitiveStringType{},
 			Description: "The role on the account. Must be one of admin, developer, or read (case-insensitive).",
 			Computed:    true,
+		},
+		"account_access_custom_roles": schema.SetAttribute{
+			Description: accountAccessCustomRolesDescription,
+			Computed:    true,
+			ElementType: types.StringType,
 		},
 		"namespace_accesses": schema.SetNestedAttribute{
 			Description: "The set of namespace permissions for this user, including each namespace and its role.",

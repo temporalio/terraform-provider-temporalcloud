@@ -30,11 +30,13 @@ type (
 	}
 
 	connectivityRuleDataModel struct {
-		ID               types.String `tfsdk:"id"`
-		ConnectivityType types.String `tfsdk:"connectivity_type"`
-		ConnectionID     types.String `tfsdk:"connection_id"`
-		Region           types.String `tfsdk:"region"`
-		GcpProjectID     types.String `tfsdk:"gcp_project_id"`
+		ID                types.String `tfsdk:"id"`
+		ConnectivityType  types.String `tfsdk:"connectivity_type"`
+		ConnectionID      types.String `tfsdk:"connection_id"`
+		Region            types.String `tfsdk:"region"`
+		GcpProjectID      types.String `tfsdk:"gcp_project_id"`
+		AzurePeResourceID types.String `tfsdk:"azure_pe_resource_id"`
+		EnableStableIps   types.Bool   `tfsdk:"enable_stable_ips"`
 
 		State     types.String `tfsdk:"state"`
 		CreatedAt types.String `tfsdk:"created_at"`
@@ -70,6 +72,14 @@ func connectivityRuleDataSourceSchema(idRequired bool) map[string]schema.Attribu
 		"gcp_project_id": schema.StringAttribute{
 			Computed:    true,
 			Description: "The GCP project ID of the connectivity rule.",
+		},
+		"azure_pe_resource_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "The ARM resource ID of the customer's Azure Private Endpoint for the connectivity rule.",
+		},
+		"enable_stable_ips": schema.BoolAttribute{
+			Computed:    true,
+			Description: "If true, namespaces attached to this public connectivity rule are reachable via a predictable set of public IPs. Only set for public connectivity rules.",
 		},
 		"state": schema.StringAttribute{
 			Computed:    true,
@@ -159,16 +169,24 @@ func connectivityRuleToConnectivityRuleDataModel(connectivityRule *connectivityr
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePrivate)
 		model.ConnectionID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetConnectionId())
 		model.Region = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetRegion())
+		model.EnableStableIps = types.BoolValue(false)
 		if connectivityRule.GetSpec().GetPrivateRule().GetGcpProjectId() != "" {
 			model.GcpProjectID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetGcpProjectId())
 		} else {
 			model.GcpProjectID = types.StringNull()
+		}
+		if connectivityRule.GetSpec().GetPrivateRule().GetAzurePeResourceId() != "" {
+			model.AzurePeResourceID = types.StringValue(connectivityRule.GetSpec().GetPrivateRule().GetAzurePeResourceId())
+		} else {
+			model.AzurePeResourceID = types.StringNull()
 		}
 	} else if connectivityRule.GetSpec().GetPublicRule() != nil {
 		model.ConnectivityType = types.StringValue(connectivityRuleTypePublic)
 		model.ConnectionID = types.StringNull()
 		model.Region = types.StringNull()
 		model.GcpProjectID = types.StringNull()
+		model.AzurePeResourceID = types.StringNull()
+		model.EnableStableIps = types.BoolValue(connectivityRule.GetSpec().GetPublicRule().GetEnableStableIps())
 	} else {
 		diags.AddError("Invalid connectivity rule", "connectivity rule must be either public or private")
 		return nil, diags

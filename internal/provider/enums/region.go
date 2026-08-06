@@ -17,6 +17,8 @@ func FromRegionCloudProvider(p region.Region_CloudProvider) (string, error) {
 		return "aws", nil
 	case region.Region_CLOUD_PROVIDER_GCP:
 		return "gcp", nil
+	case region.Region_CLOUD_PROVIDER_AZURE:
+		return "azure", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidRegionCloudProvider, p)
 	}

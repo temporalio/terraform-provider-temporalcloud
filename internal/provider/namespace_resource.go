@@ -87,6 +87,7 @@ type (
 		ConnectivityRuleIds types.Set                              `tfsdk:"connectivity_rule_ids"`
 		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
 		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
+		Fairness            internaltypes.ZeroObjectValue          `tfsdk:"fairness"`
 	}
 
 	lifecycleModel struct {
@@ -117,6 +118,10 @@ type (
 	capacityModel struct {
 		Mode  types.String  `tfsdk:"mode"`
 		Value types.Float64 `tfsdk:"value"`
+	}
+
+	fairnessModel struct {
+		TaskQueueFairnessEnabled types.Bool `tfsdk:"task_queue_fairness_enabled"`
 	}
 )
 
@@ -154,6 +159,10 @@ var (
 	capacityAttrs = map[string]attr.Type{
 		"mode":  types.StringType,
 		"value": types.Float64Type,
+	}
+
+	fairnessAttrs = map[string]attr.Type{
+		"task_queue_fairness_enabled": types.BoolType,
 	}
 )
 
@@ -357,6 +366,21 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
+			"fairness": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "The fairness configuration for the namespace.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: fairnessAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"task_queue_fairness_enabled": schema.BoolAttribute{
+						Description: "Flag to enable task queue fairness for the namespace. Defaults to disabled.",
+						Optional:    true,
+					},
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -385,7 +409,7 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	// On update (state exists), reject removing capacity once set.
+	// On update (state exists), reject removing capacity or fairness once set.
 	if !req.State.Raw.IsNull() {
 		var state namespaceResourceModel
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
@@ -396,6 +420,24 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			resp.Diagnostics.AddError(
 				"capacity cannot be removed once set",
 				`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
+			)
+			return
+		}
+		// Read fairness from Config (raw HCL), not Plan: ZeroObjectValue.ObjectSemanticEquals
+		// treats {task_queue_fairness_enabled = false} as semantically equal to null because
+		// both IsZero, and the framework substitutes Plan with State when those are equal.
+		// That substitution would mask block removal in Plan after an explicit disable, so the
+		// guard must inspect the user's actual config. Capacity does not need this because
+		// its non-null state (mode = "on_demand") is non-zero and never collapses to null.
+		var config namespaceResourceModel
+		resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !state.Fairness.IsNull() && config.Fairness.IsNull() {
+			resp.Diagnostics.AddError(
+				"fairness cannot be removed once set",
+				`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
 			)
 			return
 		}
@@ -416,28 +458,63 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	regionsResp, err := r.client.CloudService().GetRegions(ctx, &cloudservicev1.GetRegionsRequest{})
+	var stateRegions []string
+	if !req.State.Raw.IsNull() {
+		var state namespaceResourceModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		var d diag.Diagnostics
+		stateRegions, d = getRegionsFromModel(ctx, &state)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	}
+
+	getRegionsFn := func(ctx context.Context, regionsReq *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+		return r.client.CloudService().GetRegions(ctx, regionsReq)
+	}
+	resp.Diagnostics.Append(validateRegionsWithConfig(ctx, stateRegions, configuredRegions, getRegionsFn)...)
+}
+
+// validateRegionsWithConfig checks that every region in configuredRegions is valid by calling the
+// getRegionsFn.
+//
+// It skips validation when stateRegions equals configuredRegions to avoid blocking Terraform operations
+// on a namespace whose region is no longer supported for new placement.
+func validateRegionsWithConfig(
+	ctx context.Context,
+	stateRegions []string,
+	configuredRegions []string,
+	getRegionsFn func(context.Context, *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error),
+) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if areRegionsEqual(stateRegions, configuredRegions) {
+		return diags
+	}
+	regionsResp, err := getRegionsFn(ctx, &cloudservicev1.GetRegionsRequest{})
 	if err != nil {
-		resp.Diagnostics.AddWarning(
+		diags.AddWarning(
 			"Unable to Validate Regions",
 			fmt.Sprintf("Failed to fetch available regions from Temporal Cloud API: %s. Region validation will be skipped.", err.Error()),
 		)
-		return
+		return diags
 	}
-
 	validRegions := make(map[string]bool, len(regionsResp.GetRegions()))
 	for _, region := range regionsResp.GetRegions() {
 		validRegions[region.GetId()] = true
 	}
-
 	for _, region := range configuredRegions {
 		if !validRegions[region] {
-			resp.Diagnostics.AddError(
+			diags.AddError(
 				"Invalid Region",
 				fmt.Sprintf("Region %q is not a valid Temporal Cloud region. Use the temporalcloud_regions data source or see https://docs.temporal.io/cloud/regions for the list of available regions.", region),
 			)
 		}
 	}
+	return diags
 }
 
 // Create creates the resource and sets the initial Terraform state.
@@ -519,6 +596,15 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 			return
 		}
 		spec.CapacitySpec = capacitySpec
+	}
+
+	if !plan.Fairness.IsNull() {
+		fairnessSpec, d := getFairnessFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.Fairness = fairnessSpec
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -647,6 +733,20 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	// See ModifyPlan for why fairness is checked against Config rather than Plan.
+	var config namespaceResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if !state.Fairness.IsNull() && config.Fairness.IsNull() {
+		resp.Diagnostics.AddError(
+			"fairness cannot be removed once set",
+			`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
+		)
+		return
+	}
+
 	regions, d := getRegionsFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
 	if resp.Diagnostics.HasError() {
@@ -738,6 +838,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.CapacitySpec = capacitySpec
 	}
 
+	if !plan.Fairness.IsNull() {
+		fairnessSpec, d := getFairnessFromModel(ctx, &plan)
+		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		spec.Fairness = fairnessSpec
+	}
+
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
 		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
 		return
@@ -953,6 +1063,7 @@ func updateModelFromSpec(
 
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
 	if diags.HasError() {
@@ -1095,6 +1206,23 @@ func updateModelFromSpec(
 		state.Capacity = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(capacityAttrs)}
 	}
 
+	fairnessSpec := ns.GetSpec().GetFairness()
+	if fairnessSpec != nil {
+		fp, objectDiags := types.ObjectValueFrom(ctx, fairnessAttrs, &fairnessModel{
+			TaskQueueFairnessEnabled: types.BoolValue(fairnessSpec.GetTaskQueueFairnessEnabled()),
+		})
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: fp}
+	} else if !state.Fairness.IsZero(ctx) {
+		// Only overwrite state when it holds a non-default value the API no longer reports;
+		// leave a zero-but-non-null state (e.g. {task_queue_fairness_enabled = false}) intact
+		// so the ModifyPlan guard "fairness cannot be removed once set" can still see it.
+		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(fairnessAttrs)}
+	}
+
 	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
@@ -1201,6 +1329,18 @@ func getCapacityFromModel(ctx context.Context, model *namespaceResourceModel) (*
 		diags.Append(diag.NewErrorDiagnostic("Invalid capacity mode", "Invalid capacity mode: "+capacity.Mode.ValueString()))
 		return nil, diags
 	}
+}
+
+func getFairnessFromModel(ctx context.Context, model *namespaceResourceModel) (*namespacev1.FairnessSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var fairness fairnessModel
+	diags.Append(model.Fairness.As(ctx, &fairness, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &namespacev1.FairnessSpec{
+		TaskQueueFairnessEnabled: fairness.TaskQueueFairnessEnabled.ValueBool(),
+	}, diags
 }
 
 func stringOrNull(s string) types.String {

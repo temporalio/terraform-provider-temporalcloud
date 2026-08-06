@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
+	regionv1 "go.temporal.io/cloud-sdk/api/region/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 )
@@ -56,7 +57,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth       = true
   retention_days     = 7
 }`, name)
@@ -115,7 +116,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -214,6 +215,146 @@ resource "temporalcloud_namespace" "terraform" {
 	})
 }
 
+func TestAccBasicAzureNamespace(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-azure-namespace", randomString(10))
+	config := func(name string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_namespace" "terraform" {
+  name               = "%s"
+  regions            = ["azure-centralus"]
+  accepted_client_ca = base64encode(<<PEM
+-----BEGIN CERTIFICATE-----
+MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
+MA4GA1UEChMHdGVzdGluZzAeFw0yNTA4MjAxNDAwMzNaFw0yNjA4MjAxNDAxMzNa
+MBIxEDAOBgNVBAoTB3Rlc3RpbmcwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAATRWwv2
+nVfToOR59QuRHk5jAVhu991AQWXwLFSzHzjmZ8XIkiVzh3EhPwybsnm+uV6XN/xe
+1+KJ/0NyiVL91KFwS0y5xLKqdvy/mOv0eSUy/blJpLR66diTqPDMlYntuBmjZzBl
+MA4GA1UdDwEB/wQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBTNvOjx
+e/IC/jxLZvXGQT4fmj0eMTAjBgNVHREEHDAaghhjbGllbnQucm9vdC50ZXN0aW5n
+LjJ5cU4wCgYIKoZIzj0EAwMDaQAwZgIxALwxPDblJQ9R65G9/M7Tyx1H/7EUTeo9
+ThGIAJ5f8VReP9T7155ri5sRCUTBdgFHVAIxAOrtnTo8uRjEs8HdUW0e9H7E2nyW
+5hWHcfGvGFFkZn3TkJIX3kdJslSDmxOXhn7D/w==
+-----END CERTIFICATE-----
+PEM
+)
+  retention_days = %d
+}`, name, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(name, 7),
+			},
+			{
+				Config: config(name, 14),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_namespace.terraform",
+			},
+		},
+	})
+}
+
+func TestValidateRegionsWithConfig(t *testing.T) {
+	t.Parallel()
+
+	availableRegions := []*regionv1.Region{{Id: "aws-us-east-1"}, {Id: "aws-us-west-2"}}
+
+	testCases := []struct {
+		name              string
+		stateRegions      []string
+		configuredRegions []string
+		getRegionsFn      func(context.Context, *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error)
+		wantAPICall       bool
+		wantError         bool
+		wantWarning       bool
+	}{
+		{
+			name:              "skip validation when regions are unchanged",
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "skip validation when regions are unchanged (different order)",
+			stateRegions:      []string{"aws-us-east-1", "aws-us-west-2"},
+			configuredRegions: []string{"aws-us-west-2", "aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("should not be called")
+			},
+			wantAPICall: false,
+		},
+		{
+			name:              "API error produces warning, not error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return nil, errors.New("connection refused")
+			},
+			wantAPICall: true,
+			wantWarning: true,
+		},
+		{
+			name:              "valid region passes validation",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-east-1"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+		},
+		{
+			name:              "invalid region produces error",
+			stateRegions:      nil,
+			configuredRegions: []string{"aws-us-fake-99"},
+			getRegionsFn: func(_ context.Context, _ *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				return &cloudservicev1.GetRegionsResponse{Regions: availableRegions}, nil
+			},
+			wantAPICall: true,
+			wantError:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			called := false
+			wrappedFn := func(ctx context.Context, req *cloudservicev1.GetRegionsRequest) (*cloudservicev1.GetRegionsResponse, error) {
+				called = true
+				return tc.getRegionsFn(ctx, req)
+			}
+
+			diags := validateRegionsWithConfig(context.Background(), tc.stateRegions, tc.configuredRegions, wrappedFn)
+
+			if called != tc.wantAPICall {
+				t.Errorf("API called = %v, want %v", called, tc.wantAPICall)
+			}
+			if tc.wantError && !diags.HasError() {
+				t.Error("expected error diagnostic, got none")
+			}
+			if !tc.wantError && diags.HasError() {
+				t.Errorf("unexpected error diagnostics: %+v", diags)
+			}
+			if tc.wantWarning && len(diags) == 0 {
+				t.Error("expected warning diagnostic, got none")
+			}
+		})
+	}
+}
+
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
@@ -224,7 +365,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth 	 = true
   retention_days     = %d
 }`, name, retention)
@@ -261,7 +402,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -339,7 +480,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "test" {
   name               = "{{ .Name }}-{{ .ApiKeyAuth }}"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
 
 	  {{ if .ApiKeyAuth }}
 	  api_key_auth = true
@@ -619,7 +760,7 @@ provider "temporalcloud" {
 }
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -662,7 +803,7 @@ provider "temporalcloud" {
 }
 resource "temporalcloud_namespace" "test" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -709,7 +850,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -791,7 +932,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 	resource "temporalcloud_connectivity_rule" "%s" {
 	  connectivity_type = "private"
 	  connection_id     = "vpce-tftest%s"
-	  region            = "aws-us-east-1"
+	  region            = "aws-ca-central-1"
 	}
 	`, ruleName, ruleName)
 		}
@@ -811,7 +952,7 @@ func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {
 		
 	resource "temporalcloud_namespace" "test" {
 	  name               = "%s"
-	  regions            = ["aws-us-east-1"]
+	  regions            = ["aws-ca-central-1"]
 	  accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIBxzCCAU2gAwIBAgIRAnkbVL6hHp218oB9UlQtN7wwCgYIKoZIzj0EAwMwEjEQ
@@ -985,7 +1126,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "capacitytest" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   accepted_client_ca = base64encode(<<PEM
 -----BEGIN CERTIFICATE-----
 MIIByDCCAU2gAwIBAgIRAuOeFDeADUx5O53PRIsIPZIwCgYIKoZIzj0EAwMwEjEQ
@@ -1092,7 +1233,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   capacity = {
@@ -1120,7 +1261,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
   capacity = {
@@ -1132,7 +1273,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
 }`, name)
@@ -1148,6 +1289,115 @@ resource "temporalcloud_namespace" "test" {
 				Config:      withoutCapacity,
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`capacity cannot be removed once set`),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceWithFairness(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-fairness", randomString(10))
+	config := func(name string, enabled bool) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "fairnesstest" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = %t
+  }
+}`, name, enabled)
+	}
+
+	checkFairness := func(want bool) func(state *terraform.State) error {
+		return func(state *terraform.State) error {
+			id := state.RootModule().Resources["temporalcloud_namespace.fairnesstest"].Primary.Attributes["id"]
+			conn := newConnection(t)
+			ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+				Namespace: id,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %v", err)
+			}
+			got := ns.GetNamespace().GetSpec().GetFairness().GetTaskQueueFairnessEnabled()
+			if got != want {
+				return fmt.Errorf("expected task_queue_fairness_enabled=%t, got %t", want, got)
+			}
+			return nil
+		}
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(name, true),
+				Check:  checkFairness(true),
+			},
+			{
+				Config: config(name, false),
+				Check:  checkFairness(false),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceFairnessCannotBeUnset(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-fairness-unset", randomString(10))
+	withFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = true
+  }
+}`, name)
+	disabledFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+  fairness = {
+    task_queue_fairness_enabled = false
+  }
+}`, name)
+	withoutFairness := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+}`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: withFairness,
+			},
+			{
+				// Explicit disable must succeed (regression guard:
+				// task_queue_fairness_enabled = false is the zero value of types.Bool,
+				// so a naive IsZero check in ModifyPlan would reject this).
+				Config: disabledFairness,
+			},
+			{
+				Config:      withoutFairness,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`fairness cannot be removed once set`),
 			},
 		},
 	})

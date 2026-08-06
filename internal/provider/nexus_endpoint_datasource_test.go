@@ -19,7 +19,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "target_namespace" {
   name           = "terraform-target-namespace"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 14
   timeouts {
@@ -30,7 +30,7 @@ resource "temporalcloud_namespace" "target_namespace" {
 
 resource "temporalcloud_namespace" "caller_namespace" {
   name           = "terraform-caller-namespace"
-  regions        = ["aws-us-east-1"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 14
   timeouts {

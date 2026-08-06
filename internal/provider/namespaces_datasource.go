@@ -400,6 +400,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 
 	var regionStrs []attr.Value
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	for _, region := range ns.GetSpec().GetRegions() {
 		regionStrs = append(regionStrs, types.StringValue(region))
 	}

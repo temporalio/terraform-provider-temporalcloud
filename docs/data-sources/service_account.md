@@ -53,6 +53,7 @@ output "service_account" {
 ### Read-Only
 
 - `account_access` (String) The role on the account. Must be one of admin, developer, read, or metricsread (case-insensitive).
+- `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `created_at` (String) The creation time of the Service Account.
 - `description` (String) The description of the Service Account.
 - `name` (String) The name associated with the service account.

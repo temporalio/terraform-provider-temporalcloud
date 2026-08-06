@@ -54,11 +54,12 @@ resource "temporalcloud_user" "namespace_admin" {
 
 ### Required
 
-- `account_access` (String) The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `metricsread` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support. `none` is only valid for users managed via SCIM that derive their roles from group memberships.
+- `account_access` (String) The role on the account. Must be one of `owner`, `admin`, `developer`, `read`, `financeadmin`, or `none` (case-insensitive). `owner` is only valid for import and cannot be created, updated or deleted without Temporal support. Users can only be set to `none` when they are managed by SCIM and derive their roles from group memberships.
 - `email` (String) The email address for the user.
 
 ### Optional
 
+- `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 

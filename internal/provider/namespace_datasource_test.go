@@ -2,8 +2,9 @@ package provider
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
@@ -18,7 +19,7 @@ provider "temporalcloud" {
 
 resource "temporalcloud_namespace" "terraform" {
   name               = "%s"
-  regions            = ["aws-us-east-1"]
+  regions            = ["aws-ca-central-1"]
   api_key_auth 	 = true
   retention_days     = %d
 }
@@ -71,7 +72,7 @@ output "namespace" {
 					if !ok {
 						return fmt.Errorf("expected active_region to be a string")
 					}
-					if outputRegion != "aws-us-east-1" {
+					if outputRegion != "aws-ca-central-1" {
 						return fmt.Errorf("exptect active regon to match provided region")
 					}
 
