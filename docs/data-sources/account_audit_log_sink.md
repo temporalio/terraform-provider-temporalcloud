@@ -33,7 +33,7 @@ Read-Only:
 
 - `destination_uri` (String) The destination URI of the Kinesis stream where Temporal will send data.
 - `region` (String) The region of the Kinesis stream.
-- `role_name` (String) The IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.
+- `role_name` (String) The name of the IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.
 
 
 <a id="nestedatt--pubsub"></a>

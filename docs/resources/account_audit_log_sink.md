@@ -30,7 +30,7 @@ resource "temporalcloud_account_audit_log_sink" "kinesis_sink" {
   sink_name = "my-kinesis-sink"
   enabled   = true
   kinesis = {
-    role_name       = "arn:aws:iam::123456789012:role/TemporalCloudKinesisRole"
+    role_name       = "TemporalCloudKinesisRole"
     destination_uri = "arn:aws:kinesis:us-east-1:123456789012:stream/my-audit-stream"
     region          = "us-east-1"
   }
@@ -73,7 +73,7 @@ Required:
 
 - `destination_uri` (String) The destination URI of the Kinesis stream where Temporal will send data.
 - `region` (String) The region of the Kinesis stream.
-- `role_name` (String) The IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.
+- `role_name` (String) The name of the IAM role that Temporal Cloud assumes for writing records to the customer's Kinesis stream.
 
 
 <a id="nestedatt--pubsub"></a>
