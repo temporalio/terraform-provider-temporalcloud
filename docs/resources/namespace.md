@@ -122,6 +122,13 @@ resource "temporalcloud_namespace" "terraform3" {
   regions        = ["aws-us-east-1"]
   api_key_auth   = true
   retention_days = 14
+  encryption_validation = {
+    mode            = "warn"
+    metadata_key    = "encoding"
+    metadata_values = ["binary/encrypted"]
+    inspect_header  = false
+    inspect_failure = false
+  }
   namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
@@ -159,6 +166,7 @@ resource "temporalcloud_namespace" "terraform4" {
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (Set of String) The IDs of the connectivity rules for this namespace.
+- `encryption_validation` (Attributes) The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute. (see [below for nested schema](#nestedatt--encryption_validation))
 - `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
@@ -201,6 +209,18 @@ Optional:
 - `custom_error_message` (String) A custom error message to display when the codec server returns an error.
 - `include_cross_origin_credentials` (Boolean) If true, Temporal Cloud will include cross-origin credentials in requests to the codec server.
 - `pass_access_token` (Boolean) If true, Temporal Cloud will pass the access token to the codec server upon each request.
+
+
+<a id="nestedatt--encryption_validation"></a>
+### Nested Schema for `encryption_validation`
+
+Optional:
+
+- `inspect_failure` (Boolean) Whether to inspect failure payloads for encrypted payload metadata. Defaults to false.
+- `inspect_header` (Boolean) Whether to inspect workflow headers for encrypted payload metadata. Defaults to false.
+- `metadata_key` (String) The payload metadata key used to identify encrypted payloads. When omitted, Temporal Cloud uses encoding.
+- `metadata_values` (Set of String) The payload metadata values used to identify encrypted payloads. Configure one to three values. When omitted, Temporal Cloud uses binary/encrypted.
+- `mode` (String) The encryption validation mode. Valid values are disabled, warn, and deny. An empty configuration is treated as unconfigured.
 
 
 <a id="nestedatt--fairness"></a>
