@@ -35,9 +35,12 @@ import (
 	"go.temporal.io/cloud-sdk/cloudclient"
 )
 
+const DevelopmentAPIVersion = "development"
+
 // Client is a cloudclient for the Temporal Cloud API.
 type Client struct {
 	*cloudclient.Client
+	developmentClient *cloudclient.Client
 }
 
 func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, version string) (*Client, error) {
@@ -46,19 +49,34 @@ func NewConnectionWithAPIKey(addrStr string, allowInsecure bool, apiKey string, 
 		userAgentProject = fmt.Sprintf("%s/%s", userAgentProject, version)
 	}
 
-	var cClient *cloudclient.Client
-	var err error
-	cClient, err = cloudclient.New(cloudclient.Options{
-		HostPort:      addrStr,
-		APIKey:        apiKey,
-		AllowInsecure: allowInsecure,
-		UserAgent:     userAgentProject,
-	})
+	cClient, err := newCloudClient(addrStr, allowInsecure, apiKey, userAgentProject, "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %v", err)
 	}
 
-	return &Client{cClient}, nil
+	developmentClient, err := newCloudClient(addrStr, allowInsecure, apiKey, userAgentProject, DevelopmentAPIVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect with development API version: %v", err)
+	}
+
+	return &Client{
+		Client:            cClient,
+		developmentClient: developmentClient,
+	}, nil
+}
+
+func (c *Client) DevelopmentCloudService() cloudservicev1.CloudServiceClient {
+	return c.developmentClient.CloudService()
+}
+
+func newCloudClient(addrStr string, allowInsecure bool, apiKey string, userAgent string, apiVersion string) (*cloudclient.Client, error) {
+	return cloudclient.New(cloudclient.Options{
+		HostPort:      addrStr,
+		APIKey:        apiKey,
+		AllowInsecure: allowInsecure,
+		UserAgent:     userAgent,
+		APIVersion:    apiVersion,
+	})
 }
 
 func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operationv1.AsyncOperation) error {
