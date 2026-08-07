@@ -2036,7 +2036,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-west-2"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
 %s
@@ -2139,7 +2139,7 @@ provider "temporalcloud" {}
 
 resource "temporalcloud_namespace" "test" {
   name           = "%s"
-  regions        = ["aws-us-west-2"]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 7
 
