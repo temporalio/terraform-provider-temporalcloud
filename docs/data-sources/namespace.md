@@ -57,6 +57,7 @@ output "namespace" {
 - `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.
 - `active_region` (String) The currently active region for the namespace.
 - `created_time` (String) The date and time when the namespace was created.
+- `encryption_validation` (Attributes) The payload encryption validation configuration for the namespace, if configured. (see [below for nested schema](#nestedatt--encryption_validation))
 - `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--endpoints))
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--limits))
 - `name` (String) The name of the namespace.
@@ -107,6 +108,18 @@ Read-Only:
 - `allowed_principal_arns` (List of String) The list of principal arns that are allowed to access the namespace on the private link.
 - `vpc_endpoint_service_names` (List of String) The list of vpc endpoint service names that are associated with the namespace.
 
+
+
+<a id="nestedatt--encryption_validation"></a>
+### Nested Schema for `encryption_validation`
+
+Read-Only:
+
+- `inspect_failure` (Boolean) Whether failure payloads are inspected for encrypted payload metadata.
+- `inspect_header` (Boolean) Whether workflow headers are inspected for encrypted payload metadata.
+- `metadata_key` (String) The payload metadata key used to identify encrypted payloads.
+- `metadata_values` (Set of String) The payload metadata values used to identify encrypted payloads.
+- `mode` (String) The encryption validation mode: disabled, warn, or deny.
 
 
 <a id="nestedatt--endpoints"></a>

@@ -101,6 +101,13 @@ resource "temporalcloud_namespace" "terraform3" {
   regions        = ["aws-us-east-1"]
   api_key_auth   = true
   retention_days = 14
+  encryption_validation = {
+    mode            = "warn"
+    metadata_key    = "encoding"
+    metadata_values = ["binary/encrypted"]
+    inspect_header  = false
+    inspect_failure = false
+  }
   namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
