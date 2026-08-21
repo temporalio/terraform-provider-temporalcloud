@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -17,15 +18,18 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	projectv1 "go.temporal.io/cloud-sdk/api/project/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 type (
@@ -34,13 +38,17 @@ type (
 	}
 
 	projectResourceModel struct {
-		ID                     types.String `tfsdk:"id"`
-		State                  types.String `tfsdk:"state"`
-		DisplayName            types.String `tfsdk:"display_name"`
-		Description            types.String `tfsdk:"description"`
-		EnableDeleteProtection types.Bool   `tfsdk:"enable_delete_protection"`
+		ID          types.String                  `tfsdk:"id"`
+		State       types.String                  `tfsdk:"state"`
+		DisplayName types.String                  `tfsdk:"display_name"`
+		Description types.String                  `tfsdk:"description"`
+		Lifecycle   internaltypes.ZeroObjectValue `tfsdk:"project_lifecycle"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	projectLifecycleModel struct {
+		EnableDeleteProtection types.Bool `tfsdk:"enable_delete_protection"`
 	}
 )
 
@@ -48,6 +56,10 @@ var (
 	_ resource.Resource                = (*projectResource)(nil)
 	_ resource.ResourceWithConfigure   = (*projectResource)(nil)
 	_ resource.ResourceWithImportState = (*projectResource)(nil)
+
+	projectLifecycleAttrs = map[string]attr.Type{
+		"enable_delete_protection": types.BoolType,
+	}
 )
 
 func NewProjectResource() resource.Resource {
@@ -107,11 +119,22 @@ func (r *projectResource) Schema(ctx context.Context, _ resource.SchemaRequest, 
 				Computed:    true,
 				Default:     stringdefault.StaticString(""),
 			},
-			"enable_delete_protection": schema.BoolAttribute{
-				Description: "If true, the Project cannot be deleted. Set this back to `false` and apply before destroying the Project.",
-				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
+			"project_lifecycle": schema.SingleNestedAttribute{
+				Description: "The lifecycle configuration for the Project. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: projectLifecycleAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"enable_delete_protection": schema.BoolAttribute{
+						Description: "If true, the Project cannot be deleted. This is a safeguard against accidental deletion. To delete a Project with this option enabled, you must first set it to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+					},
+				},
+				Optional: true,
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -140,8 +163,14 @@ func (r *projectResource) Create(ctx context.Context, req resource.CreateRequest
 	ctx, cancel := context.WithTimeout(ctx, createTimeout)
 	defer cancel()
 
+	spec, d := getProjectSpecFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	svcResp, err := r.client.CloudService().CreateProject(ctx, &cloudservicev1.CreateProjectRequest{
-		Spec:             getProjectSpecFromModel(&plan),
+		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -161,7 +190,7 @@ func (r *projectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	resp.Diagnostics.Append(updateProjectModelFromSpec(&plan, project.GetProject())...)
+	resp.Diagnostics.Append(updateProjectModelFromSpec(ctx, &plan, project.GetProject())...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -193,7 +222,7 @@ func (r *projectResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	resp.Diagnostics.Append(updateProjectModelFromSpec(&state, project.GetProject())...)
+	resp.Diagnostics.Append(updateProjectModelFromSpec(ctx, &state, project.GetProject())...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -224,9 +253,15 @@ func (r *projectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
+	spec, d := getProjectSpecFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	svcResp, err := r.client.CloudService().UpdateProject(ctx, &cloudservicev1.UpdateProjectRequest{
 		ProjectId:        plan.ID.ValueString(),
-		Spec:             getProjectSpecFromModel(&plan),
+		Spec:             spec,
 		ResourceVersion:  currentProject.GetProject().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
@@ -247,7 +282,7 @@ func (r *projectResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	resp.Diagnostics.Append(updateProjectModelFromSpec(&plan, project.GetProject())...)
+	resp.Diagnostics.Append(updateProjectModelFromSpec(ctx, &plan, project.GetProject())...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -293,7 +328,7 @@ func (r *projectResource) Delete(ctx context.Context, req resource.DeleteRequest
 	if currentProject.GetProject().GetSpec().GetLifecycle().GetEnableDeleteProtection() {
 		resp.Diagnostics.AddError(
 			"Failed to delete Project",
-			fmt.Sprintf("Project %s has delete protection enabled. Set enable_delete_protection to false and apply before destroying the Project.", state.ID.ValueString()),
+			fmt.Sprintf("Project %s has delete protection enabled. Set project_lifecycle.enable_delete_protection to false and apply before destroying the Project.", state.ID.ValueString()),
 		)
 		return
 	}
@@ -326,17 +361,39 @@ func (r *projectResource) ImportState(ctx context.Context, req resource.ImportSt
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
-func getProjectSpecFromModel(plan *projectResourceModel) *projectv1.ProjectSpec {
-	return &projectv1.ProjectSpec{
+func getProjectSpecFromModel(ctx context.Context, plan *projectResourceModel) (*projectv1.ProjectSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	spec := &projectv1.ProjectSpec{
 		DisplayName: plan.DisplayName.ValueString(),
 		Description: plan.Description.ValueString(),
-		Lifecycle: &projectv1.LifecycleSpec{
-			EnableDeleteProtection: plan.EnableDeleteProtection.ValueBool(),
-		},
 	}
+
+	if !plan.Lifecycle.IsNull() && !plan.Lifecycle.IsZero(ctx) {
+		lifecycle, d := getProjectLifecycleFromModel(ctx, plan)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		spec.Lifecycle = lifecycle
+	}
+
+	return spec, diags
 }
 
-func updateProjectModelFromSpec(state *projectResourceModel, project *projectv1.Project) diag.Diagnostics {
+func getProjectLifecycleFromModel(ctx context.Context, model *projectResourceModel) (*projectv1.LifecycleSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var lifecycle projectLifecycleModel
+	diags.Append(model.Lifecycle.As(ctx, &lifecycle, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	return &projectv1.LifecycleSpec{
+		EnableDeleteProtection: lifecycle.EnableDeleteProtection.ValueBool(),
+	}, diags
+}
+
+func updateProjectModelFromSpec(ctx context.Context, state *projectResourceModel, project *projectv1.Project) diag.Diagnostics {
 	var diags diag.Diagnostics
 
 	stateStr, err := enums.FromResourceState(project.GetState())
@@ -349,7 +406,21 @@ func updateProjectModelFromSpec(state *projectResourceModel, project *projectv1.
 	state.State = types.StringValue(stateStr)
 	state.DisplayName = types.StringValue(project.GetSpec().GetDisplayName())
 	state.Description = types.StringValue(project.GetSpec().GetDescription())
-	state.EnableDeleteProtection = types.BoolValue(project.GetSpec().GetLifecycle().GetEnableDeleteProtection())
+
+	if lifecycleSpec := project.GetSpec().GetLifecycle(); lifecycleSpec != nil && !proto.Equal(lifecycleSpec, &projectv1.LifecycleSpec{}) {
+		lifecycle := &projectLifecycleModel{
+			EnableDeleteProtection: types.BoolValue(lifecycleSpec.GetEnableDeleteProtection()),
+		}
+		obj, objectDiags := types.ObjectValueFrom(ctx, projectLifecycleAttrs, lifecycle)
+		diags.Append(objectDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.Lifecycle = internaltypes.ZeroObjectValue{ObjectValue: obj}
+	} else if !state.Lifecycle.IsZero(ctx) {
+		// only update the lifecycle if it's not already set to zero
+		state.Lifecycle = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(projectLifecycleAttrs)}
+	}
 
 	return diags
 }

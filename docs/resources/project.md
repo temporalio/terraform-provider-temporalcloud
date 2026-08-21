@@ -29,8 +29,11 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
   description  = "Namespaces and resources owned by the Payments team."
 
-  // Add enable_delete_protection = true to block deletion. Destroying a protected
-  // Project then takes two steps: set it back to false, apply, then destroy.
+  project_lifecycle = {
+    // Prevents the Project from being deleted accidentally. Destroying a protected
+    // Project takes two steps: set this back to false, apply, then destroy.
+    enable_delete_protection = false
+  }
 }
 ```
 
@@ -44,13 +47,21 @@ resource "temporalcloud_project" "payments" {
 ### Optional
 
 - `description` (String) The description of the Project.
-- `enable_delete_protection` (Boolean) If true, the Project cannot be deleted. Set this back to `false` and apply before destroying the Project.
+- `project_lifecycle` (Attributes) The lifecycle configuration for the Project. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--project_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
 
 - `id` (String) The unique identifier of the Project.
 - `state` (String) The current state of the Project.
+
+<a id="nestedatt--project_lifecycle"></a>
+### Nested Schema for `project_lifecycle`
+
+Optional:
+
+- `enable_delete_protection` (Boolean) If true, the Project cannot be deleted. This is a safeguard against accidental deletion. To delete a Project with this option enabled, you must first set it to false.
+
 
 <a id="nestedblock--timeouts"></a>
 ### Nested Schema for `timeouts`

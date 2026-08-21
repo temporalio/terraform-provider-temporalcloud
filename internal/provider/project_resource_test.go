@@ -56,7 +56,6 @@ resource "temporalcloud_project" "terraform" {
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_project.terraform", "display_name", name),
 					resource.TestCheckResourceAttr("temporalcloud_project.terraform", "description", ""),
-					resource.TestCheckResourceAttr("temporalcloud_project.terraform", "enable_delete_protection", "false"),
 					resource.TestCheckResourceAttrSet("temporalcloud_project.terraform", "id"),
 					resource.TestCheckResourceAttrSet("temporalcloud_project.terraform", "state"),
 				),
@@ -92,8 +91,10 @@ provider "temporalcloud" {
 }
 
 resource "temporalcloud_project" "terraform" {
-  display_name             = "%s"
-  enable_delete_protection = %t
+  display_name = "%s"
+  project_lifecycle = {
+    enable_delete_protection = %t
+  }
 }`, displayName, enableDeleteProtection)
 	}
 
@@ -107,7 +108,7 @@ resource "temporalcloud_project" "terraform" {
 			{
 				Config: config(name, true),
 				Check: resource.TestCheckResourceAttr(
-					"temporalcloud_project.terraform", "enable_delete_protection", "true"),
+					"temporalcloud_project.terraform", "project_lifecycle.enable_delete_protection", "true"),
 			},
 			{
 				ImportState:       true,
@@ -118,7 +119,7 @@ resource "temporalcloud_project" "terraform" {
 				// Protection must be lifted before the test framework can destroy the Project.
 				Config: config(name, false),
 				Check: resource.TestCheckResourceAttr(
-					"temporalcloud_project.terraform", "enable_delete_protection", "false"),
+					"temporalcloud_project.terraform", "project_lifecycle.enable_delete_protection", "false"),
 			},
 		},
 	})
