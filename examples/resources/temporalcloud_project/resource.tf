@@ -13,13 +13,8 @@ provider "temporalcloud" {
 resource "temporalcloud_project" "payments" {
   display_name = "payments"
   description  = "Namespaces and resources owned by the Payments team."
-}
 
-// Projects that should not be torn down by accident can enable delete protection.
-// To destroy such a Project, set enable_delete_protection back to false and apply
-// before running terraform destroy.
-resource "temporalcloud_project" "production" {
-  display_name             = "production"
-  description              = "Production workloads."
-  enable_delete_protection = true
+  // Set enable_delete_protection = true to block deletion. Destroying such a
+  // Project then takes two steps: set it back to false, apply, then destroy.
+  // enable_delete_protection = false
 }
