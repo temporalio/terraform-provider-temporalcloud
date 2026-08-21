@@ -14,3 +14,8 @@ testacc:
 .PHONY: test-namespace-export-sink
 test-namespace-export-sink:
 	TF_ACC=1 go test ./internal/provider -run TestAccNamespaceExportSink_GCS -v $(TESTARGS) -timeout 120m
+
+# Run the Project resource acceptance tests. Requires an account with Projects enabled.
+.PHONY: test-project
+test-project:
+	TF_ACC=1 go test ./internal/provider -run 'TestAccBasicProject|TestAccProject_DeleteProtection' -v $(TESTARGS) -timeout 30m
