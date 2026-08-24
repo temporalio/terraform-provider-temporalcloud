@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -182,15 +183,13 @@ func (r *projectResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	project, err := r.client.CloudService().GetProject(ctx, &cloudservicev1.GetProjectRequest{
-		ProjectId: svcResp.GetProjectId(),
-	})
+	project, err := waitForProjectAvailable(ctx, r.client, svcResp.GetProjectId())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get Project after creation", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(updateProjectModelFromSpec(ctx, &plan, project.GetProject())...)
+	resp.Diagnostics.Append(updateProjectModelFromSpec(ctx, &plan, project)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -359,6 +358,80 @@ func (r *projectResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *projectResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// waitForProjectAvailableConfig contains configuration for polling behavior.
+type waitForProjectAvailableConfig struct {
+	retryInterval time.Duration
+	maxAttempts   int
+}
+
+// defaultWaitForProjectAvailableConfig returns the default polling configuration.
+func defaultWaitForProjectAvailableConfig() waitForProjectAvailableConfig {
+	return waitForProjectAvailableConfig{
+		retryInterval: 10 * time.Second,
+		maxAttempts:   12,
+	}
+}
+
+func waitForProjectAvailable(ctx context.Context, c *client.Client, projectID string) (*projectv1.Project, error) {
+	getProjectFunc := func(ctx context.Context, req *cloudservicev1.GetProjectRequest) (*cloudservicev1.GetProjectResponse, error) {
+		return c.CloudService().GetProject(ctx, req)
+	}
+	return waitForProjectAvailableWithConfig(ctx, getProjectFunc, projectID, defaultWaitForProjectAvailableConfig())
+}
+
+// waitForProjectAvailableWithConfig polls GetProject until the Project is readable. A freshly
+// created Project is not immediately visible to the caller: the API reports PermissionDenied (not
+// only NotFound) while the caller's access to it propagates, even after the create async operation
+// reports fulfilled. This mirrors waitForNamespaceAvailable.
+func waitForProjectAvailableWithConfig(ctx context.Context, getProjectFunc func(context.Context, *cloudservicev1.GetProjectRequest) (*cloudservicev1.GetProjectResponse, error), projectID string, config waitForProjectAvailableConfig) (*projectv1.Project, error) {
+	ctx = tflog.SetField(ctx, "project_id", projectID)
+
+	retryInterval := config.retryInterval
+	maxAttempts := config.maxAttempts
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		tflog.Debug(ctx, "attempting to get project", map[string]any{
+			"attempt": attempt,
+		})
+
+		project, err := getProjectFunc(ctx, &cloudservicev1.GetProjectRequest{
+			ProjectId: projectID,
+		})
+
+		if err == nil {
+			tflog.Debug(ctx, "project successfully retrieved")
+			return project.GetProject(), nil
+		}
+
+		if status.Code(err) == codes.PermissionDenied || status.Code(err) == codes.NotFound {
+			tflog.Debug(ctx, "project not yet accessible, retrying", map[string]any{
+				"attempt":  attempt,
+				"retry_in": retryInterval.String(),
+				"error":    err.Error(),
+			})
+		} else {
+			tflog.Error(ctx, "failed to get project with non-retryable error", map[string]any{
+				"attempt": attempt,
+				"error":   err.Error(),
+			})
+			return nil, fmt.Errorf("failed to get project: %w", err)
+		}
+
+		if attempt >= maxAttempts {
+			break
+		}
+
+		// Wait before next retry, respecting context cancellation
+		select {
+		case <-time.After(retryInterval):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
+	return nil, fmt.Errorf("project %s not available after %d attempts", projectID, maxAttempts)
 }
 
 func getProjectSpecFromModel(ctx context.Context, plan *projectResourceModel) (*projectv1.ProjectSpec, diag.Diagnostics) {
