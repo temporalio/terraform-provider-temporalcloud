@@ -143,6 +143,8 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
+	// Read before spec.Access is overwritten below.
+	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -246,6 +248,8 @@ func (r *groupAccessResource) Update(ctx context.Context, req resource.UpdateReq
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
+	// Read before spec.Access is overwritten below.
+	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -313,6 +317,9 @@ func (r *groupAccessResource) Delete(ctx context.Context, req resource.DeleteReq
 
 	// Use the current group spec to update the access
 	spec := currentGroup.GetGroup().GetSpec()
+	// This resource only manages account and namespace access, so removing it must not take the
+	// group's project grants with it. Read before spec.Access is overwritten below.
+	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{

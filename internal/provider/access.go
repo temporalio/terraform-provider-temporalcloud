@@ -174,6 +174,24 @@ func getAccountAccessFromModel(ctx context.Context, accountAccess string, accoun
 	}, diags
 }
 
+// preserveProjectAccesses copies project access grants from the Access currently stored server-side
+// onto a freshly built Access.
+//
+// Terraform does not manage project accesses yet, so rebuilding a spec from configuration alone
+// sends a nil ProjectAccesses map. The server declares an API version at or above the
+// min_version of Access.project_accesses, so it treats the caller as project-aware and reads that
+// nil map as "revoke every grant" rather than "field not supported by this client". Without this,
+// an unrelated edit (even just a description change) silently revokes grants made outside
+// Terraform.
+//
+// Remove this once project accesses are a managed attribute and configuration is authoritative.
+func preserveProjectAccesses(built *identityv1.Access, current *identityv1.Access) {
+	if built == nil {
+		return
+	}
+	built.ProjectAccesses = current.GetProjectAccesses()
+}
+
 func getNamespaceSetFromSpec(ctx context.Context, spec *identityv1.Access) (types.Set, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
