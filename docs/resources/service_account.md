@@ -79,6 +79,7 @@ resource "temporalcloud_apikey" "metrics" {
 - `description` (String) The description for the service account.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces. Cannot be set if namespace_scoped_access is provided. (see [below for nested schema](#nestedatt--namespace_accesses))
 - `namespace_scoped_access` (Attributes) Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, or namespace_accesses are provided. (see [below for nested schema](#nestedatt--namespace_scoped_access))
+- `project_accesses` (Attributes Set) The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account-level role are not represented here and cannot be managed. (see [below for nested schema](#nestedatt--project_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -102,6 +103,15 @@ Required:
 
 - `namespace_id` (String) The namespace to scope this service account to. This field is immutable after creation.
 - `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive). This field is mutable.
+
+
+<a id="nestedatt--project_accesses"></a>
+### Nested Schema for `project_accesses`
+
+Required:
+
+- `project_id` (String) The project to assign a role in.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
 
 
 <a id="nestedblock--timeouts"></a>

@@ -38,6 +38,7 @@ type (
 		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -150,12 +151,19 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	svcResp, err := r.client.CloudService().CreateUser(ctx, &cloudservicev1.CreateUserRequest{
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess:     accountAccess,
 				NamespaceAccesses: namespaceAccesses,
+				ProjectAccesses:   projectAccesses,
 			},
 		},
 		AsyncOperationId: uuid.New().String(),
@@ -244,11 +252,17 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
-	preserveProjectAccesses(access, currentUser.GetUser().GetSpec().GetAccess())
 
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
@@ -411,6 +425,13 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 		return diags
 	}
 	state.AccountAccessCustomRoles = accountAccessCustomRoles
+
+	projectAccesses, d := getProjectSetFromSpec(ctx, user.GetSpec().GetAccess())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.ProjectAccesses = projectAccesses
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {

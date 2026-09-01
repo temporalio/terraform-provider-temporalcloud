@@ -12,6 +12,7 @@ var (
 	ErrInvalidOwnerType                 = errors.New("invalid owner type")
 	ErrInvalidAccountAccessRole         = errors.New("invalid account access role")
 	ErrInvalidNamespaceAccessPermission = errors.New("invalid namespace access permission")
+	ErrInvalidProjectAccessRole         = errors.New("invalid project access role")
 )
 
 func ToOwnerType(s string) (identity.OwnerType, error) {
@@ -130,5 +131,62 @@ func AllowedNamespaceAccessPermissions() []string {
 		"admin",
 		"write",
 		"read",
+	}
+}
+
+func ToProjectAccessRole(s string) (identity.ProjectAccess_ProjectRole, error) {
+	switch strings.ToLower(s) {
+	case "admin":
+		return identity.ProjectAccess_PROJECT_ROLE_ADMIN, nil
+	case "write":
+		return identity.ProjectAccess_PROJECT_ROLE_WRITE, nil
+	case "read":
+		return identity.ProjectAccess_PROJECT_ROLE_READ, nil
+	case "list":
+		return identity.ProjectAccess_PROJECT_ROLE_LIST, nil
+	case "contribute":
+		return identity.ProjectAccess_PROJECT_ROLE_CONTRIBUTE, nil
+	case "member":
+		return identity.ProjectAccess_PROJECT_ROLE_MEMBER, nil
+	default:
+		// "developer" is deliberately absent: it is inherited from the account developer role and
+		// cannot be assigned directly. See AllowedProjectAccessRoles.
+		return identity.ProjectAccess_PROJECT_ROLE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidProjectAccessRole, s)
+	}
+}
+
+func FromProjectAccessRole(r identity.ProjectAccess_ProjectRole) (string, error) {
+	switch r {
+	case identity.ProjectAccess_PROJECT_ROLE_ADMIN:
+		return "admin", nil
+	case identity.ProjectAccess_PROJECT_ROLE_WRITE:
+		return "write", nil
+	case identity.ProjectAccess_PROJECT_ROLE_READ:
+		return "read", nil
+	case identity.ProjectAccess_PROJECT_ROLE_LIST:
+		return "list", nil
+	case identity.ProjectAccess_PROJECT_ROLE_CONTRIBUTE:
+		return "contribute", nil
+	case identity.ProjectAccess_PROJECT_ROLE_MEMBER:
+		return "member", nil
+	case identity.ProjectAccess_PROJECT_ROLE_DEVELOPER:
+		// Not assignable, and not returned in an identity's Access. Decoded defensively so an
+		// unexpected value surfaces as a role rather than an error.
+		return "developer", nil
+	default:
+		return "", fmt.Errorf("%w: %v", ErrInvalidProjectAccessRole, r)
+	}
+}
+
+// AllowedProjectAccessRoles lists the roles that can be assigned directly. "developer" is excluded:
+// it is inherited from the account-level developer role.
+func AllowedProjectAccessRoles() []string {
+	return []string{
+		"admin",
+		"write",
+		"read",
+		"list",
+		"contribute",
+		"member",
 	}
 }

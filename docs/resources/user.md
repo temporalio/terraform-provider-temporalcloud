@@ -61,6 +61,7 @@ resource "temporalcloud_user" "namespace_admin" {
 
 - `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `project_accesses` (Attributes Set) The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account-level role are not represented here and cannot be managed. (see [below for nested schema](#nestedatt--project_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -75,6 +76,15 @@ Required:
 
 - `namespace_id` (String) The namespace to assign permissions to.
 - `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
+
+
+<a id="nestedatt--project_accesses"></a>
+### Nested Schema for `project_accesses`
+
+Required:
+
+- `project_id` (String) The project to assign a role in.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
 
 
 <a id="nestedblock--timeouts"></a>

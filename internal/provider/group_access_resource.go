@@ -57,6 +57,7 @@ type groupAccessResourceModel struct {
 	AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 	AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 	NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+	ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 }
 
 var (
@@ -136,15 +137,20 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
-	// Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -241,15 +247,20 @@ func (r *groupAccessResource) Update(ctx context.Context, req resource.UpdateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
-	// Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -313,13 +324,11 @@ func (r *groupAccessResource) Delete(ctx context.Context, req resource.DeleteReq
 	access := &identityv1.Access{
 		AccountAccess:     nil,
 		NamespaceAccesses: map[string]*identityv1.NamespaceAccess{},
+		ProjectAccesses:   map[string]*identityv1.ProjectAccess{},
 	}
 
 	// Use the current group spec to update the access
 	spec := currentGroup.GetGroup().GetSpec()
-	// This resource only manages account and namespace access, so removing it must not take the
-	// group's project grants with it. Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
@@ -371,6 +380,13 @@ func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel
 		return diags
 	}
 	state.AccountAccessCustomRoles = accountAccessCustomRoles
+
+	projectAccesses, d := getProjectSetFromSpec(ctx, group.GetSpec().GetAccess())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.ProjectAccesses = projectAccesses
 
 	namespaceAccesses, d := getNamespaceSetFromSpec(ctx, group.GetSpec().GetAccess())
 	diags.Append(d...)
