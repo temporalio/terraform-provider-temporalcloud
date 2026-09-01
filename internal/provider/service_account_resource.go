@@ -314,6 +314,7 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	preserveProjectAccesses(spec.GetAccess(), currentServiceAccount.GetServiceAccount().GetSpec().GetAccess())
 
 	svcResp, err := r.client.CloudService().UpdateServiceAccount(ctx, &cloudservicev1.UpdateServiceAccountRequest{
 		ServiceAccountId: plan.ID.ValueString(),

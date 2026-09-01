@@ -248,6 +248,7 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
 	}
+	preserveProjectAccesses(access, currentUser.GetUser().GetSpec().GetAccess())
 
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
