@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -69,6 +70,29 @@ func projectAccessesSchema(extraValidators ...validator.Set) schema.SetNestedAtt
 			setvalidator.SizeAtLeast(1),
 			validation.SetNestedAttributeMustBeUnique("project_id"),
 		}, extraValidators...),
+	}
+}
+
+// projectAccessesDataSourceSchema mirrors projectAccessesSchema for the read-only data sources.
+// It decodes through the same projectAccessAttrs and getProjectSetFromSpec as the resources, so the
+// attribute types must match those exactly.
+func projectAccessesDataSourceSchema() dsschema.SetNestedAttribute {
+	return dsschema.SetNestedAttribute{
+		Description: "The set of project roles for this identity, including each project and its role.",
+		Computed:    true,
+		NestedObject: dsschema.NestedAttributeObject{
+			Attributes: map[string]dsschema.Attribute{
+				"project_id": dsschema.StringAttribute{
+					Description: "The project the role applies to.",
+					Computed:    true,
+				},
+				"role": dsschema.StringAttribute{
+					CustomType:  internaltypes.CaseInsensitiveStringType{},
+					Description: "The role assigned in the project.",
+					Computed:    true,
+				},
+			},
+		},
 	}
 }
 

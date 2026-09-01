@@ -25,6 +25,7 @@ type (
 		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 		CreatedAt                types.String                             `tfsdk:"created_at"`
 		UpdatedAt                types.String                             `tfsdk:"updated_at"`
 	}
@@ -64,6 +65,13 @@ func userToUserDataModel(ctx context.Context, sa *identityv1.User) (*userDataMod
 		return nil, diags
 	}
 	userModel.AccountAccessCustomRoles = accountAccessCustomRoles
+
+	projectAccesses, d := getProjectSetFromSpec(ctx, sa.GetSpec().GetAccess())
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	userModel.ProjectAccesses = projectAccesses
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 
@@ -151,6 +159,7 @@ func userSchema(idRequired bool) map[string]schema.Attribute {
 				},
 			},
 		},
+		"project_accesses": projectAccessesDataSourceSchema(),
 		"created_at": schema.StringAttribute{
 			Description: "The creation time of the User.",
 			Computed:    true,
