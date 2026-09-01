@@ -29,6 +29,10 @@ data "temporalcloud_scim_group" "my_scim_group" {
   idp_id = "usually-group-name"
 }
 
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
 resource "temporalcloud_namespace" "test" {
   name         = "my-namespace"
   regions      = ["aws-us-east-1"]
@@ -45,6 +49,12 @@ resource "temporalcloud_group_access" "my_group_access" {
     {
       namespace_id = temporalcloud_namespace.test.id
       permission   = "write"
+    }
+  ]
+  project_accesses = [
+    {
+      project_id = temporalcloud_project.payments.id
+      role       = "read"
     }
   ]
 }

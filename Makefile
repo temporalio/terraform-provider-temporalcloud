@@ -19,3 +19,8 @@ test-namespace-export-sink:
 .PHONY: test-project
 test-project:
 	TF_ACC=1 go test ./internal/provider -run 'TestAccBasicProject|TestAccProject_DeleteProtection' -v $(TESTARGS) -timeout 30m
+
+# Run the project_accesses acceptance tests across users, service accounts, and groups.
+.PHONY: test-project-access
+test-project-access:
+	TF_ACC=1 go test ./internal/provider -run 'TestAccBasicUserWithProjectAccesses|TestAccServiceAccountWithProjectAccesses|TestAccGroupAccess_WithProjectAccesses' -v $(TESTARGS) -timeout 30m

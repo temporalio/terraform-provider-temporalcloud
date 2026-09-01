@@ -225,3 +225,80 @@ resource "temporalcloud_group_access" "terraform" {
 		},
 	})
 }
+
+func TestAccGroupAccess_WithProjectAccesses(t *testing.T) {
+	type configArgs struct {
+		ProjectName     string
+		ProjectAccesses string
+	}
+
+	projectName := createRandomName()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+}
+
+data "temporalcloud_scim_group" "terraform" {
+  idp_id = "tf-basic-scim-group"
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "{{ .ProjectName }}"
+}
+
+resource "temporalcloud_group_access" "terraform" {
+  id             = data.temporalcloud_scim_group.terraform.id
+  account_access = "read"
+  {{ .ProjectAccesses }}
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template: %v", err)
+			t.FailNow()
+		}
+		writer.Flush()
+		return buf.String()
+	}
+
+	withRole := func(role string) string {
+		return fmt.Sprintf(`project_accesses = [
+    {
+      project_id = temporalcloud_project.test.id
+      role       = "%s"
+    }
+  ]`, role)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{ProjectName: projectName, ProjectAccesses: withRole("read")}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_group_access.terraform", "project_accesses.#", "1"),
+					resource.TestCheckTypeSetElemNestedAttrs("temporalcloud_group_access.terraform", "project_accesses.*", map[string]string{
+						"role": "read",
+					}),
+				),
+			},
+			{
+				Config: config(configArgs{ProjectName: projectName, ProjectAccesses: withRole("write")}),
+				Check: resource.TestCheckTypeSetElemNestedAttrs("temporalcloud_group_access.terraform", "project_accesses.*", map[string]string{
+					"role": "write",
+				}),
+			},
+			{
+				// Configuration is authoritative: dropping the attribute revokes the grant.
+				Config: config(configArgs{ProjectName: projectName, ProjectAccesses: ""}),
+				Check: resource.TestCheckNoResourceAttr(
+					"temporalcloud_group_access.terraform", "project_accesses.#"),
+			},
+		},
+	})
+}
