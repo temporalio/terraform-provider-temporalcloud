@@ -456,3 +456,43 @@ resource "temporalcloud_user" "terraform" {
 		},
 	})
 }
+
+// Account owners and admins implicitly receive access to all Projects, so explicit project roles
+// are rejected at plan time rather than being silently sent to the API.
+func TestAccUserProjectAccessesRejectedForAccountAdmin(t *testing.T) {
+	config := func(accountAccess string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_user" "terraform" {
+  email          = "%s"
+  account_access = "%s"
+  project_accesses = [
+    {
+      project_id = "6f4bbbcb4d8e4a0e9a1f2c3d4e5f6a7b"
+      role       = "read"
+    }
+  ]
+}`, createRandomEmail(), accountAccess)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config("admin"),
+				ExpectError: regexp.MustCompile(`must be empty when`),
+				PlanOnly:    true,
+			},
+			{
+				Config:      config("owner"),
+				ExpectError: regexp.MustCompile(`must be empty when`),
+				PlanOnly:    true,
+			},
+		},
+	})
+}
