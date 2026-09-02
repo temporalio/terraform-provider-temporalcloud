@@ -155,6 +155,17 @@ func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 	s.Attributes["project_accesses"] = projectAccessesSchema("")
 }
 
+// projectAccessesManagedByConfig reports whether configuration takes responsibility for project
+// roles. A set that is not yet known counts: its elements arrive at apply time, so nothing is being
+// given up.
+func projectAccessesManagedByConfig(configAccesses types.Set) bool {
+	if configAccesses.IsNull() {
+		return false
+	}
+
+	return configAccesses.IsUnknown() || len(configAccesses.Elements()) > 0
+}
+
 // projectAccessRevocationWarning warns that an apply will revoke the project roles recorded in
 // state because configuration does not list any.
 //
@@ -172,7 +183,7 @@ func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses type
 	if stateAccesses.IsNull() || stateAccesses.IsUnknown() || len(stateAccesses.Elements()) == 0 {
 		return diags
 	}
-	if !configAccesses.IsNull() && !configAccesses.IsUnknown() && len(configAccesses.Elements()) > 0 {
+	if projectAccessesManagedByConfig(configAccesses) {
 		return diags
 	}
 
@@ -191,13 +202,17 @@ func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses type
 // project roles it already holds.
 //
 // projectAccessRevocationWarning cannot report this: a create has no prior state to compare
-// against. It only arises for group access, which "creates" by overwriting the access of a group
-// that already exists, so out-of-band roles are lost the first time the group is brought under
-// Terraform management. Users and service accounts are created fresh and have no roles to lose.
-func projectAccessRevocationOnCreateWarning(currentAccesses, plannedAccesses map[string]*identityv1.ProjectAccess) diag.Diagnostics {
+// against, so the roles have to be read from the API. It only arises for group access, which
+// "creates" by overwriting the access of a group that already exists, so out-of-band roles are lost
+// the first time the group is brought under Terraform management. Users and service accounts are
+// created fresh and have no roles to lose.
+//
+// Configuration is taken as a set rather than a built map because a plan can carry values that are
+// unknown until apply, which cannot be converted to project accesses.
+func projectAccessRevocationOnCreateWarning(currentAccesses map[string]*identityv1.ProjectAccess, configAccesses types.Set) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	if len(currentAccesses) == 0 || len(plannedAccesses) > 0 {
+	if len(currentAccesses) == 0 || projectAccessesManagedByConfig(configAccesses) {
 		return diags
 	}
 

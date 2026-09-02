@@ -134,16 +134,7 @@ func TestProjectAccessRevocationWarning(t *testing.T) {
 
 	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
 	emptySet := types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{})
-	grants := func(projectIDs ...string) types.Set {
-		objects := make([]attr.Value, 0, len(projectIDs))
-		for _, projectID := range projectIDs {
-			objects = append(objects, types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
-				"project_id": types.StringValue(projectID),
-				"role":       internaltypes.CaseInsensitiveString("read"),
-			}))
-		}
-		return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, objects)
-	}
+	unknownSet := types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})
 
 	cases := []struct {
 		name        string
@@ -153,12 +144,13 @@ func TestProjectAccessRevocationWarning(t *testing.T) {
 	}{
 		{name: "no roles in state", state: nullSet, config: nullSet},
 		{name: "empty state set", state: emptySet, config: nullSet},
-		{name: "roles kept in configuration", state: grants("project-a"), config: grants("project-a")},
-		{name: "roles replaced in configuration", state: grants("project-a"), config: grants("project-b")},
-		// Terraform never plans a value the configuration does not have, so an absent attribute is
-		// the case worth warning about.
-		{name: "roles absent from configuration", state: grants("project-a", "project-b"), config: nullSet, wantWarning: true},
-		{name: "configuration empties the set", state: grants("project-a"), config: emptySet, wantWarning: true},
+		{name: "roles kept in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-a")},
+		{name: "roles replaced in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-b")},
+		{name: "configuration is not known until apply", state: projectAccessSet("project-a"), config: unknownSet},
+		// An attribute absent from configuration is the case worth warning about: the roles leave
+		// the diff without ever having been mentioned.
+		{name: "roles absent from configuration", state: projectAccessSet("project-a", "project-b"), config: nullSet, wantWarning: true},
+		{name: "configuration empties the set", state: projectAccessSet("project-a"), config: emptySet, wantWarning: true},
 	}
 
 	for _, tc := range cases {
@@ -187,32 +179,35 @@ func boolToCount(b bool) int {
 func TestProjectAccessRevocationOnCreateWarning(t *testing.T) {
 	t.Parallel()
 
-	grants := func(projectIDs ...string) map[string]*identityv1.ProjectAccess {
+	held := func(projectIDs ...string) map[string]*identityv1.ProjectAccess {
 		accesses := make(map[string]*identityv1.ProjectAccess, len(projectIDs))
 		for _, projectID := range projectIDs {
 			accesses[projectID] = &identityv1.ProjectAccess{Role: identityv1.ProjectAccess_PROJECT_ROLE_READ}
 		}
 		return accesses
 	}
+	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
 
 	cases := []struct {
 		name        string
 		current     map[string]*identityv1.ProjectAccess
-		planned     map[string]*identityv1.ProjectAccess
+		config      types.Set
 		wantWarning bool
 	}{
-		{name: "group holds no roles", current: nil, planned: nil},
-		{name: "group holds no roles and configuration adds some", current: nil, planned: grants("project-a")},
-		{name: "configuration keeps managing roles", current: grants("project-a"), planned: grants("project-a")},
-		{name: "configuration replaces the roles", current: grants("project-a"), planned: grants("project-b")},
-		{name: "configuration omits the group's roles", current: grants("project-a", "project-b"), planned: nil, wantWarning: true},
+		{name: "group holds no roles", current: nil, config: nullSet},
+		{name: "group holds no roles and configuration adds some", current: nil, config: projectAccessSet("project-a")},
+		{name: "configuration keeps managing roles", current: held("project-a"), config: projectAccessSet("project-a")},
+		{name: "configuration replaces the roles", current: held("project-a"), config: projectAccessSet("project-b")},
+		// A plan can carry an unknown project_id, which still means configuration manages the roles.
+		{name: "configuration is not known until apply", current: held("project-a"), config: types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})},
+		{name: "configuration omits the group's roles", current: held("project-a", "project-b"), config: nullSet, wantWarning: true},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			diags := projectAccessRevocationOnCreateWarning(tc.current, tc.planned)
+			diags := projectAccessRevocationOnCreateWarning(tc.current, tc.config)
 
 			if diags.HasError() {
 				t.Fatalf("expected no errors, got %+v", diags)
@@ -222,4 +217,16 @@ func TestProjectAccessRevocationOnCreateWarning(t *testing.T) {
 			}
 		})
 	}
+}
+
+func projectAccessSet(projectIDs ...string) types.Set {
+	objects := make([]attr.Value, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		objects = append(objects, types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+			"project_id": types.StringValue(projectID),
+			"role":       internaltypes.CaseInsensitiveString("read"),
+		}))
+	}
+
+	return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, objects)
 }

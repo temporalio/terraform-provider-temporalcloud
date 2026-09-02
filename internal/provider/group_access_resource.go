@@ -95,20 +95,56 @@ func (r *groupAccessResource) Metadata(_ context.Context, req resource.MetadataR
 
 // ModifyPlan warns when an apply would revoke project roles that configuration does not list.
 func (r *groupAccessResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// A create has no prior roles, and destroying this resource is a request to remove the group's
-	// access, so losing its project roles is the point rather than a surprise.
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+	// Destroying this resource is a request to remove the group's access, so losing its project
+	// roles is the point rather than a surprise.
+	if req.Plan.Raw.IsNull() {
 		return
 	}
 
-	var state, config groupAccessResourceModel
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	var config groupAccessResourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
+	// Bringing a group under management overwrites the access it already has, and a create has no
+	// prior state to compare against, so read the group's roles to report them before the apply.
+	if req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(r.warnProjectAccessRevocationOnCreate(ctx, config)...)
+		return
+	}
+
+	var state groupAccessResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
+}
+
+// warnProjectAccessRevocationOnCreate reads the group's current project roles so that a plan can
+// report the ones configuration omits. Anything that prevents the read is left for Create to
+// report: an unconfigured client, an id that is not known until apply, or a group that cannot be
+// fetched.
+func (r *groupAccessResource) warnProjectAccessRevocationOnCreate(ctx context.Context, config groupAccessResourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if r.client == nil || config.ID.IsNull() || config.ID.IsUnknown() {
+		return diags
+	}
+
+	currentGroup, err := r.client.CloudService().GetUserGroup(ctx, &cloudservicev1.GetUserGroupRequest{
+		GroupId: config.ID.ValueString(),
+	})
+	if err != nil {
+		return diags
+	}
+
+	return projectAccessRevocationOnCreateWarning(
+		currentGroup.GetGroup().GetSpec().GetAccess().GetProjectAccesses(),
+		config.ProjectAccesses,
+	)
 }
 
 func (r *groupAccessResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -161,12 +197,6 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// ModifyPlan cannot warn about this: on create there is no prior state holding the roles the
-	// group already has.
-	resp.Diagnostics.Append(projectAccessRevocationOnCreateWarning(
-		currentGroup.GetGroup().GetSpec().GetAccess().GetProjectAccesses(),
-		projectAccesses,
-	)...)
 
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
