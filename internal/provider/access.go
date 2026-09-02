@@ -155,6 +155,62 @@ func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 	s.Attributes["project_accesses"] = projectAccessesSchema("")
 }
 
+// projectAccessRevocationWarning warns that an apply will revoke the project roles recorded in
+// state because configuration does not list any.
+//
+// Configuration is authoritative for project_accesses, and roles granted outside Terraform land in
+// state on the first refresh after this attribute was added. An identity that was edited for an
+// unrelated reason therefore loses those roles, so say so at plan time instead of relying on the
+// attribute quietly leaving the diff.
+//
+// Roles are compared against configuration rather than the plan for the same reason the namespace
+// resource reads fairness from Config: the plan can be substituted with prior state, which would
+// mask the removal this warning exists to report.
+func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses types.Set) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if stateAccesses.IsNull() || stateAccesses.IsUnknown() || len(stateAccesses.Elements()) == 0 {
+		return diags
+	}
+	if !configAccesses.IsNull() && !configAccesses.IsUnknown() && len(configAccesses.Elements()) > 0 {
+		return diags
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("project_accesses"),
+		"Project roles will be revoked",
+		fmt.Sprintf("%d project role(s) recorded in state are not in the configuration and will be revoked by this apply. "+
+			"Roles granted outside Terraform appear in state once the resource is refreshed; add them to project_accesses to keep them.",
+			len(stateAccesses.Elements())),
+	)
+
+	return diags
+}
+
+// projectAccessRevocationOnCreateWarning warns that taking over an identity's access revokes the
+// project roles it already holds.
+//
+// projectAccessRevocationWarning cannot report this: a create has no prior state to compare
+// against. It only arises for group access, which "creates" by overwriting the access of a group
+// that already exists, so out-of-band roles are lost the first time the group is brought under
+// Terraform management. Users and service accounts are created fresh and have no roles to lose.
+func projectAccessRevocationOnCreateWarning(currentAccesses, plannedAccesses map[string]*identityv1.ProjectAccess) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if len(currentAccesses) == 0 || len(plannedAccesses) > 0 {
+		return diags
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("project_accesses"),
+		"Project roles will be revoked",
+		fmt.Sprintf("This group holds %d project role(s) that are not in the configuration and will be revoked by this apply. "+
+			"Add them to project_accesses to keep them.", len(currentAccesses)),
+	)
+
+	return diags
+}
+
 func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*identityv1.ProjectAccess, diag.Diagnostics) {
 	var diags diag.Diagnostics
 

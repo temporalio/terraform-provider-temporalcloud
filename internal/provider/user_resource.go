@@ -53,6 +53,7 @@ var (
 	_ resource.Resource                = (*userResource)(nil)
 	_ resource.ResourceWithConfigure   = (*userResource)(nil)
 	_ resource.ResourceWithImportState = (*userResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*userResource)(nil)
 
 	userNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -84,6 +85,23 @@ func (r *userResource) Configure(_ context.Context, req resource.ConfigureReques
 
 func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_user"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A create has no prior roles, and deleting the user revokes its roles by definition.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state, config userResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
 }
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {

@@ -64,6 +64,7 @@ var (
 	_ resource.Resource                = (*groupAccessResource)(nil)
 	_ resource.ResourceWithConfigure   = (*groupAccessResource)(nil)
 	_ resource.ResourceWithImportState = (*groupAccessResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*groupAccessResource)(nil)
 )
 
 func NewGroupAccessResource() resource.Resource {
@@ -90,6 +91,24 @@ func (r *groupAccessResource) Configure(_ context.Context, req resource.Configur
 
 func (r *groupAccessResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_group_access"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *groupAccessResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A create has no prior roles, and destroying this resource is a request to remove the group's
+	// access, so losing its project roles is the point rather than a surprise.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state, config groupAccessResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
 }
 
 func (r *groupAccessResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -142,6 +161,12 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	// ModifyPlan cannot warn about this: on create there is no prior state holding the roles the
+	// group already has.
+	resp.Diagnostics.Append(projectAccessRevocationOnCreateWarning(
+		currentGroup.GetGroup().GetSpec().GetAccess().GetProjectAccesses(),
+		projectAccesses,
+	)...)
 
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,

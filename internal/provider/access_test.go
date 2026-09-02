@@ -4,8 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
+
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 func TestGetCustomRolesRoundTrip(t *testing.T) {
@@ -121,6 +124,101 @@ func TestGetAccountAccessFromModel(t *testing.T) {
 
 			if len(accountAccess.GetCustomRoles()) != tc.wantCustomRoleCount {
 				t.Fatalf("expected %d custom roles, got %d", tc.wantCustomRoleCount, len(accountAccess.GetCustomRoles()))
+			}
+		})
+	}
+}
+
+func TestProjectAccessRevocationWarning(t *testing.T) {
+	t.Parallel()
+
+	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	emptySet := types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{})
+	grants := func(projectIDs ...string) types.Set {
+		objects := make([]attr.Value, 0, len(projectIDs))
+		for _, projectID := range projectIDs {
+			objects = append(objects, types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+				"project_id": types.StringValue(projectID),
+				"role":       internaltypes.CaseInsensitiveString("read"),
+			}))
+		}
+		return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, objects)
+	}
+
+	cases := []struct {
+		name        string
+		state       types.Set
+		config      types.Set
+		wantWarning bool
+	}{
+		{name: "no roles in state", state: nullSet, config: nullSet},
+		{name: "empty state set", state: emptySet, config: nullSet},
+		{name: "roles kept in configuration", state: grants("project-a"), config: grants("project-a")},
+		{name: "roles replaced in configuration", state: grants("project-a"), config: grants("project-b")},
+		// Terraform never plans a value the configuration does not have, so an absent attribute is
+		// the case worth warning about.
+		{name: "roles absent from configuration", state: grants("project-a", "project-b"), config: nullSet, wantWarning: true},
+		{name: "configuration empties the set", state: grants("project-a"), config: emptySet, wantWarning: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := projectAccessRevocationWarning(tc.state, tc.config)
+
+			if diags.HasError() {
+				t.Fatalf("expected no errors, got %+v", diags)
+			}
+			if got := diags.WarningsCount(); got != boolToCount(tc.wantWarning) {
+				t.Fatalf("expected %d warnings, got %d: %+v", boolToCount(tc.wantWarning), got, diags)
+			}
+		})
+	}
+}
+
+func boolToCount(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func TestProjectAccessRevocationOnCreateWarning(t *testing.T) {
+	t.Parallel()
+
+	grants := func(projectIDs ...string) map[string]*identityv1.ProjectAccess {
+		accesses := make(map[string]*identityv1.ProjectAccess, len(projectIDs))
+		for _, projectID := range projectIDs {
+			accesses[projectID] = &identityv1.ProjectAccess{Role: identityv1.ProjectAccess_PROJECT_ROLE_READ}
+		}
+		return accesses
+	}
+
+	cases := []struct {
+		name        string
+		current     map[string]*identityv1.ProjectAccess
+		planned     map[string]*identityv1.ProjectAccess
+		wantWarning bool
+	}{
+		{name: "group holds no roles", current: nil, planned: nil},
+		{name: "group holds no roles and configuration adds some", current: nil, planned: grants("project-a")},
+		{name: "configuration keeps managing roles", current: grants("project-a"), planned: grants("project-a")},
+		{name: "configuration replaces the roles", current: grants("project-a"), planned: grants("project-b")},
+		{name: "configuration omits the group's roles", current: grants("project-a", "project-b"), planned: nil, wantWarning: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := projectAccessRevocationOnCreateWarning(tc.current, tc.planned)
+
+			if diags.HasError() {
+				t.Fatalf("expected no errors, got %+v", diags)
+			}
+			if got := diags.WarningsCount(); got != boolToCount(tc.wantWarning) {
+				t.Fatalf("expected %d warnings, got %d: %+v", boolToCount(tc.wantWarning), got, diags)
 			}
 		})
 	}

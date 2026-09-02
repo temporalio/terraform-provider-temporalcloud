@@ -62,6 +62,7 @@ var (
 	_ resource.Resource                = (*serviceAccountResource)(nil)
 	_ resource.ResourceWithConfigure   = (*serviceAccountResource)(nil)
 	_ resource.ResourceWithImportState = (*serviceAccountResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*serviceAccountResource)(nil)
 
 	serviceAccountNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -93,6 +94,23 @@ func (r *serviceAccountResource) Configure(_ context.Context, req resource.Confi
 
 func (r *serviceAccountResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_service_account"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *serviceAccountResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A create has no prior roles, and deleting the service account revokes its roles by definition.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state, config serviceAccountResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
 }
 
 func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
