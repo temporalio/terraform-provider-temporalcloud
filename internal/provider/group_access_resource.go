@@ -124,9 +124,12 @@ func (r *groupAccessResource) ModifyPlan(ctx context.Context, req resource.Modif
 }
 
 // warnProjectAccessRevocationOnCreate reads the group's current project roles so that a plan can
-// report the ones configuration omits. Anything that prevents the read is left for Create to
-// report: an unconfigured client, an id that is not known until apply, or a group that cannot be
-// fetched.
+// report the ones configuration omits.
+//
+// The read is best effort: an unconfigured client, an id that is not known until apply, or a group
+// that cannot be fetched skips the warning, and nothing reports it later. That is not a silent
+// revocation, because Create fetches the same group before overwriting its access, so a read that
+// keeps failing fails the apply instead.
 func (r *groupAccessResource) warnProjectAccessRevocationOnCreate(ctx context.Context, config groupAccessResourceModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
