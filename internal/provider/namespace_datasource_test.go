@@ -11,7 +11,8 @@ import (
 
 func TestAccDataSource_Namespace(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
-	config := func(name string, retention int) string {
+	description := "test-description"
+	config := func(name string, retention int, description string) string {
 		return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -22,6 +23,7 @@ resource "temporalcloud_namespace" "terraform" {
   regions            = ["aws-ca-central-1"]
   api_key_auth 	 = true
   retention_days     = %d
+  description        = %q
 }
 
 data "temporalcloud_namespace" "terraform" {
@@ -31,7 +33,7 @@ data "temporalcloud_namespace" "terraform" {
 output "namespace" {
   value = data.temporalcloud_namespace.terraform
 }
-`, name, retention)
+`, name, retention, description)
 	}
 
 	resource.Test(t, resource.TestCase{
@@ -41,7 +43,7 @@ output "namespace" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config: config(name, 14),
+				Config: config(name, 14, description),
 				Check: func(s *terraform.State) error {
 					output, ok := s.RootModule().Outputs["namespace"]
 					if !ok {
@@ -74,6 +76,14 @@ output "namespace" {
 					}
 					if outputRegion != "aws-ca-central-1" {
 						return fmt.Errorf("exptect active regon to match provided region")
+					}
+
+					outputDescription, ok := outputValue["description"].(string)
+					if !ok {
+						return fmt.Errorf("expected description to be a string")
+					}
+					if outputDescription != description {
+						return fmt.Errorf("expected namespace description to be: %s, got: %s", description, outputDescription)
 					}
 
 					return nil

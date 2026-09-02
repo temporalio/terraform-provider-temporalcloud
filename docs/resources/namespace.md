@@ -42,19 +42,11 @@ resource "temporalcloud_namespace" "terraform" {
   regions            = ["aws-us-east-1"]
   accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
   retention_days     = 14
+  description        = "Example namespace description"
   namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
   }
-}
-
-// example namespace with a description
-resource "temporalcloud_namespace" "with_description" {
-  name               = "terraform-with-description"
-  regions            = ["aws-us-east-1"]
-  accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
-  retention_days     = 14
-  description        = "Example namespace description"
 }
 
 // the following example demonstrates how to use the hashi tls provider to generate certs for use in a namespace and end-entity
