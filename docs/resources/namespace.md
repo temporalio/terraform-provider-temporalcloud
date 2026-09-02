@@ -48,6 +48,15 @@ resource "temporalcloud_namespace" "terraform" {
   }
 }
 
+// example namespace with a description
+resource "temporalcloud_namespace" "with_description" {
+  name               = "terraform-with-description"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
+  retention_days     = 14
+  description        = "Example namespace description"
+}
+
 // the following example demonstrates how to use the hashi tls provider to generate certs for use in a namespace and end-entity
 // the hasicorp tls provider is used to generate the namespace's ca cert
 // for more information see the provider's documentation here https://registry.terraform.io/providers/hashicorp/tls/latest/docs
@@ -159,6 +168,7 @@ resource "temporalcloud_namespace" "terraform4" {
 - `certificate_filters` (Attributes List) A list of filters to apply to client certificates when initiating a connection Temporal Cloud. If present, connections will only be allowed from client certificates whose distinguished name properties match at least one of the filters. Empty lists are not allowed, omit the attribute instead. (see [below for nested schema](#nestedatt--certificate_filters))
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (Set of String) The IDs of the connectivity rules for this namespace.
+- `description` (String) The description of the namespace. Optional. Must be at most 255 printable ASCII characters plus whitespace. An empty string clears the description.
 - `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))

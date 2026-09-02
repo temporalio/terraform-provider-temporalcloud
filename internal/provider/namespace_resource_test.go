@@ -1403,6 +1403,69 @@ resource "temporalcloud_namespace" "test" {
 	})
 }
 
+func TestAccNamespaceWithDescription(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-desc", randomString(10))
+	t.Logf("namespace name=%s (cloud id is %s.<account_id>)", name, name)
+	config := func(description string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "desctest" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+  description    = %q
+}`, name, description)
+	}
+
+	checkDescription := func(want string) resource.TestCheckFunc {
+		return func(state *terraform.State) error {
+			id := state.RootModule().Resources["temporalcloud_namespace.desctest"].Primary.Attributes["id"]
+			conn := newConnection(t)
+			ns, err := conn.GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+				Namespace: id,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %v", err)
+			}
+			nsDesc := ns.GetNamespace().GetSpec().GetDescription()
+			if nsDesc != want {
+				return fmt.Errorf("expected description=%q, got %q", want, nsDesc)
+			}
+			return nil
+		}
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("Created namespace description"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_namespace.desctest", "description", "Created namespace description"),
+					checkDescription("Created namespace description"),
+				),
+			},
+			{
+				Config: config("Updated namespace description"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_namespace.desctest", "description", "Updated namespace description"),
+					checkDescription("Updated namespace description"),
+				),
+			},
+			{
+				Config: config(""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_namespace.desctest", "description", ""),
+					checkDescription(""),
+				),
+			},
+		},
+	})
+}
+
 func testConfig() waitForNamespaceAvailableConfig {
 	return waitForNamespaceAvailableConfig{
 		retryInterval: 10 * time.Millisecond,
@@ -1846,6 +1909,43 @@ func TestGetCodecServerFromModel_CustomErrorMessage(t *testing.T) {
 			}
 			if spec.CustomErrorMessage.Default.Link != tc.expectLink {
 				t.Errorf("expected link %q, got %q", tc.expectLink, spec.CustomErrorMessage.Default.Link)
+			}
+		})
+	}
+}
+
+func TestUpdateModelFromSpec_Description(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		description string
+	}{
+		{name: "empty description"},
+		{name: "set description", description: "Example namespace description"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ns := &namespace.Namespace{
+				Namespace: "test-ns",
+				Spec: &namespace.NamespaceSpec{
+					Name:          "test-ns",
+					Regions:       []string{"aws-us-east-1"},
+					RetentionDays: 7,
+					Description:   tc.description,
+				},
+				Endpoints: &namespace.Endpoints{},
+			}
+
+			state := &namespaceResourceModel{}
+			diags := updateModelFromSpec(ctx, state, ns)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if got := state.Description.ValueString(); got != tc.description {
+				t.Errorf("expected description %q, got %q", tc.description, got)
 			}
 		})
 	}

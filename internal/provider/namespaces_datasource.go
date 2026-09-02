@@ -42,6 +42,7 @@ type (
 	namespaceDataModel struct {
 		ID                     types.String                  `tfsdk:"id"`
 		Name                   types.String                  `tfsdk:"name"`
+		Description            types.String                  `tfsdk:"description"`
 		State                  types.String                  `tfsdk:"state"`
 		ActiveRegion           types.String                  `tfsdk:"active_region"`
 		Regions                types.List                    `tfsdk:"regions"`
@@ -162,6 +163,10 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 		"retention_days": schema.Int64Attribute{
 			Computed:    true,
 			Description: "The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.",
+		},
+		"description": schema.StringAttribute{
+			Computed:    true,
+			Description: "The description of the namespace, if set.",
 		},
 		"certificate_filters": schema.ListNestedAttribute{
 			Computed:    true,
@@ -382,6 +387,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	namespaceModel := &namespaceDataModel{
 		ID:               types.StringValue(ns.Namespace),
 		Name:             types.StringValue(ns.GetSpec().GetName()),
+		Description:      types.StringValue(ns.GetSpec().GetDescription()),
 		State:            types.StringValue(stateStr),
 		ActiveRegion:     types.StringValue(ns.ActiveRegion),
 		AcceptedClientCA: types.StringValue(base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())),

@@ -27,6 +27,15 @@ resource "temporalcloud_namespace" "terraform" {
   }
 }
 
+// example namespace with a description
+resource "temporalcloud_namespace" "with_description" {
+  name               = "terraform-with-description"
+  regions            = ["aws-us-east-1"]
+  accepted_client_ca = base64encode(file("${path.module}/ca.pem"))
+  retention_days     = 14
+  description        = "Example namespace description"
+}
+
 // the following example demonstrates how to use the hashi tls provider to generate certs for use in a namespace and end-entity
 // the hasicorp tls provider is used to generate the namespace's ca cert
 // for more information see the provider's documentation here https://registry.terraform.io/providers/hashicorp/tls/latest/docs
