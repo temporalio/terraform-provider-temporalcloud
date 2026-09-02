@@ -167,9 +167,6 @@ func FromProjectAccessRole(r identity.ProjectAccess_ProjectRole) (string, error)
 		return "contribute", nil
 	case identity.ProjectAccess_PROJECT_ROLE_MEMBER:
 		return "member", nil
-	case identity.ProjectAccess_PROJECT_ROLE_DEVELOPER:
-		// Decoded but not assignable, so an unexpected value surfaces as a role rather than an error.
-		return "developer", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidProjectAccessRole, r)
 	}

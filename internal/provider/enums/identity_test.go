@@ -47,8 +47,8 @@ func TestToProjectAccessRoleIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// "developer" is inherited from the account_access developer role and cannot be assigned, so it
-// must be rejected on the way in while still decoding on the way out.
+// "developer" is inherited from the account_access developer role, cannot be assigned, and is never
+// returned by the API, so it is rejected in both directions.
 func TestProjectAccessRoleDeveloperIsNotAssignable(t *testing.T) {
 	t.Parallel()
 
@@ -62,12 +62,8 @@ func TestProjectAccessRoleDeveloperIsNotAssignable(t *testing.T) {
 		t.Errorf("ToProjectAccessRole(\"developer\") error = %v, want ErrInvalidProjectAccessRole", err)
 	}
 
-	got, err := FromProjectAccessRole(identity.ProjectAccess_PROJECT_ROLE_DEVELOPER)
-	if err != nil {
-		t.Fatalf("FromProjectAccessRole(DEVELOPER): %v", err)
-	}
-	if got != "developer" {
-		t.Errorf("FromProjectAccessRole(DEVELOPER) = %q, want \"developer\"", got)
+	if _, err := FromProjectAccessRole(identity.ProjectAccess_PROJECT_ROLE_DEVELOPER); !errors.Is(err, ErrInvalidProjectAccessRole) {
+		t.Errorf("FromProjectAccessRole(DEVELOPER) error = %v, want ErrInvalidProjectAccessRole", err)
 	}
 }
 
