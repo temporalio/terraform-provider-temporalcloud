@@ -47,8 +47,8 @@ func TestToProjectAccessRoleIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// "developer" is inherited from the account-level developer role and cannot be assigned, so it must
-// be rejected on the way in while still decoding on the way out.
+// "developer" is inherited from the account_access developer role and cannot be assigned, so it
+// must be rejected on the way in while still decoding on the way out.
 func TestProjectAccessRoleDeveloperIsNotAssignable(t *testing.T) {
 	t.Parallel()
 

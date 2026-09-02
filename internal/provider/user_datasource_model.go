@@ -159,7 +159,7 @@ func userSchema(idRequired bool) map[string]schema.Attribute {
 				},
 			},
 		},
-		"project_accesses": projectAccessesDataSourceSchema(),
+		"project_accesses": projectAccessesDataSourceSchema("user"),
 		"created_at": schema.StringAttribute{
 			Description: "The creation time of the User.",
 			Computed:    true,

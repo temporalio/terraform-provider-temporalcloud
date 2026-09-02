@@ -149,8 +149,6 @@ func ToProjectAccessRole(s string) (identity.ProjectAccess_ProjectRole, error) {
 	case "member":
 		return identity.ProjectAccess_PROJECT_ROLE_MEMBER, nil
 	default:
-		// "developer" is deliberately absent: it is inherited from the account developer role and
-		// cannot be assigned directly. See AllowedProjectAccessRoles.
 		return identity.ProjectAccess_PROJECT_ROLE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidProjectAccessRole, s)
 	}
 }
@@ -170,16 +168,15 @@ func FromProjectAccessRole(r identity.ProjectAccess_ProjectRole) (string, error)
 	case identity.ProjectAccess_PROJECT_ROLE_MEMBER:
 		return "member", nil
 	case identity.ProjectAccess_PROJECT_ROLE_DEVELOPER:
-		// Not assignable, and not returned in an identity's Access. Decoded defensively so an
-		// unexpected value surfaces as a role rather than an error.
+		// Decoded but not assignable, so an unexpected value surfaces as a role rather than an error.
 		return "developer", nil
 	default:
 		return "", fmt.Errorf("%w: %v", ErrInvalidProjectAccessRole, r)
 	}
 }
 
-// AllowedProjectAccessRoles lists the roles that can be assigned directly. "developer" is excluded:
-// it is inherited from the account-level developer role.
+// AllowedProjectAccessRoles omits "developer": that role is inherited from the account_access
+// developer role and cannot be assigned to a project directly.
 func AllowedProjectAccessRoles() []string {
 	return []string{
 		"admin",

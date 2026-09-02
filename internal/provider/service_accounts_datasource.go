@@ -130,7 +130,7 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 				},
 			},
 		},
-		"project_accesses": projectAccessesDataSourceSchema(),
+		"project_accesses": projectAccessesDataSourceSchema("service account"),
 		"namespace_scoped_access": schema.SingleNestedAttribute{
 			Description: "The namespace-scoped access configuration for this service account.",
 			Computed:    true,

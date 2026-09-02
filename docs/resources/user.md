@@ -52,8 +52,8 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }
 
-// Project roles are granted alongside account and namespace access. Roles inherited from
-// an account-level role are not listed here and cannot be managed from Terraform.
+// Project roles are granted alongside account and namespace access. Roles inherited from an
+// account_access role are not listed here and cannot be managed with Terraform.
 resource "temporalcloud_user" "project_member" {
   email          = "member@yourdomain.com"
   account_access = "read"
@@ -78,7 +78,7 @@ resource "temporalcloud_user" "project_member" {
 
 - `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
-- `project_accesses` (Attributes Set) The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account-level role are not represented here and cannot be managed. (see [below for nested schema](#nestedatt--project_accesses))
+- `project_accesses` (Attributes Set) The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account_access role are not included in this set and cannot be managed. (see [below for nested schema](#nestedatt--project_accesses))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
@@ -100,7 +100,7 @@ Required:
 
 Required:
 
-- `project_id` (String) The project to assign a role in.
+- `project_id` (String) The project to assign a role to.
 - `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
 
 

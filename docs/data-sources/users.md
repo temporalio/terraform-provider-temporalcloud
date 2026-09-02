@@ -34,7 +34,7 @@ Read-Only:
 - `created_at` (String) The creation time of the User.
 - `email` (String) The email of the User.
 - `id` (String) The unique identifier of the User.
-- `project_accesses` (Attributes Set) The set of project roles for this identity, including each project and its role. (see [below for nested schema](#nestedatt--users--project_accesses))
+- `project_accesses` (Attributes Set) The set of project roles for this user, including each project and its role. (see [below for nested schema](#nestedatt--users--project_accesses))
 - `state` (String) The current state of the User.
 - `updated_at` (String) The last update time of the User.
 
@@ -52,5 +52,5 @@ Read-Only:
 
 Read-Only:
 
-- `project_id` (String) The project the role applies to.
-- `role` (String) The role assigned in the project.
+- `project_id` (String) The project to assign a role to.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).

@@ -37,8 +37,8 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }
 
-// Project roles are granted alongside account and namespace access. Roles inherited from
-// an account-level role are not listed here and cannot be managed from Terraform.
+// Project roles are granted alongside account and namespace access. Roles inherited from an
+// account_access role are not listed here and cannot be managed with Terraform.
 resource "temporalcloud_user" "project_member" {
   email          = "member@yourdomain.com"
   account_access = "read"

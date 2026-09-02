@@ -177,12 +177,13 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 				},
 			},
 			"project_accesses": projectAccessesSchema(
+				" Cannot be set if namespace_scoped_access is provided.",
 				setvalidator.ConflictsWith(path.Expressions{
 					path.MatchRoot("namespace_scoped_access"),
 				}...),
 			),
 			"namespace_scoped_access": schema.SingleNestedAttribute{
-				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, or namespace_accesses are provided.",
+				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, namespace_accesses, or project_accesses are provided.",
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"namespace_id": schema.StringAttribute{

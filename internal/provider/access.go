@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -32,7 +33,9 @@ type projectAccessModel struct {
 
 const accountAccessCustomRolesDescription = "The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead."
 
-const projectAccessesDescription = "The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account-level role are not represented here and cannot be managed."
+const projectAccessesDescription = "The set of project accesses. Empty sets are not allowed, omit the attribute instead. Roles inherited from an account_access role are not included in this set and cannot be managed."
+
+const projectAccessRoleDescription = "The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive)."
 
 var namespaceAccessAttrs = map[string]attr.Type{
 	"namespace_id": types.StringType,
@@ -44,21 +47,21 @@ var projectAccessAttrs = map[string]attr.Type{
 	"role":       internaltypes.CaseInsensitiveStringType{},
 }
 
-// projectAccessesSchema returns the project_accesses attribute. Shared so that the resources that
-// build their access schema inline stay identical to the ones using addAccessSchemaAttrs.
-func projectAccessesSchema(extraValidators ...validator.Set) schema.SetNestedAttribute {
+// projectAccessesSchema returns the project_accesses attribute, shared by the resources that build
+// their access schema inline and the ones using addAccessSchemaAttrs.
+func projectAccessesSchema(descriptionSuffix string, extraValidators ...validator.Set) schema.SetNestedAttribute {
 	return schema.SetNestedAttribute{
-		Description: projectAccessesDescription,
+		Description: projectAccessesDescription + descriptionSuffix,
 		Optional:    true,
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"project_id": schema.StringAttribute{
-					Description: "The project to assign a role in.",
+					Description: "The project to assign a role to.",
 					Required:    true,
 				},
 				"role": schema.StringAttribute{
 					CustomType:  internaltypes.CaseInsensitiveStringType{},
-					Description: "The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).",
+					Description: projectAccessRoleDescription,
 					Required:    true,
 					Validators: []validator.String{
 						stringvalidator.OneOfCaseInsensitive(enums.AllowedProjectAccessRoles()...),
@@ -73,22 +76,21 @@ func projectAccessesSchema(extraValidators ...validator.Set) schema.SetNestedAtt
 	}
 }
 
-// projectAccessesDataSourceSchema mirrors projectAccessesSchema for the read-only data sources.
-// It decodes through the same projectAccessAttrs and getProjectSetFromSpec as the resources, so the
-// attribute types must match those exactly.
-func projectAccessesDataSourceSchema() dsschema.SetNestedAttribute {
+// projectAccessesDataSourceSchema is the read-only equivalent of projectAccessesSchema. identityType
+// names the identity in the description, as namespace_accesses does ("user", "service account").
+func projectAccessesDataSourceSchema(identityType string) dsschema.SetNestedAttribute {
 	return dsschema.SetNestedAttribute{
-		Description: "The set of project roles for this identity, including each project and its role.",
+		Description: fmt.Sprintf("The set of project roles for this %s, including each project and its role.", identityType),
 		Computed:    true,
 		NestedObject: dsschema.NestedAttributeObject{
 			Attributes: map[string]dsschema.Attribute{
 				"project_id": dsschema.StringAttribute{
-					Description: "The project the role applies to.",
+					Description: "The project to assign a role to.",
 					Computed:    true,
 				},
 				"role": dsschema.StringAttribute{
 					CustomType:  internaltypes.CaseInsensitiveStringType{},
-					Description: "The role assigned in the project.",
+					Description: projectAccessRoleDescription,
 					Computed:    true,
 				},
 			},
@@ -144,7 +146,7 @@ func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 		},
 	}
 
-	s.Attributes["project_accesses"] = projectAccessesSchema()
+	s.Attributes["project_accesses"] = projectAccessesSchema("")
 }
 
 func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*identityv1.ProjectAccess, diag.Diagnostics) {
@@ -169,7 +171,7 @@ func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*
 		}
 		role, err := enums.ToProjectAccessRole(model.Role.ValueString())
 		if err != nil {
-			diags.AddError("Failed to convert project role", err.Error())
+			diags.AddError("Failed to convert project access role", err.Error())
 			return nil, diags
 		}
 		projectAccesses[model.ProjectID.ValueString()] = &identityv1.ProjectAccess{
