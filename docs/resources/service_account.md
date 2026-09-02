@@ -125,7 +125,7 @@ Required:
 
 Required:
 
-- `project_id` (String) The project to assign a role to.
+- `project_id` (String) The project the role applies to.
 - `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
 
 

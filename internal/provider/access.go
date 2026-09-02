@@ -35,6 +35,8 @@ const accountAccessCustomRolesDescription = "The set of custom role IDs assigned
 
 const projectAccessesDescription = "The set of project accesses. Empty sets are not allowed, omit the attribute instead. Cannot be set when account_access is owner or admin, which implicitly receive access to all Projects."
 
+const projectAccessProjectIDDescription = "The project the role applies to."
+
 const projectAccessRoleDescription = "The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive)."
 
 var namespaceAccessAttrs = map[string]attr.Type{
@@ -56,7 +58,7 @@ func projectAccessesSchema(descriptionSuffix string, extraValidators ...validato
 		NestedObject: schema.NestedAttributeObject{
 			Attributes: map[string]schema.Attribute{
 				"project_id": schema.StringAttribute{
-					Description: "The project to assign a role to.",
+					Description: projectAccessProjectIDDescription,
 					Required:    true,
 				},
 				"role": schema.StringAttribute{
@@ -89,7 +91,7 @@ func projectAccessesDataSourceSchema(identityType string) dsschema.SetNestedAttr
 		NestedObject: dsschema.NestedAttributeObject{
 			Attributes: map[string]dsschema.Attribute{
 				"project_id": dsschema.StringAttribute{
-					Description: "The project to assign a role to.",
+					Description: projectAccessProjectIDDescription,
 					Computed:    true,
 				},
 				"role": dsschema.StringAttribute{
