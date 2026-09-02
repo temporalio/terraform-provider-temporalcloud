@@ -117,7 +117,7 @@ Import is supported using the following syntax:
 The [`terraform import` command](https://developer.hashicorp.com/terraform/cli/commands/import) can be used, for example:
 
 ```shell
-# Users can be imported to incorporate existing Users into your Terraform pipeline.
+# Users can be imported to incorporate existing Users into your Terraform pipeline. 
 # To import a User, you need
 # - a resource configuration in your Terraform configuration file/module to accept the imported User. In the example below, the placeholder is "temporalcloud_user" "user"
 # - the User's ID, which is found using the Temporal Cloud CLI tcld u l. In the example below, this is 72360058153949edb2f1d47019c1e85f
