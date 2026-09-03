@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -24,11 +26,80 @@ type namespaceAccessModel struct {
 	Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
 }
 
+type projectAccessModel struct {
+	ProjectID types.String                             `tfsdk:"project_id"`
+	Role      internaltypes.CaseInsensitiveStringValue `tfsdk:"role"`
+}
+
 const accountAccessCustomRolesDescription = "The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead."
+
+const projectAccessesDescription = "The set of project accesses. Empty sets are not allowed, omit the attribute instead. Cannot be set when account_access is owner or admin, which implicitly receive access to all Projects."
+
+const projectAccessProjectIDDescription = "The project the role applies to."
+
+const projectAccessRoleDescription = "The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive)."
 
 var namespaceAccessAttrs = map[string]attr.Type{
 	"namespace_id": types.StringType,
 	"permission":   internaltypes.CaseInsensitiveStringType{},
+}
+
+var projectAccessAttrs = map[string]attr.Type{
+	"project_id": types.StringType,
+	"role":       internaltypes.CaseInsensitiveStringType{},
+}
+
+func projectAccessesSchema(descriptionSuffix string, extraValidators ...validator.Set) schema.SetNestedAttribute {
+	return schema.SetNestedAttribute{
+		Description: projectAccessesDescription + descriptionSuffix,
+		Optional:    true,
+		NestedObject: schema.NestedAttributeObject{
+			Attributes: map[string]schema.Attribute{
+				"project_id": schema.StringAttribute{
+					Description: projectAccessProjectIDDescription,
+					Required:    true,
+				},
+				"role": schema.StringAttribute{
+					CustomType:  internaltypes.CaseInsensitiveStringType{},
+					Description: projectAccessRoleDescription,
+					Required:    true,
+					Validators: []validator.String{
+						stringvalidator.OneOfCaseInsensitive(enums.AllowedProjectAccessRoles()...),
+					},
+				},
+			},
+		},
+		Validators: append([]validator.Set{
+			setvalidator.SizeAtLeast(1),
+			validation.SetNestedAttributeMustBeUnique("project_id"),
+			validation.SetMustBeEmptyWhen(
+				path.Root("account_access"),
+				[]string{"owner", "admin"},
+			),
+		}, extraValidators...),
+	}
+}
+
+// projectAccessesDataSourceSchema is the read-only equivalent of projectAccessesSchema. identityType
+// names the identity in the description, as namespace_accesses does ("user", "service account").
+func projectAccessesDataSourceSchema(identityType string) dsschema.SetNestedAttribute {
+	return dsschema.SetNestedAttribute{
+		Description: fmt.Sprintf("The set of project roles for this %s, including each project and its role.", identityType),
+		Computed:    true,
+		NestedObject: dsschema.NestedAttributeObject{
+			Attributes: map[string]dsschema.Attribute{
+				"project_id": dsschema.StringAttribute{
+					Description: projectAccessProjectIDDescription,
+					Computed:    true,
+				},
+				"role": dsschema.StringAttribute{
+					CustomType:  internaltypes.CaseInsensitiveStringType{},
+					Description: projectAccessRoleDescription,
+					Computed:    true,
+				},
+			},
+		},
+	}
 }
 
 func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
@@ -78,6 +149,116 @@ func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 			),
 		},
 	}
+
+}
+
+func projectAccessesManagedByConfig(configAccesses types.Set) bool {
+	if configAccesses.IsNull() {
+		return false
+	}
+
+	return configAccesses.IsUnknown() || len(configAccesses.Elements()) > 0
+}
+
+// projectAccessRevocationWarning warns that an apply will revoke the project roles recorded in
+// state because configuration does not list any.
+//
+// Configuration is authoritative for project_accesses, and roles granted outside Terraform land in
+// state on the first refresh after this attribute was added. An identity that was edited for an
+// unrelated reason therefore loses those roles, so say so at plan time instead of relying on the
+// attribute quietly leaving the diff.
+//
+// Roles are compared against configuration rather than the plan for the same reason the namespace
+// resource reads fairness from Config: the plan can be substituted with prior state, which would
+// mask the removal this warning exists to report.
+func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses types.Set) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if stateAccesses.IsNull() || stateAccesses.IsUnknown() || len(stateAccesses.Elements()) == 0 {
+		return diags
+	}
+	if projectAccessesManagedByConfig(configAccesses) {
+		return diags
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("project_accesses"),
+		"Project roles will be revoked",
+		fmt.Sprintf("%d project role(s) recorded in state are not in the configuration and will be revoked by this apply. "+
+			"Roles granted outside Terraform appear in state once the resource is refreshed; add them to project_accesses to keep them.",
+			len(stateAccesses.Elements())),
+	)
+
+	return diags
+}
+
+func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*identityv1.ProjectAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	elements := make([]types.Object, 0, len(set.Elements()))
+	diags.Append(set.ElementsAs(ctx, &elements, false)...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	if len(elements) == 0 {
+		return nil, diags
+	}
+
+	projectAccesses := make(map[string]*identityv1.ProjectAccess, len(elements))
+	for _, access := range elements {
+		var model projectAccessModel
+		diags.Append(access.As(ctx, &model, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		role, err := enums.ToProjectAccessRole(model.Role.ValueString())
+		if err != nil {
+			diags.AddError("Failed to convert project access role", err.Error())
+			return nil, diags
+		}
+		projectAccesses[model.ProjectID.ValueString()] = &identityv1.ProjectAccess{
+			Role: role,
+		}
+	}
+
+	return projectAccesses, diags
+}
+
+func getProjectSetFromSpec(ctx context.Context, spec *identityv1.Access) (types.Set, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	projectAccesses := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	if len(spec.GetProjectAccesses()) > 0 {
+		projectAccessObjects := make([]types.Object, 0)
+		for projectID, projectAccess := range spec.GetProjectAccesses() {
+			role, err := enums.FromProjectAccessRole(projectAccess.GetRole())
+			if err != nil {
+				diags.AddError("Failed to convert project access role", err.Error())
+				return projectAccesses, diags
+			}
+			model := projectAccessModel{
+				ProjectID: types.StringValue(projectID),
+				Role:      internaltypes.CaseInsensitiveString(role),
+			}
+			obj, d := types.ObjectValueFrom(ctx, projectAccessAttrs, model)
+			diags.Append(d...)
+			if diags.HasError() {
+				return projectAccesses, diags
+			}
+			projectAccessObjects = append(projectAccessObjects, obj)
+		}
+
+		accesses, d := types.SetValueFrom(ctx, types.ObjectType{AttrTypes: projectAccessAttrs}, projectAccessObjects)
+		diags.Append(d...)
+		if diags.HasError() {
+			return projectAccesses, diags
+		}
+
+		projectAccesses = accesses
+	}
+
+	return projectAccesses, diags
 }
 
 func getNamespaceAccessesFromSet(ctx context.Context, set types.Set) (map[string]*identityv1.NamespaceAccess, diag.Diagnostics) {
@@ -177,14 +358,15 @@ func getAccountAccessFromModel(ctx context.Context, accountAccess string, accoun
 // preserveProjectAccesses copies project access grants from the Access currently stored server-side
 // onto a freshly built Access.
 //
-// Terraform does not manage project accesses yet, so rebuilding a spec from configuration alone
+// Group access does not manage project accesses yet, so rebuilding a spec from configuration alone
 // sends a nil ProjectAccesses map. The server declares an API version at or above the
 // min_version of Access.project_accesses, so it treats the caller as project-aware and reads that
 // nil map as "revoke every grant" rather than "field not supported by this client". Without this,
 // an unrelated edit (even just a description change) silently revokes grants made outside
 // Terraform.
 //
-// Remove this once project accesses are a managed attribute and configuration is authoritative.
+// Remove this once group access manages project_accesses too. Users and service accounts already
+// do, and build their spec from configuration alone.
 func preserveProjectAccesses(built *identityv1.Access, current *identityv1.Access) {
 	if built == nil {
 		return

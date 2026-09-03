@@ -46,6 +46,7 @@ type (
 		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 		NamespaceScopedAccess    types.Object                             `tfsdk:"namespace_scoped_access"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
@@ -61,6 +62,7 @@ var (
 	_ resource.Resource                = (*serviceAccountResource)(nil)
 	_ resource.ResourceWithConfigure   = (*serviceAccountResource)(nil)
 	_ resource.ResourceWithImportState = (*serviceAccountResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*serviceAccountResource)(nil)
 
 	serviceAccountNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -92,6 +94,23 @@ func (r *serviceAccountResource) Configure(_ context.Context, req resource.Confi
 
 func (r *serviceAccountResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_service_account"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *serviceAccountResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A create has no prior roles, and deleting the service account revokes its roles by definition.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state, config serviceAccountResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
 }
 
 func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -175,8 +194,14 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 					}...),
 				},
 			},
+			"project_accesses": projectAccessesSchema(
+				" Cannot be set if namespace_scoped_access is provided.",
+				setvalidator.ConflictsWith(path.Expressions{
+					path.MatchRoot("namespace_scoped_access"),
+				}...),
+			),
 			"namespace_scoped_access": schema.SingleNestedAttribute{
-				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, or namespace_accesses are provided.",
+				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, namespace_accesses, or project_accesses are provided.",
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"namespace_id": schema.StringAttribute{
@@ -199,6 +224,7 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 					objectvalidator.ConflictsWith(path.Expressions{
 						path.MatchRoot("account_access"),
 						path.MatchRoot("namespace_accesses"),
+						path.MatchRoot("project_accesses"),
 					}...),
 				},
 			},
@@ -314,7 +340,6 @@ func (r *serviceAccountResource) Update(ctx context.Context, req resource.Update
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	preserveProjectAccesses(spec.GetAccess(), currentServiceAccount.GetServiceAccount().GetSpec().GetAccess())
 
 	svcResp, err := r.client.CloudService().UpdateServiceAccount(ctx, &cloudservicev1.UpdateServiceAccountRequest{
 		ServiceAccountId: plan.ID.ValueString(),
@@ -480,9 +505,16 @@ func buildServiceAccountSpec(ctx context.Context, plan *serviceAccountResourceMo
 			return nil, diags
 		}
 
+		projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
 		spec.Access = &identityv1.Access{
 			AccountAccess:     accountAccess,
 			NamespaceAccesses: namespaceAccesses,
+			ProjectAccesses:   projectAccesses,
 		}
 	}
 
@@ -548,6 +580,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 		state.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
 		state.AccountAccessCustomRoles = types.SetNull(types.StringType)
 		state.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+		state.ProjectAccesses = types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
 	} else {
 		// Handle account-scoped service account
 		role, err := enums.FromAccountAccessRole(serviceAccount.GetSpec().GetAccess().GetAccountAccess().GetRole())
@@ -592,9 +625,16 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 			return diags
 		}
 
+		projectAccesses, d := getProjectSetFromSpec(ctx, serviceAccount.GetSpec().GetAccess())
+		diags.Append(d...)
+		if diags.HasError() {
+			return diags
+		}
+
 		state.AccountAccess = internaltypes.CaseInsensitiveString(role)
 		state.AccountAccessCustomRoles = accountAccessCustomRoles
 		state.NamespaceAccesses = namespaceAccesses
+		state.ProjectAccesses = projectAccesses
 		state.NamespaceScopedAccess = types.ObjectNull(serviceAccountNamespaceAccessAttrs)
 	}
 
