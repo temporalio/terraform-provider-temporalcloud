@@ -238,7 +238,6 @@ func projectAccessRevocationOnCreateWarning(ctx context.Context, currentAccesses
 		return diags
 	}
 
-	// Map iteration is unordered, and the plan renders this text verbatim.
 	sort.Strings(revoked)
 
 	diags.AddAttributeWarning(
