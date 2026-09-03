@@ -49,8 +49,6 @@ var projectAccessAttrs = map[string]attr.Type{
 	"role":       internaltypes.CaseInsensitiveStringType{},
 }
 
-// projectAccessesSchema returns the project_accesses attribute, shared by the resources that build
-// their access schema inline and the ones using addAccessSchemaAttrs.
 func projectAccessesSchema(descriptionSuffix string, extraValidators ...validator.Set) schema.SetNestedAttribute {
 	return schema.SetNestedAttribute{
 		Description: projectAccessesDescription + descriptionSuffix,
@@ -155,9 +153,6 @@ func addAccessSchemaAttrs(s *schema.Schema, accountDescriptionSuffix string) {
 	s.Attributes["project_accesses"] = projectAccessesSchema("")
 }
 
-// projectAccessesManagedByConfig reports whether configuration takes responsibility for project
-// roles. A set that is not yet known counts: its elements arrive at apply time, so nothing is being
-// given up.
 func projectAccessesManagedByConfig(configAccesses types.Set) bool {
 	if configAccesses.IsNull() {
 		return false
