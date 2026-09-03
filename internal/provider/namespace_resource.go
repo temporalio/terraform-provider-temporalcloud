@@ -50,6 +50,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
@@ -76,6 +77,7 @@ type (
 	namespaceResourceModel struct {
 		ID                  types.String                           `tfsdk:"id"`
 		Name                types.String                           `tfsdk:"name"`
+		Description         types.String                           `tfsdk:"description"`
 		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
 		AcceptedClientCA    internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
 		RetentionDays       types.Int64                            `tfsdk:"retention_days"`
@@ -218,6 +220,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
+			},
+			"description": schema.StringAttribute{
+				Description: "The description of the namespace. Optional. Must be at most 255 printable ASCII characters plus whitespace. An empty string clears the description.",
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 			},
 			"regions": schema.ListAttribute{
 				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
@@ -574,6 +582,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		Name:                plan.Name.ValueString(),
 		Regions:             regions,
 		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		Description:         plan.Description.ValueString(),
 		CodecServer:         codecServer,
 		Lifecycle:           lifecycle,
 		ConnectivityRuleIds: connectivityRuleIds,
@@ -796,6 +805,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		Name:                plan.Name.ValueString(),
 		Regions:             regions,
 		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
+		Description:         plan.Description.ValueString(),
 		CodecServer:         codecServer,
 		SearchAttributes:    currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
 		Lifecycle:           lifecycle,
@@ -1063,6 +1073,7 @@ func updateModelFromSpec(
 
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
+	state.Description = types.StringValue(ns.GetSpec().GetDescription())
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
