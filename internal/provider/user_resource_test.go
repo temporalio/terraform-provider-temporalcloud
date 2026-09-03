@@ -375,3 +375,124 @@ resource "temporalcloud_user" "terraform" {
 		},
 	})
 }
+
+func TestAccBasicUserWithProjectAccesses(t *testing.T) {
+	type configArgs struct {
+		Email           string
+		ProjectName     string
+		ProjectAccesses string
+	}
+
+	emailAddr := createRandomEmail()
+	projectName := createRandomName()
+
+	tmpl := template.Must(template.New("config").Parse(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "{{ .ProjectName }}"
+}
+
+resource "temporalcloud_user" "terraform" {
+  email          = "{{ .Email }}"
+  account_access = "read"
+  {{ .ProjectAccesses }}
+}`))
+
+	config := func(args configArgs) string {
+		var buf bytes.Buffer
+		writer := bufio.NewWriter(&buf)
+		if err := tmpl.Execute(writer, args); err != nil {
+			t.Errorf("failed to execute template: %v", err)
+			t.FailNow()
+		}
+		writer.Flush()
+		return buf.String()
+	}
+
+	withRole := func(role string) string {
+		return fmt.Sprintf(`project_accesses = [
+    {
+      project_id = temporalcloud_project.test.id
+      role       = "%s"
+    }
+  ]`, role)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(configArgs{Email: emailAddr, ProjectName: projectName, ProjectAccesses: withRole("read")}),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_user.terraform", "project_accesses.#", "1"),
+					resource.TestCheckTypeSetElemNestedAttrs("temporalcloud_user.terraform", "project_accesses.*", map[string]string{
+						"role": "read",
+					}),
+				),
+			},
+			{
+				// The role is mutable in place.
+				Config: config(configArgs{Email: emailAddr, ProjectName: projectName, ProjectAccesses: withRole("admin")}),
+				Check: resource.TestCheckTypeSetElemNestedAttrs("temporalcloud_user.terraform", "project_accesses.*", map[string]string{
+					"role": "admin",
+				}),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
+			},
+			{
+				// Configuration is authoritative: dropping the attribute revokes the grant.
+				Config: config(configArgs{Email: emailAddr, ProjectName: projectName, ProjectAccesses: ""}),
+				Check: resource.TestCheckNoResourceAttr(
+					"temporalcloud_user.terraform", "project_accesses.#"),
+			},
+		},
+	})
+}
+
+// Account owners and admins implicitly receive access to all Projects, so explicit project roles
+// are rejected at plan time rather than being silently sent to the API.
+func TestAccUserProjectAccessesRejectedForAccountAdmin(t *testing.T) {
+	config := func(accountAccess string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_user" "terraform" {
+  email          = "%s"
+  account_access = "%s"
+  project_accesses = [
+    {
+      project_id = "6f4bbbcb4d8e4a0e9a1f2c3d4e5f6a7b"
+      role       = "read"
+    }
+  ]
+}`, createRandomEmail(), accountAccess)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config("admin"),
+				ExpectError: regexp.MustCompile(`must be empty when`),
+				PlanOnly:    true,
+			},
+			{
+				Config:      config("owner"),
+				ExpectError: regexp.MustCompile(`must be empty when`),
+				PlanOnly:    true,
+			},
+		},
+	})
+}
