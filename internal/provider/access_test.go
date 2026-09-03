@@ -4,8 +4,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
+
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 func TestGetCustomRolesRoundTrip(t *testing.T) {
@@ -124,6 +127,65 @@ func TestGetAccountAccessFromModel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProjectAccessRevocationWarning(t *testing.T) {
+	t.Parallel()
+
+	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	emptySet := types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{})
+	unknownSet := types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})
+
+	cases := []struct {
+		name        string
+		state       types.Set
+		config      types.Set
+		wantWarning bool
+	}{
+		{name: "no roles in state", state: nullSet, config: nullSet},
+		{name: "empty state set", state: emptySet, config: nullSet},
+		{name: "roles kept in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-a")},
+		{name: "roles replaced in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-b")},
+		{name: "configuration is not known until apply", state: projectAccessSet("project-a"), config: unknownSet},
+		// An attribute absent from configuration is the case worth warning about: the roles leave
+		// the diff without ever having been mentioned.
+		{name: "roles absent from configuration", state: projectAccessSet("project-a", "project-b"), config: nullSet, wantWarning: true},
+		{name: "configuration empties the set", state: projectAccessSet("project-a"), config: emptySet, wantWarning: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := projectAccessRevocationWarning(tc.state, tc.config)
+
+			if diags.HasError() {
+				t.Fatalf("expected no errors, got %+v", diags)
+			}
+			if got := diags.WarningsCount(); got != boolToCount(tc.wantWarning) {
+				t.Fatalf("expected %d warnings, got %d: %+v", boolToCount(tc.wantWarning), got, diags)
+			}
+		})
+	}
+}
+
+func boolToCount(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func projectAccessSet(projectIDs ...string) types.Set {
+	objects := make([]attr.Value, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		objects = append(objects, types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+			"project_id": types.StringValue(projectID),
+			"role":       internaltypes.CaseInsensitiveString("read"),
+		}))
+	}
+
+	return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, objects)
 }
 
 func TestPreserveProjectAccesses(t *testing.T) {
