@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -187,36 +189,77 @@ func TestProjectAccessRevocationOnCreateWarning(t *testing.T) {
 		return accesses
 	}
 	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	unknownSet := types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})
 
 	cases := []struct {
-		name        string
-		current     map[string]*identityv1.ProjectAccess
-		config      types.Set
-		wantWarning bool
+		name    string
+		current map[string]*identityv1.ProjectAccess
+		config  types.Set
+		// wantRevoked lists the project ids the warning must name. Empty means no warning at all.
+		wantRevoked []string
 	}{
 		{name: "group holds no roles", current: nil, config: nullSet},
 		{name: "group holds no roles and configuration adds some", current: nil, config: projectAccessSet("project-a")},
-		{name: "configuration keeps managing roles", current: held("project-a"), config: projectAccessSet("project-a")},
-		{name: "configuration replaces the roles", current: held("project-a"), config: projectAccessSet("project-b")},
-		// A plan can carry an unknown project_id, which still means configuration manages the roles.
-		{name: "configuration is not known until apply", current: held("project-a"), config: types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})},
-		{name: "configuration omits the group's roles", current: held("project-a", "project-b"), config: nullSet, wantWarning: true},
+		{name: "configuration names every role the group holds", current: held("project-a"), config: projectAccessSet("project-a")},
+		// A create has no prior state, so an omitted role appears nowhere in the plan. Unlike the
+		// update path, configuration naming some roles is not enough to stay quiet.
+		{name: "configuration replaces the roles", current: held("project-a"), config: projectAccessSet("project-b"), wantRevoked: []string{"project-a"}},
+		{name: "configuration names only some of the roles", current: held("project-a", "project-b"), config: projectAccessSet("project-a"), wantRevoked: []string{"project-b"}},
+		{name: "configuration omits the group's roles", current: held("project-a", "project-b"), config: nullSet, wantRevoked: []string{"project-a", "project-b"}},
+		// Ids that arrive at apply time cannot be matched against the ones the group holds.
+		{name: "configuration is not known until apply", current: held("project-a"), config: unknownSet},
+		{name: "a project id is not known until apply", current: held("project-a"), config: projectAccessSetWithUnknownID()},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			diags := projectAccessRevocationOnCreateWarning(tc.current, tc.config)
+			diags := projectAccessRevocationOnCreateWarning(context.Background(), tc.current, tc.config)
 
 			if diags.HasError() {
 				t.Fatalf("expected no errors, got %+v", diags)
 			}
-			if got := diags.WarningsCount(); got != boolToCount(tc.wantWarning) {
-				t.Fatalf("expected %d warnings, got %d: %+v", boolToCount(tc.wantWarning), got, diags)
+
+			warnings := diags.Warnings()
+			if len(tc.wantRevoked) == 0 {
+				if len(warnings) != 0 {
+					t.Fatalf("expected no warnings, got %+v", warnings)
+				}
+				return
+			}
+			if len(warnings) != 1 {
+				t.Fatalf("expected 1 warning, got %d: %+v", len(warnings), warnings)
+			}
+
+			// The plan shows nothing on create, so the message is the only place these ids appear.
+			detail := warnings[0].Detail()
+			for _, projectID := range tc.wantRevoked {
+				if !strings.Contains(detail, projectID) {
+					t.Errorf("warning does not name %q: %s", projectID, detail)
+				}
+			}
+			for projectID := range tc.current {
+				if slices.Contains(tc.wantRevoked, projectID) {
+					continue
+				}
+				if strings.Contains(detail, projectID) {
+					t.Errorf("warning names %q, which configuration keeps: %s", projectID, detail)
+				}
 			}
 		})
 	}
+}
+
+// projectAccessSetWithUnknownID builds the shape a plan carries when project_id references a
+// project that is created by the same apply.
+func projectAccessSetWithUnknownID() types.Set {
+	return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{
+		types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+			"project_id": types.StringUnknown(),
+			"role":       internaltypes.CaseInsensitiveString("read"),
+		}),
+	})
 }
 
 func projectAccessSet(projectIDs ...string) types.Set {

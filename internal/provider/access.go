@@ -3,6 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -193,8 +195,8 @@ func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses type
 	return diags
 }
 
-// projectAccessRevocationOnCreateWarning warns that taking over an identity's access revokes the
-// project roles it already holds.
+// projectAccessRevocationOnCreateWarning warns that taking over a group's access revokes the
+// project roles it already holds and configuration does not name.
 //
 // projectAccessRevocationWarning cannot report this: a create has no prior state to compare
 // against, so the roles have to be read from the API. It only arises for group access, which
@@ -202,23 +204,87 @@ func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses type
 // the first time the group is brought under Terraform management. Users and service accounts are
 // created fresh and have no roles to lose.
 //
-// Configuration is taken as a set rather than a built map because a plan can carry values that are
-// unknown until apply, which cannot be converted to project accesses.
-func projectAccessRevocationOnCreateWarning(currentAccesses map[string]*identityv1.ProjectAccess, configAccesses types.Set) diag.Diagnostics {
+// Unlike the update path, this compares project IDs rather than asking whether configuration
+// manages the attribute at all. An update renders the roles it omits as removals in the plan diff,
+// so a configuration that names some of them already shows which ones it drops. A create has no
+// prior state to diff against, so the plan shows only the roles being added and the ones being
+// overwritten appear nowhere.
+func projectAccessRevocationOnCreateWarning(ctx context.Context, currentAccesses map[string]*identityv1.ProjectAccess, configAccesses types.Set) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	if len(currentAccesses) == 0 || projectAccessesManagedByConfig(configAccesses) {
+	if len(currentAccesses) == 0 {
 		return diags
 	}
+
+	configured, known, d := projectIDsFromSet(ctx, configAccesses)
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+
+	// A project ID that is not known until apply cannot be matched against the ones the group
+	// holds, and configuration that names it is managing the role, so assume nothing is lost.
+	if !known {
+		return diags
+	}
+
+	revoked := make([]string, 0, len(currentAccesses))
+	for projectID := range currentAccesses {
+		if _, ok := configured[projectID]; !ok {
+			revoked = append(revoked, projectID)
+		}
+	}
+	if len(revoked) == 0 {
+		return diags
+	}
+
+	// Map iteration is unordered, and the plan renders this text verbatim.
+	sort.Strings(revoked)
 
 	diags.AddAttributeWarning(
 		path.Root("project_accesses"),
 		"Project roles will be revoked",
-		fmt.Sprintf("This group holds %d project role(s) that are not in the configuration and will be revoked by this apply. "+
-			"Add them to project_accesses to keep them.", len(currentAccesses)),
+		fmt.Sprintf("This group holds %d project role(s) that are not in the configuration and will be revoked by this apply: %s. "+
+			"Bringing a group under management has no prior state, so these do not appear in the plan. "+
+			"Add them to project_accesses to keep them.",
+			len(revoked), strings.Join(revoked, ", ")),
 	)
 
 	return diags
+}
+
+// projectIDsFromSet collects the project IDs a configured set names.
+// The bool reports whether every ID was known.
+func projectIDsFromSet(ctx context.Context, set types.Set) (map[string]struct{}, bool, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	if set.IsNull() {
+		return nil, true, diags
+	}
+	if set.IsUnknown() {
+		return nil, false, diags
+	}
+
+	elements := make([]types.Object, 0, len(set.Elements()))
+	diags.Append(set.ElementsAs(ctx, &elements, false)...)
+	if diags.HasError() {
+		return nil, false, diags
+	}
+
+	projectIDs := make(map[string]struct{}, len(elements))
+	for _, element := range elements {
+		var model projectAccessModel
+		diags.Append(element.As(ctx, &model, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, false, diags
+		}
+		if model.ProjectID.IsUnknown() {
+			return nil, false, diags
+		}
+		projectIDs[model.ProjectID.ValueString()] = struct{}{}
+	}
+
+	return projectIDs, true, diags
 }
 
 func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*identityv1.ProjectAccess, diag.Diagnostics) {
