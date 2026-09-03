@@ -59,6 +59,7 @@ Read-Only:
 - `accepted_client_ca` (String) The Base64-encoded CA cert in PEM format that clients use when authenticating with Temporal Cloud.
 - `active_region` (String) The currently active region for the namespace.
 - `created_time` (String) The date and time when the namespace was created.
+- `description` (String) The description of the namespace, if set.
 - `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--namespaces--endpoints))
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--namespaces--limits))
