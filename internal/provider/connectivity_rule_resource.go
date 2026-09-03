@@ -40,6 +40,7 @@ type (
 
 	connectivityRuleResourceModel struct {
 		ID                types.String   `tfsdk:"id"`
+		ProjectID         types.String   `tfsdk:"project_id"`
 		ConnectivityType  types.String   `tfsdk:"connectivity_type"`
 		ConnectionID      types.String   `tfsdk:"connection_id"`
 		Region            types.String   `tfsdk:"region"`
@@ -88,6 +89,14 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "The unique identifier of the Connectivity Rule.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this Connectivity Rule belongs to. Defaults to the account's default project. This rule can only be attached to namespaces in the same project. Cannot be changed after creation; the rule must be destroyed and recreated in the other project.",
+				Optional:    true,
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
@@ -161,8 +170,11 @@ func (r *connectivityRuleResource) Create(ctx context.Context, req resource.Crea
 		return
 	}
 
+	// project_id is Optional+Computed, so an unconfigured value is Unknown here and sends an empty
+	// string, which the API reads as the account's default project.
 	svcResp, err := r.client.CloudService().CreateConnectivityRule(ctx, &cloudservicev1.CreateConnectivityRuleRequest{
 		Spec:             spec,
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -362,6 +374,8 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(connectivityRule.GetId())
+	// Reads always report a project, the account's default one included, so this is never empty.
+	model.ProjectID = types.StringValue(connectivityRule.GetProjectId())
 	model.AzurePeResourceID = types.StringNull()
 
 	if connectivityRule.Spec.GetPrivateRule() != nil {

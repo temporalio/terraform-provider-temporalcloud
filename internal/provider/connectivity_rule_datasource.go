@@ -31,6 +31,7 @@ type (
 
 	connectivityRuleDataModel struct {
 		ID                types.String `tfsdk:"id"`
+		ProjectID         types.String `tfsdk:"project_id"`
 		ConnectivityType  types.String `tfsdk:"connectivity_type"`
 		ConnectionID      types.String `tfsdk:"connection_id"`
 		Region            types.String `tfsdk:"region"`
@@ -57,6 +58,10 @@ func connectivityRuleDataSourceSchema(idRequired bool) map[string]schema.Attribu
 
 	return map[string]schema.Attribute{
 		"id": idAttribute,
+		"project_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "The ID of the Temporal Cloud project the connectivity rule belongs to.",
+		},
 		"connectivity_type": schema.StringAttribute{
 			Computed:    true,
 			Description: "The type of connectivity.",
@@ -162,6 +167,7 @@ func connectivityRuleToConnectivityRuleDataModel(connectivityRule *connectivityr
 
 	model := new(connectivityRuleDataModel)
 	model.ID = types.StringValue(connectivityRule.GetId())
+	model.ProjectID = types.StringValue(connectivityRule.GetProjectId())
 	model.State = types.StringValue(stateStr)
 	model.CreatedAt = types.StringValue(connectivityRule.GetCreatedTime().AsTime().Format(time.RFC3339))
 
