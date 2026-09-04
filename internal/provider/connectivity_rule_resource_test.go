@@ -178,7 +178,6 @@ func TestAccConnectivityRuleResource_Azure_Private(t *testing.T) {
 
 func TestAccConnectivityRuleResource_Project(t *testing.T) {
 	projectName := createRandomName()
-	otherProjectName := createRandomName()
 
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -204,10 +203,19 @@ func TestAccConnectivityRuleResource_Project(t *testing.T) {
 				ImportStateVerify: true,
 			},
 			// project_id is create-only, and connectivity rules have no update path at all, so
-			// pointing the rule at another project is rejected rather than moving it.
+			// pointing the rule at another project is rejected rather than moving it. The guard runs
+			// before any API call, so the target project does not have to exist.
 			{
-				Config:      testAccConnectivityRuleResourceConfig_ProjectMoved(projectName, otherProjectName),
+				Config:      testAccConnectivityRuleResourceConfig_ProjectMoved(projectName),
 				ExpectError: regexp.MustCompile("Connectivity rules cannot be updated"),
+			},
+			// Destroy the rule in its own step, leaving only the project for the post-test destroy.
+			// DeleteProject reads the database directly and rejects a project that still holds
+			// resources, but a resource's delete operation reports fulfilled before its row is gone,
+			// so deleting both in one pass makes the project delete fail. Separating them puts a
+			// plan and an apply between the two deletes.
+			{
+				Config: testAccConnectivityRuleResourceConfig_ProjectOnly(projectName),
 			},
 		},
 	})
@@ -289,7 +297,7 @@ resource "temporalcloud_connectivity_rule" "test_project" {
 `, projectName)
 }
 
-func testAccConnectivityRuleResourceConfig_ProjectMoved(projectName string, otherProjectName string) string {
+func testAccConnectivityRuleResourceConfig_ProjectMoved(projectName string) string {
 	return fmt.Sprintf(`
 provider "temporalcloud" {
 
@@ -299,15 +307,23 @@ resource "temporalcloud_project" "test" {
   display_name = "%s"
 }
 
-resource "temporalcloud_project" "other" {
-  display_name = "%s"
-}
-
 resource "temporalcloud_connectivity_rule" "test_project" {
   connectivity_type = "public"
-  project_id        = temporalcloud_project.other.id
+  project_id        = "00000000000000000000000000000000"
 }
-`, projectName, otherProjectName)
+`, projectName)
+}
+
+func testAccConnectivityRuleResourceConfig_ProjectOnly(projectName string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "%s"
+}
+`, projectName)
 }
 
 func testAccConnectivityRuleResourceConfig_PublicStableIps() string {
