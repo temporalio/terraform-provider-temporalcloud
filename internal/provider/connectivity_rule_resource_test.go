@@ -45,7 +45,17 @@ func TestAccConnectivityRuleResource_Public(t *testing.T) {
 				Config: testAccConnectivityRuleResourceConfig_Public(),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_public", "connectivity_type", "public"),
+					// Omitting project_id creates the rule in the account's default project, whose
+					// real ID is reported on read.
+					resource.TestCheckResourceAttrSet("temporalcloud_connectivity_rule.test_public", "project_id"),
 				),
+			},
+			// project_id is Optional+Computed, so omitting it must not leave a perpetual diff. This
+			// relies on UseStateForUnknown putting the project read back from the API into the plan;
+			// without it every plan would propose an update, which this resource always rejects.
+			{
+				Config:   testAccConnectivityRuleResourceConfig_Public(),
+				PlanOnly: true,
 			},
 			// Import state testing
 			{
@@ -166,6 +176,43 @@ func TestAccConnectivityRuleResource_Azure_Private(t *testing.T) {
 	})
 }
 
+func TestAccConnectivityRuleResource_Project(t *testing.T) {
+	projectName := createRandomName()
+	otherProjectName := createRandomName()
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create a public connectivity rule in an explicit project
+			{
+				Config: testAccConnectivityRuleResourceConfig_Project(projectName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_connectivity_rule.test_project", "connectivity_type", "public"),
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_connectivity_rule.test_project", "project_id",
+						"temporalcloud_project.test", "id",
+					),
+				),
+			},
+			// Import state testing
+			{
+				ResourceName:      "temporalcloud_connectivity_rule.test_project",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// project_id is create-only, and connectivity rules have no update path at all, so
+			// pointing the rule at another project is rejected rather than moving it.
+			{
+				Config:      testAccConnectivityRuleResourceConfig_ProjectMoved(projectName, otherProjectName),
+				ExpectError: regexp.MustCompile("Connectivity rules cannot be updated"),
+			},
+		},
+	})
+}
+
 func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck: func() {
@@ -223,6 +270,44 @@ resource "temporalcloud_connectivity_rule" "test_public" {
   connectivity_type = "public"
 }
 `
+}
+
+func testAccConnectivityRuleResourceConfig_Project(projectName string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "%s"
+}
+
+resource "temporalcloud_connectivity_rule" "test_project" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.test.id
+}
+`, projectName)
+}
+
+func testAccConnectivityRuleResourceConfig_ProjectMoved(projectName string, otherProjectName string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "%s"
+}
+
+resource "temporalcloud_project" "other" {
+  display_name = "%s"
+}
+
+resource "temporalcloud_connectivity_rule" "test_project" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.other.id
+}
+`, projectName, otherProjectName)
 }
 
 func testAccConnectivityRuleResourceConfig_PublicStableIps() string {
