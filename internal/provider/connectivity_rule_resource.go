@@ -374,7 +374,6 @@ func updateConnectivityRuleModelFromSpec(model *connectivityRuleResourceModel, c
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(connectivityRule.GetId())
-	// Reads always report a project, the account's default one included, so this is never empty.
 	model.ProjectID = types.StringValue(connectivityRule.GetProjectId())
 	model.AzurePeResourceID = types.StringNull()
 
