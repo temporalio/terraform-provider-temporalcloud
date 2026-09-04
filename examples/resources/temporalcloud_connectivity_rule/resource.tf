@@ -21,6 +21,18 @@ resource "temporalcloud_connectivity_rule" "public_rule_stable_ips" {
   enable_stable_ips = true
 }
 
+// Create Public Connectivity Rule in a specific project. Rules are created in the account's
+// default project unless project_id is set, and can only be attached to namespaces in the same
+// project as the rule.
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_connectivity_rule" "public_rule_in_project" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.payments.id
+}
+
 // Create Private Connectivity Rule for AWS
 resource "temporalcloud_connectivity_rule" "private_aws" {
   connectivity_type = "private"
