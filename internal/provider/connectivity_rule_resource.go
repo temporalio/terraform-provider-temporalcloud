@@ -95,7 +95,7 @@ func (r *connectivityRuleResource) Schema(ctx context.Context, _ resource.Schema
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "The ID of the Temporal Cloud project this Connectivity Rule belongs to. Defaults to the account's default project. This rule can only be attached to namespaces in the same project. Cannot be changed after creation; the rule must be destroyed and recreated in the other project.",
+				Description: "The ID of the Temporal Cloud project this Connectivity Rule belongs to. If not provided, the Connectivity Rule is created in the account's default project. This rule can only be attached to namespaces in the same project. Cannot be changed after creation; the rule must be destroyed and recreated in the other project.",
 				Optional:    true,
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
