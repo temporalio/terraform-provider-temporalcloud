@@ -65,9 +65,7 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }
 
-// A Nexus Endpoint belongs to one project and cannot be moved between projects. Terraform
-// rejects a changed project_id at plan time; to place an endpoint in a different project,
-// destroy it and create it again.
+// A Nexus Endpoint belongs to one project and cannot be moved between projects.
 resource "temporalcloud_nexus_endpoint" "project_scoped" {
   name       = "payments-endpoint"
   project_id = temporalcloud_project.payments.id

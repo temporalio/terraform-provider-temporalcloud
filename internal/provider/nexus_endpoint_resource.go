@@ -100,7 +100,7 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. A Nexus Endpoint cannot be moved between projects: changing this is rejected at plan time. To place an endpoint in a different project, destroy it and create it again.",
+				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Cannot be changed after creation.",
 				Optional:    true,
 				Computed:    true,
 				Validators: []validator.String{
@@ -160,7 +160,6 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 // Terraform's post-apply consistency check after the rest of the spec had already been written.
 // Replacement is deliberately not used: destroying an endpoint breaks Nexus callers routing
 // through it, and that should be an explicit choice rather than a side effect of editing an
-// attribute. Operators who want the endpoint in another project destroy it and create it again.
 //
 // If the API gains a way to move an endpoint between projects, this guard is what gets deleted.
 // Replacing it means wiring the move into Update: compare the planned project against state, call
@@ -203,9 +202,7 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 		path.Root("project_id"),
 		"Nexus Endpoint cannot be moved between projects",
 		fmt.Sprintf(
-			"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between "+
-				"projects. To place one in a different project, destroy this endpoint and create it "+
-				"again, which interrupts any Nexus callers routing through it.",
+			"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
 			state.ProjectID, config.ProjectID,
 		),
 	)
