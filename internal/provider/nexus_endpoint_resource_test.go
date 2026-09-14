@@ -257,6 +257,70 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 	})
 }
 
+// A move whose destination project is created in the same apply leaves project_id unknown at plan
+// time, so the plan-time comparison has nothing to compare. It must still be rejected: Terraform
+// accepts any applied value where the plan was unknown, so without this the first apply would
+// appear to succeed while silently dropping the move, and only later plans would fail.
+func TestAccNexusEndpointResource_MoveToProjectCreatedInSameApply(t *testing.T) {
+	timeSuffix := time.Now().Format("060102150405")
+	endpointName := fmt.Sprintf("tf-nexus-unk-%s-%s", timeSuffix, randomString(3))
+	targetNamespaceName := fmt.Sprintf("tf-nexus-unk-ns-%s-%s", timeSuffix, randomString(4))
+	projectName := createRandomName()
+
+	config := func(withProject bool) string {
+		projectBlock, projectAttr := "", ""
+		if withProject {
+			projectBlock = fmt.Sprintf(`
+resource "temporalcloud_project" "later" {
+  display_name = %q
+}
+`, projectName)
+			projectAttr = "project_id = temporalcloud_project.later.id"
+		}
+
+		return fmt.Sprintf(`
+%[1]s
+%[2]s
+
+resource "temporalcloud_nexus_endpoint" "test_unknown_project" {
+  name = %[3]q
+  %[4]s
+
+  worker_target = {
+    namespace_id = temporalcloud_namespace.target_namespace.id
+    task_queue   = "task-queue-1"
+  }
+
+  allowed_caller_namespaces = [temporalcloud_namespace.target_namespace.id]
+
+  timeouts {
+    create = "4m"
+    delete = "4m"
+  }
+}
+`, testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, "aws-ca-central-1", 1),
+			projectBlock, endpointName, projectAttr)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Endpoint lands in the default project.
+			{
+				Config: config(false),
+				Check:  resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test_unknown_project", "project_id"),
+			},
+			// Now point it at a project that does not exist yet, so project_id is unknown at plan
+			// time. Rejected during plan, so the project is never created either.
+			{
+				Config:      config(true),
+				ExpectError: regexp.MustCompile("cannot be moved between projects"),
+			},
+		},
+	})
+}
+
 func TestNexusEndpointSchema(t *testing.T) {
 	t.Parallel()
 
