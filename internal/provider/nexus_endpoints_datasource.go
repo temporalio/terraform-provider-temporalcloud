@@ -20,7 +20,6 @@ type (
 
 	nexusEndpointsDataModel struct {
 		ID             types.String             `tfsdk:"id"`
-		ProjectID      types.String             `tfsdk:"project_id"`
 		NexusEndpoints []nexusEndpointDataModel `tfsdk:"nexus_endpoints"`
 	}
 )
@@ -63,10 +62,6 @@ func (d *nexusEndpointsDataSource) Schema(_ context.Context, _ datasource.Schema
 				Description: "The unique identifier of the Nexus Endpoints data source.",
 				Computed:    true,
 			},
-			"project_id": schema.StringAttribute{
-				Description: "Only return Nexus Endpoints belonging to this project. If omitted, Nexus Endpoints across all projects are returned.",
-				Optional:    true,
-			},
 			"nexus_endpoints": schema.ListNestedAttribute{
 				Description: "The list of Nexus Endpoints.",
 				Computed:    true,
@@ -78,20 +73,13 @@ func (d *nexusEndpointsDataSource) Schema(_ context.Context, _ datasource.Schema
 	}
 }
 
-func (d *nexusEndpointsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+func (d *nexusEndpointsDataSource) Read(ctx context.Context, _ datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var state nexusEndpointsDataModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
 
 	var nexusEndpoints []*nexusv1.Endpoint
 	pageToken := ""
 	for {
-		r, err := d.client.CloudService().GetNexusEndpoints(ctx, &cloudservicev1.GetNexusEndpointsRequest{
-			PageToken: pageToken,
-			ProjectId: state.ProjectID.ValueString(),
-		})
+		r, err := d.client.CloudService().GetNexusEndpoints(ctx, &cloudservicev1.GetNexusEndpointsRequest{PageToken: pageToken})
 		if err != nil {
 			resp.Diagnostics.AddError("Unable to fetch nexus endpoints", err.Error())
 			return
@@ -124,12 +112,7 @@ func (d *nexusEndpointsDataSource) Read(ctx context.Context, req datasource.Read
 
 	// Silly, but temporarily necessary:
 	// https://developer.hashicorp.com/terraform/plugin/framework/acctests#no-id-found-in-attributes
-	// Include the filter so two data source blocks scoped to different projects don't collide.
-	if projectID := state.ProjectID.ValueString(); projectID != "" {
-		state.ID = types.StringValue(fmt.Sprintf("account-%s-project-%s-nexus-endpoints", accResp.GetAccount().GetId(), projectID))
-	} else {
-		state.ID = types.StringValue(fmt.Sprintf("account-%s-nexus-endpoints", accResp.GetAccount().GetId()))
-	}
+	state.ID = types.StringValue(fmt.Sprintf("account-%s-nexus-endpoints", accResp.GetAccount().GetId()))
 	diags := resp.State.Set(ctx, &state)
 	resp.Diagnostics.Append(diags...)
 }
