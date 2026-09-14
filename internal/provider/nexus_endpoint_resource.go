@@ -14,10 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"go.temporal.io/api/common/v1"
@@ -33,6 +35,7 @@ type (
 
 	nexusEndpointResourceModel struct {
 		ID                      types.String `tfsdk:"id"`
+		ProjectID               types.String `tfsdk:"project_id"`
 		Name                    types.String `tfsdk:"name"`
 		Description             types.String `tfsdk:"description"`
 		WorkerTarget            types.Object `tfsdk:"worker_target"`
@@ -51,6 +54,7 @@ var (
 	_ resource.Resource                = (*nexusEndpointResource)(nil)
 	_ resource.ResourceWithConfigure   = (*nexusEndpointResource)(nil)
 	_ resource.ResourceWithImportState = (*nexusEndpointResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*nexusEndpointResource)(nil)
 
 	workerTargetAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -95,6 +99,24 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. A Nexus Endpoint cannot be moved between projects: changing this is rejected at plan time. To place an endpoint in a different project, destroy it and create it again.",
+				Optional:    true,
+				Computed:    true,
+				Validators: []validator.String{
+					// Only fires when the attribute is set. Omitting it is still valid and means
+					// the default project. An explicit "" is planned as a real value but the
+					// server substitutes the default project on create, so the read back would
+					// differ from the plan and fail Terraform's post-apply consistency check.
+					stringvalidator.LengthAtLeast(1),
+				},
+				PlanModifiers: []planmodifier.String{
+					// Keeps plans clean for endpoints whose state predates this attribute: an
+					// omitted value resolves to prior state instead of Unknown, so no spurious
+					// update is planned. Changing the project is rejected in ModifyPlan.
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"name": schema.StringAttribute{
 				Description: "The name of the endpoint. Must be unique within an account and match `^[a-zA-Z][a-zA-Z0-9\\-]*[a-zA-Z0-9]$`",
 				Required:    true,
@@ -131,6 +153,62 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 			}),
 		},
 	}
+}
+
+// ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not part of the
+// endpoint spec, so UpdateNexusEndpoint would silently ignore the change, succeed, and then fail
+// Terraform's post-apply consistency check after the rest of the spec had already been written.
+// Replacement is deliberately not used: destroying an endpoint breaks Nexus callers routing
+// through it, and that should be an explicit choice rather than a side effect of editing an
+// attribute. Operators who want the endpoint in another project destroy it and create it again.
+//
+// If the API gains a way to move an endpoint between projects, this guard is what gets deleted.
+// Replacing it means wiring the move into Update: compare the planned project against state, call
+// the move, and await its async operation. Two things to watch when doing that:
+//   - The move is expected to be its own RPC rather than a project_id field on the spec, so it
+//     bumps resource_version. Update cannot reuse the version it fetched for the spec write;
+//     either write the spec first and move second, or move first and then re-fetch.
+//   - That makes two async operations in one Update, so the update timeout has to cover both, and
+//     a failure between them leaves a partially applied change.
+//
+// Going from "rejected" to "moves in place" is purely additive: no schema change, no state
+// migration, and nothing can have depended on the error. Note this is only true because the guard
+// errors rather than forcing replacement -- had it replaced, anyone relying on
+// `lifecycle { prevent_destroy = true }` to block project changes would silently lose that guard.
+func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip on create and destroy; there is no prior project to move away from.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var config, state nexusEndpointResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Checked against Config rather than Plan so that omitting the attribute means "leave the
+	// endpoint where it is" rather than being read as a move. Plan would have prior state copied
+	// into it by then, making the two indistinguishable.
+	if config.ProjectID.IsNull() || config.ProjectID.IsUnknown() {
+		return
+	}
+
+	if config.ProjectID.Equal(state.ProjectID) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("project_id"),
+		"Nexus Endpoint cannot be moved between projects",
+		fmt.Sprintf(
+			"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between "+
+				"projects. To place one in a different project, destroy this endpoint and create it "+
+				"again, which interrupts any Nexus callers routing through it.",
+			state.ProjectID, config.ProjectID,
+		),
+	)
 }
 
 func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -178,6 +256,9 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
+		// Empty means the account's default project. project_id is Optional + Computed, so an
+		// unconfigured value is Unknown here and ValueString reports "".
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 
@@ -375,6 +456,7 @@ func updateNexusEndpointModelFromSpec(ctx context.Context, model *nexusEndpointR
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(nexusEndpoint.GetId())
+	model.ProjectID = types.StringValue(nexusEndpoint.GetProjectId())
 
 	model.Name = types.StringValue(nexusEndpoint.GetSpec().GetName())
 
