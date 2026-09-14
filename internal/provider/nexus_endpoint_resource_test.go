@@ -71,28 +71,26 @@ func TestAccNexusEndpointResource(t *testing.T) {
 	})
 }
 
-func testAccNamespaceResourceConfig(resourceName, name, region string, retentionDays int) string {
+func testAccNamespaceResourceConfig(resourceName, name string) string {
 	return fmt.Sprintf(`
 resource "temporalcloud_namespace" %[1]q {
   name           = %[2]q
-  regions        = [%[3]q]
+  regions        = ["aws-ca-central-1"]
   api_key_auth   = true
-  retention_days = %[4]d
+  retention_days = 1
   timeouts {
     create = "15m"
     delete = "15m"
   }
 }
-`, resourceName, name, region, retentionDays)
+`, resourceName, name)
 }
 
 func testAccNexusEndpointResourceConfig(name, description, targetNamespaceName, taskQueue string, allowedNamespaces []string) string {
-	region := "aws-ca-central-1"
-	retentionDays := 1
 	allowedNamespaceIDs := []string{}
-	namespacesConfig := testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, region, retentionDays)
+	namespacesConfig := testAccNamespaceResourceConfig("target_namespace", targetNamespaceName)
 	for _, allowedNamespace := range allowedNamespaces {
-		namespacesConfig += testAccNamespaceResourceConfig("allowed_namespace_"+allowedNamespace, allowedNamespace, region, retentionDays)
+		namespacesConfig += testAccNamespaceResourceConfig("allowed_namespace_"+allowedNamespace, allowedNamespace)
 		allowedNamespaceIDs = append(allowedNamespaceIDs, "temporalcloud_namespace.allowed_namespace_"+allowedNamespace+".id")
 	}
 	allowedNamespaceIDsStr := fmt.Sprintf("[%s]", strings.Join(allowedNamespaceIDs, ", "))
@@ -193,7 +191,7 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
     delete = "4m"
   }
 }
-`, testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, "aws-ca-central-1", 1),
+`, testAccNamespaceResourceConfig("target_namespace", targetNamespaceName),
 			projectAName, projectBName, endpointName, projectResource)
 	}
 
@@ -298,7 +296,7 @@ resource "temporalcloud_nexus_endpoint" "test_unknown_project" {
     delete = "4m"
   }
 }
-`, testAccNamespaceResourceConfig("target_namespace", targetNamespaceName, "aws-ca-central-1", 1),
+`, testAccNamespaceResourceConfig("target_namespace", targetNamespaceName),
 			projectBlock, endpointName, projectAttr)
 	}
 
