@@ -104,16 +104,13 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 				Optional:    true,
 				Computed:    true,
 				Validators: []validator.String{
-					// Only fires when the attribute is set. Omitting it is still valid and means
-					// the default project. An explicit "" is planned as a real value but the
-					// server substitutes the default project on create, so the read back would
-					// differ from the plan and fail Terraform's post-apply consistency check.
+					// Rejects an explicit "", which the server would swap for the default
+					// project, breaking the post-apply consistency check. Omitting is still valid.
 					stringvalidator.LengthAtLeast(1),
 				},
 				PlanModifiers: []planmodifier.String{
-					// Keeps plans clean for endpoints whose state predates this attribute: an
-					// omitted value resolves to prior state instead of Unknown, so no spurious
-					// update is planned. Changing the project is rejected in ModifyPlan.
+					// Resolves an omitted value to prior state, so endpoints created before this
+					// attribute existed don't plan a spurious update.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -155,26 +152,16 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 	}
 }
 
-// ModifyPlan rejects moving a Nexus Endpoint between projects, and Update guards the same rule for
-// the case this hook cannot decide (see below). project_id is not part of the
-// endpoint spec, so UpdateNexusEndpoint would silently ignore the change, succeed, and then fail
-// Terraform's post-apply consistency check after the rest of the spec had already been written.
-// Replacement is deliberately not used: destroying an endpoint breaks Nexus callers routing
-// through it, and that should be an explicit choice rather than a side effect of editing an
+// ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not in the endpoint
+// spec, so UpdateNexusEndpoint would ignore the change and succeed, leaving the endpoint where it
+// was. Update guards the same rule for the one case this hook cannot decide: an unknown value.
 //
-// If the API gains a way to move an endpoint between projects, this guard is what gets deleted.
-// Replacing it means wiring the move into Update: compare the planned project against state, call
-// the move, and await its async operation. Two things to watch when doing that:
-//   - The move is expected to be its own RPC rather than a project_id field on the spec, so it
-//     bumps resource_version. Update cannot reuse the version it fetched for the spec write;
-//     either write the spec first and move second, or move first and then re-fetch.
-//   - That makes two async operations in one Update, so the update timeout has to cover both, and
-//     a failure between them leaves a partially applied change.
+// Replacement is deliberately not used -- destroying an endpoint interrupts Nexus callers, which
+// should be a deliberate act rather than a side effect of editing an attribute.
 //
-// Going from "rejected" to "moves in place" is purely additive: no schema change, no state
-// migration, and nothing can have depended on the error. Note this is only true because the guard
-// errors rather than forcing replacement -- had it replaced, anyone relying on
-// `lifecycle { prevent_destroy = true }` to block project changes would silently lose that guard.
+// If a move API lands, delete both guards and call it from Update. It is expected to be its own
+// RPC, so it bumps resource_version: Update cannot reuse the version it fetched for the spec
+// write, and the timeout then has to cover two async operations.
 func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
 	// Skip on create and destroy; there is no prior project to move away from.
 	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
@@ -188,12 +175,10 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 		return
 	}
 
-	// An unknown configured value means the target project is created (or replaced) by this same
-	// apply, so an endpoint that already exists cannot already belong to it -- this is a move even
-	// though the destination ID is not resolved yet. It has to be rejected rather than skipped:
-	// Terraform accepts any applied value where the plan was unknown, so the post-apply
-	// consistency check would not catch the dropped move either, and the first apply would appear
-	// to succeed.
+	// An unknown value means the target project is created by this same apply, so an endpoint that
+	// already exists cannot be in it -- necessarily a move. Rejected rather than skipped because
+	// Terraform accepts any applied value where the plan was unknown, so nothing downstream would
+	// catch the dropped change.
 	if config.ProjectID.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("project_id"),
@@ -203,9 +188,8 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 		return
 	}
 
-	// Checked against Config rather than Plan so that omitting the attribute means "leave the
-	// endpoint where it is" rather than being read as a move. Plan would have prior state copied
-	// into it by then, making the two indistinguishable.
+	// Config, not Plan: by now Plan has prior state copied into it, so an omitted attribute and one
+	// set to the current project are indistinguishable there.
 	if config.ProjectID.IsNull() || config.ProjectID.Equal(state.ProjectID) {
 		return
 	}
@@ -217,8 +201,7 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 	)
 }
 
-// projectMoveNotSupportedDetail is shared by the plan-time and apply-time guards so the two cannot
-// drift apart.
+// projectMoveNotSupportedDetail keeps the plan-time and apply-time guards in sync.
 func projectMoveNotSupportedDetail(from, to string) string {
 	return fmt.Sprintf(
 		"project_id is %q and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
@@ -271,8 +254,8 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
-		// Empty means the account's default project. project_id is Optional + Computed, so an
-		// unconfigured value is Unknown here and ValueString reports "".
+		// Empty means the account's default project; an unconfigured Optional+Computed value is
+		// Unknown here, which ValueString reports as "".
 		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
@@ -349,10 +332,9 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	// ModifyPlan rejects project changes at plan time, but it cannot compare a value that is still
-	// unknown then. By now it is resolved, so compare against the live endpoint. Checked before any
-	// write, otherwise the rest of the spec would be applied while the project change was silently
-	// dropped -- UpdateNexusEndpoint carries no project_id.
+	// Backstop for the unknown value ModifyPlan cannot compare; it is resolved by now. Checked
+	// before any write, since the spec update carries no project_id and would otherwise succeed
+	// while dropping the change.
 	if currentProjectID := nexusEndpoint.GetEndpoint().GetProjectId(); !plan.ProjectID.IsNull() &&
 		!plan.ProjectID.IsUnknown() && plan.ProjectID.ValueString() != currentProjectID {
 		resp.Diagnostics.AddAttributeError(
