@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -14,10 +15,12 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
 	"go.temporal.io/api/common/v1"
@@ -33,6 +36,7 @@ type (
 
 	nexusEndpointResourceModel struct {
 		ID                      types.String `tfsdk:"id"`
+		ProjectID               types.String `tfsdk:"project_id"`
 		Name                    types.String `tfsdk:"name"`
 		Description             types.String `tfsdk:"description"`
 		WorkerTarget            types.Object `tfsdk:"worker_target"`
@@ -51,6 +55,7 @@ var (
 	_ resource.Resource                = (*nexusEndpointResource)(nil)
 	_ resource.ResourceWithConfigure   = (*nexusEndpointResource)(nil)
 	_ resource.ResourceWithImportState = (*nexusEndpointResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*nexusEndpointResource)(nil)
 
 	workerTargetAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -95,6 +100,21 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Cannot be changed after creation.",
+				Optional:    true,
+				Computed:    true,
+				Validators: []validator.String{
+					// Rejects an explicit "", which the server would swap for the default
+					// project, breaking the post-apply consistency check. Omitting is still valid.
+					stringvalidator.LengthAtLeast(1),
+				},
+				PlanModifiers: []planmodifier.String{
+					// Resolves an omitted value to prior state, so endpoints created before this
+					// attribute existed don't plan a spurious update.
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"name": schema.StringAttribute{
 				Description: "The name of the endpoint. Must be unique within an account and match `^[a-zA-Z][a-zA-Z0-9\\-]*[a-zA-Z0-9]$`",
 				Required:    true,
@@ -131,6 +151,63 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 			}),
 		},
 	}
+}
+
+// ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not in the endpoint
+// spec, so UpdateNexusEndpoint would ignore the change and succeed, leaving the endpoint where it
+// was. Update guards the same rule for the one case this hook cannot decide: an unknown value.
+//
+// Replacement is deliberately not used -- destroying an endpoint interrupts Nexus callers, which
+// should be a deliberate act rather than a side effect of editing an attribute.
+//
+// If a move API lands, delete both guards and call it from Update. It is expected to be its own
+// RPC, so it bumps resource_version: Update cannot reuse the version it fetched for the spec
+// write, and the timeout then has to cover two async operations.
+func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip on create and destroy; there is no prior project to move away from.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var config, state nexusEndpointResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// An unknown value means the target project is created by this same apply, so an endpoint that
+	// already exists cannot be in it -- necessarily a move. Rejected rather than skipped because
+	// Terraform accepts any applied value where the plan was unknown, so nothing downstream would
+	// catch the dropped change.
+	if config.ProjectID.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("project_id"),
+			"Nexus Endpoint cannot be moved between projects",
+			projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), "a project created by this configuration"),
+		)
+		return
+	}
+
+	// Config, not Plan: by now Plan has prior state copied into it, so an omitted attribute and one
+	// set to the current project are indistinguishable there.
+	if config.ProjectID.IsNull() || config.ProjectID.Equal(state.ProjectID) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("project_id"),
+		"Nexus Endpoint cannot be moved between projects",
+		projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), strconv.Quote(config.ProjectID.ValueString())),
+	)
+}
+
+// projectMoveNotSupportedDetail keeps the plan-time and apply-time guards in sync.
+func projectMoveNotSupportedDetail(from, to string) string {
+	return fmt.Sprintf(
+		"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
+		from, to,
+	)
 }
 
 func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -178,6 +255,9 @@ func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateR
 			TargetSpec:  targetSpec,
 			PolicySpecs: policySpecs,
 		},
+		// Empty means the account's default project; an unconfigured Optional+Computed value is
+		// Unknown here, which ValueString reports as "".
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 
@@ -250,6 +330,19 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get current Nexus endpoint status", err.Error())
+		return
+	}
+
+	// Backstop for the unknown value ModifyPlan cannot compare; it is resolved by now. Checked
+	// before any write, since the spec update carries no project_id and would otherwise succeed
+	// while dropping the change.
+	if currentProjectID := nexusEndpoint.GetEndpoint().GetProjectId(); !plan.ProjectID.IsNull() &&
+		!plan.ProjectID.IsUnknown() && plan.ProjectID.ValueString() != currentProjectID {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("project_id"),
+			"Nexus Endpoint cannot be moved between projects",
+			projectMoveNotSupportedDetail(strconv.Quote(currentProjectID), strconv.Quote(plan.ProjectID.ValueString())),
+		)
 		return
 	}
 
@@ -375,6 +468,7 @@ func updateNexusEndpointModelFromSpec(ctx context.Context, model *nexusEndpointR
 	var diags diag.Diagnostics
 
 	model.ID = types.StringValue(nexusEndpoint.GetId())
+	model.ProjectID = types.StringValue(nexusEndpoint.GetProjectId())
 
 	model.Name = types.StringValue(nexusEndpoint.GetSpec().GetName())
 
