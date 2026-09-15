@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -183,7 +184,7 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 		resp.Diagnostics.AddAttributeError(
 			path.Root("project_id"),
 			"Nexus Endpoint cannot be moved between projects",
-			projectMoveNotSupportedDetail(state.ProjectID.ValueString(), "a project created by this configuration"),
+			projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), "a project created by this configuration"),
 		)
 		return
 	}
@@ -197,14 +198,14 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 	resp.Diagnostics.AddAttributeError(
 		path.Root("project_id"),
 		"Nexus Endpoint cannot be moved between projects",
-		projectMoveNotSupportedDetail(state.ProjectID.ValueString(), config.ProjectID.ValueString()),
+		projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), strconv.Quote(config.ProjectID.ValueString())),
 	)
 }
 
 // projectMoveNotSupportedDetail keeps the plan-time and apply-time guards in sync.
 func projectMoveNotSupportedDetail(from, to string) string {
 	return fmt.Sprintf(
-		"project_id is %q and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
+		"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
 		from, to,
 	)
 }
@@ -340,7 +341,7 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		resp.Diagnostics.AddAttributeError(
 			path.Root("project_id"),
 			"Nexus Endpoint cannot be moved between projects",
-			projectMoveNotSupportedDetail(currentProjectID, fmt.Sprintf("%q", plan.ProjectID.ValueString())),
+			projectMoveNotSupportedDetail(strconv.Quote(currentProjectID), strconv.Quote(plan.ProjectID.ValueString())),
 		)
 		return
 	}
