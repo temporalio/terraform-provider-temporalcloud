@@ -27,5 +27,6 @@ Fetches details about a connectivity rule.
 - `created_at` (String) The time the connectivity rule was created.
 - `enable_stable_ips` (Boolean) If true, namespaces attached to this public connectivity rule are reachable via a predictable set of public IPs. Only set for public connectivity rules.
 - `gcp_project_id` (String) The GCP project ID of the connectivity rule.
+- `project_id` (String) The ID of the Temporal Cloud project the connectivity rule belongs to.
 - `region` (String) The region of the connectivity rule.
 - `state` (String) The current state of the connectivity rule.

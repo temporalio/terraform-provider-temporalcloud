@@ -36,6 +36,18 @@ resource "temporalcloud_connectivity_rule" "public_rule_stable_ips" {
   enable_stable_ips = true
 }
 
+// Create Public Connectivity Rule in a specific project. Rules are created in the account's
+// default project unless project_id is set, and can only be attached to namespaces in the same
+// project as the rule.
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_connectivity_rule" "public_rule_in_project" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.payments.id
+}
+
 // Create Private Connectivity Rule for AWS
 resource "temporalcloud_connectivity_rule" "private_aws" {
   connectivity_type = "private"
@@ -83,6 +95,7 @@ resource "temporalcloud_namespace" "ns-with-cr" {
 - `connection_id` (String) The connection ID of the private connection. Not applicable for Azure, where this is populated automatically after the Private Endpoint connection is approved.
 - `enable_stable_ips` (Boolean) If true, namespaces attached to this public connectivity rule will be reachable via a predictable set of public IPs. Only applies when connectivity_type is 'public'.
 - `gcp_project_id` (String) The GCP project ID. Required when region is 'gcp'.
+- `project_id` (String) The ID of the Temporal Cloud project this Connectivity Rule belongs to. If not provided, the Connectivity Rule is created in the account's default project. This rule can only be attached to namespaces in the same project. Cannot be changed after creation; the rule must be destroyed and recreated in the other project.
 - `region` (String) The region of the connection. Example: 'aws-us-west-2', 'gcp-us-central1', 'azure-centralus'.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
