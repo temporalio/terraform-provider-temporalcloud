@@ -110,10 +110,8 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 					stringvalidator.LengthAtLeast(1),
 				},
 				PlanModifiers: []planmodifier.String{
-					// Defensive only. Terraform already carries a known prior value forward for an
-					// omitted Optional+Computed attribute, and this modifier is a no-op when prior
-					// state is null -- which is exactly the case for endpoints created before this
-					// attribute existed. Neither case plans a spurious update.
+					// Keeps plans clean for endpoints that do not configure project_id. It copies
+					// a null out of state that predates this attribute, which ModifyPlan undoes.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -184,7 +182,16 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 	// has not filled it in. There is nothing to compare against, and rejecting would block a
 	// config that merely pins the project the endpoint is already in. Update decides these by
 	// comparing against the live endpoint.
+	//
+	// Restore unknown first. UseStateForUnknown guards on the whole resource's state being null
+	// (i.e. "is this a create"), not the attribute's, so it has already copied that null prior
+	// value into the plan. Leaving it there would promise null while the apply writes the real
+	// project ID, which Terraform rejects as an inconsistent result after apply. Unknown is the
+	// honest plan: the project is not known until the endpoint is read.
 	if state.ProjectID.IsNull() || state.ProjectID.IsUnknown() {
+		if config.ProjectID.IsNull() {
+			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("project_id"), types.StringUnknown())...)
+		}
 		return
 	}
 
