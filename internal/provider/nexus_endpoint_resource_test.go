@@ -226,7 +226,7 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 			{
 				// project_id is not part of the endpoint spec, so it cannot be updated in place.
 				// Rejected at plan time rather than replaced: destroying the endpoint interrupts
-				// Nexus callers, so it has to be an explicit choice via -replace.
+				// Nexus callers, so it is not done as a side effect of editing an attribute.
 				Config:      config("temporalcloud_project.project_b.id"),
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile("cannot be moved between projects"),

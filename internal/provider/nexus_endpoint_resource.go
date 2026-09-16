@@ -110,8 +110,10 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 					stringvalidator.LengthAtLeast(1),
 				},
 				PlanModifiers: []planmodifier.String{
-					// Resolves an omitted value to prior state, so endpoints created before this
-					// attribute existed don't plan a spurious update.
+					// Defensive only. Terraform already carries a known prior value forward for an
+					// omitted Optional+Computed attribute, and this modifier is a no-op when prior
+					// state is null -- which is exactly the case for endpoints created before this
+					// attribute existed. Neither case plans a spurious update.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -155,7 +157,8 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 
 // ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not in the endpoint
 // spec, so UpdateNexusEndpoint would ignore the change and succeed, leaving the endpoint where it
-// was. Update guards the same rule for the one case this hook cannot decide: an unknown value.
+// was. Update guards the same rule for the cases this hook cannot decide, where the endpoint's
+// current project is unknown at plan time.
 //
 // Replacement is deliberately not used -- destroying an endpoint interrupts Nexus callers, which
 // should be a deliberate act rather than a side effect of editing an attribute.
@@ -176,10 +179,20 @@ func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.Mod
 		return
 	}
 
-	// An unknown value means the target project is created by this same apply, so an endpoint that
-	// already exists cannot be in it -- necessarily a move. Rejected rather than skipped because
-	// Terraform accepts any applied value where the plan was unknown, so nothing downstream would
-	// catch the dropped change.
+	// A null or unknown prior value means the endpoint's current project is not known here --
+	// typically state written before this attribute existed, planned with -refresh=false so Read
+	// has not filled it in. There is nothing to compare against, and rejecting would block a
+	// config that merely pins the project the endpoint is already in. Update decides these by
+	// comparing against the live endpoint.
+	if state.ProjectID.IsNull() || state.ProjectID.IsUnknown() {
+		return
+	}
+
+	// An unknown configured value cannot be compared. Rejected here rather than deferred so the
+	// failure lands at plan time: the Update guard would still catch it at apply, but Terraform's
+	// own consistency check would not, since it accepts any applied value where the plan was
+	// unknown. Usually caused by a target project created in this same apply, which an endpoint
+	// that already exists cannot be in.
 	if config.ProjectID.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("project_id"),
@@ -333,9 +346,11 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	// Backstop for the unknown value ModifyPlan cannot compare; it is resolved by now. Checked
-	// before any write, since the spec update carries no project_id and would otherwise succeed
-	// while dropping the change.
+	// Covers what ModifyPlan deliberately skips: a change whose prior project was not known at
+	// plan time. Comparing against the live endpoint rather than against state also catches the
+	// endpoint having moved server-side since the last refresh. Not dead code -- ModifyPlan cannot
+	// decide either case. Checked before any write, since the spec update carries no project_id
+	// and would otherwise succeed while silently dropping the change.
 	if currentProjectID := nexusEndpoint.GetEndpoint().GetProjectId(); !plan.ProjectID.IsNull() &&
 		!plan.ProjectID.IsUnknown() && plan.ProjectID.ValueString() != currentProjectID {
 		resp.Diagnostics.AddAttributeError(
