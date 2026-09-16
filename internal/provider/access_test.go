@@ -2,10 +2,15 @@ package provider
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	identityv1 "go.temporal.io/cloud-sdk/api/identity/v1"
+
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 func TestGetCustomRolesRoundTrip(t *testing.T) {
@@ -126,59 +131,145 @@ func TestGetAccountAccessFromModel(t *testing.T) {
 	}
 }
 
-func TestPreserveProjectAccesses(t *testing.T) {
+func TestProjectAccessRevocationWarning(t *testing.T) {
 	t.Parallel()
 
-	grants := map[string]*identityv1.ProjectAccess{
-		"project-abc": {Role: identityv1.ProjectAccess_PROJECT_ROLE_ADMIN},
+	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	emptySet := types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{})
+	unknownSet := types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})
+
+	cases := []struct {
+		name        string
+		state       types.Set
+		config      types.Set
+		wantWarning bool
+	}{
+		{name: "no roles in state", state: nullSet, config: nullSet},
+		{name: "empty state set", state: emptySet, config: nullSet},
+		{name: "roles kept in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-a")},
+		{name: "roles replaced in configuration", state: projectAccessSet("project-a"), config: projectAccessSet("project-b")},
+		{name: "configuration is not known until apply", state: projectAccessSet("project-a"), config: unknownSet},
+		// An attribute absent from configuration is the case worth warning about: the roles leave
+		// the diff without ever having been mentioned.
+		{name: "roles absent from configuration", state: projectAccessSet("project-a", "project-b"), config: nullSet, wantWarning: true},
+		{name: "configuration empties the set", state: projectAccessSet("project-a"), config: emptySet, wantWarning: true},
 	}
 
-	t.Run("carries grants onto a freshly built access", func(t *testing.T) {
-		t.Parallel()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		built := &identityv1.Access{AccountAccess: &identityv1.AccountAccess{Role: identityv1.AccountAccess_ROLE_READ}}
-		current := &identityv1.Access{ProjectAccesses: grants}
+			diags := projectAccessRevocationWarning(tc.state, tc.config)
 
-		preserveProjectAccesses(built, current)
+			if diags.HasError() {
+				t.Fatalf("expected no errors, got %+v", diags)
+			}
+			if got := diags.WarningsCount(); got != boolToCount(tc.wantWarning) {
+				t.Fatalf("expected %d warnings, got %d: %+v", boolToCount(tc.wantWarning), got, diags)
+			}
+		})
+	}
+}
 
-		if len(built.GetProjectAccesses()) != 1 {
-			t.Fatalf("expected 1 preserved grant, got %d", len(built.GetProjectAccesses()))
+func boolToCount(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func TestProjectAccessRevocationOnCreateWarning(t *testing.T) {
+	t.Parallel()
+
+	held := func(projectIDs ...string) map[string]*identityv1.ProjectAccess {
+		accesses := make(map[string]*identityv1.ProjectAccess, len(projectIDs))
+		for _, projectID := range projectIDs {
+			accesses[projectID] = &identityv1.ProjectAccess{Role: identityv1.ProjectAccess_PROJECT_ROLE_READ}
 		}
-		if got := built.GetProjectAccesses()["project-abc"].GetRole(); got != identityv1.ProjectAccess_PROJECT_ROLE_ADMIN {
-			t.Errorf("expected admin role, got %v", got)
-		}
-		// Preserving must not disturb the access the caller built from configuration.
-		if built.GetAccountAccess().GetRole() != identityv1.AccountAccess_ROLE_READ {
-			t.Error("account access was modified")
-		}
+		return accesses
+	}
+	nullSet := types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	unknownSet := types.SetUnknown(types.ObjectType{AttrTypes: projectAccessAttrs})
+
+	cases := []struct {
+		name    string
+		current map[string]*identityv1.ProjectAccess
+		config  types.Set
+		// wantRevoked lists the project ids the warning must name. Empty means no warning at all.
+		wantRevoked []string
+	}{
+		{name: "group holds no roles", current: nil, config: nullSet},
+		{name: "group holds no roles and configuration adds some", current: nil, config: projectAccessSet("project-a")},
+		{name: "configuration names every role the group holds", current: held("project-a"), config: projectAccessSet("project-a")},
+		// A create has no prior state, so an omitted role appears nowhere in the plan. Unlike the
+		// update path, configuration naming some roles is not enough to stay quiet.
+		{name: "configuration replaces the roles", current: held("project-a"), config: projectAccessSet("project-b"), wantRevoked: []string{"project-a"}},
+		{name: "configuration names only some of the roles", current: held("project-a", "project-b"), config: projectAccessSet("project-a"), wantRevoked: []string{"project-b"}},
+		{name: "configuration omits the group's roles", current: held("project-a", "project-b"), config: nullSet, wantRevoked: []string{"project-a", "project-b"}},
+		// Ids that arrive at apply time cannot be matched against the ones the group holds.
+		{name: "configuration is not known until apply", current: held("project-a"), config: unknownSet},
+		{name: "a project id is not known until apply", current: held("project-a"), config: projectAccessSetWithUnknownID()},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := projectAccessRevocationOnCreateWarning(context.Background(), tc.current, tc.config)
+
+			if diags.HasError() {
+				t.Fatalf("expected no errors, got %+v", diags)
+			}
+
+			warnings := diags.Warnings()
+			if len(tc.wantRevoked) == 0 {
+				if len(warnings) != 0 {
+					t.Fatalf("expected no warnings, got %+v", warnings)
+				}
+				return
+			}
+			if len(warnings) != 1 {
+				t.Fatalf("expected 1 warning, got %d: %+v", len(warnings), warnings)
+			}
+
+			// The plan shows nothing on create, so the message is the only place these ids appear.
+			detail := warnings[0].Detail()
+			for _, projectID := range tc.wantRevoked {
+				if !strings.Contains(detail, projectID) {
+					t.Errorf("warning does not name %q: %s", projectID, detail)
+				}
+			}
+			for projectID := range tc.current {
+				if slices.Contains(tc.wantRevoked, projectID) {
+					continue
+				}
+				if strings.Contains(detail, projectID) {
+					t.Errorf("warning names %q, which configuration keeps: %s", projectID, detail)
+				}
+			}
+		})
+	}
+}
+
+// projectAccessSetWithUnknownID builds the shape a plan carries when project_id references a
+// project that is created by the same apply.
+func projectAccessSetWithUnknownID() types.Set {
+	return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{
+		types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+			"project_id": types.StringUnknown(),
+			"role":       internaltypes.CaseInsensitiveString("read"),
+		}),
 	})
+}
 
-	t.Run("no grants server-side leaves the built access alone", func(t *testing.T) {
-		t.Parallel()
+func projectAccessSet(projectIDs ...string) types.Set {
+	objects := make([]attr.Value, 0, len(projectIDs))
+	for _, projectID := range projectIDs {
+		objects = append(objects, types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
+			"project_id": types.StringValue(projectID),
+			"role":       internaltypes.CaseInsensitiveString("read"),
+		}))
+	}
 
-		built := &identityv1.Access{}
-		preserveProjectAccesses(built, &identityv1.Access{})
-
-		if built.GetProjectAccesses() != nil {
-			t.Errorf("expected nil, got %v", built.GetProjectAccesses())
-		}
-	})
-
-	t.Run("nil current access is tolerated", func(t *testing.T) {
-		t.Parallel()
-
-		built := &identityv1.Access{}
-		preserveProjectAccesses(built, nil)
-
-		if built.GetProjectAccesses() != nil {
-			t.Errorf("expected nil, got %v", built.GetProjectAccesses())
-		}
-	})
-
-	// A namespace-scoped service account has no Access message at all.
-	t.Run("nil built access does not panic", func(t *testing.T) {
-		t.Parallel()
-
-		preserveProjectAccesses(nil, &identityv1.Access{ProjectAccesses: grants})
-	})
+	return types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, objects)
 }

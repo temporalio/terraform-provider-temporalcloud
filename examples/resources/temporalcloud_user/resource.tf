@@ -32,3 +32,18 @@ resource "temporalcloud_user" "namespace_admin" {
     }
   ]
 }
+
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_user" "project_member" {
+  email          = "member@yourdomain.com"
+  account_access = "read"
+  project_accesses = [
+    {
+      project_id = temporalcloud_project.payments.id
+      role       = "contribute"
+    }
+  ]
+}

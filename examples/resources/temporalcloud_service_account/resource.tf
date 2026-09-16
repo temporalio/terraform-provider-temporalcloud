@@ -48,3 +48,18 @@ resource "temporalcloud_apikey" "metrics" {
   expiry_time  = "2027-11-01T00:00:00Z"
   disabled     = false
 }
+
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_service_account" "project_worker" {
+  name           = "payments-worker"
+  account_access = "read"
+  project_accesses = [
+    {
+      project_id = temporalcloud_project.payments.id
+      role       = "contribute"
+    }
+  ]
+}

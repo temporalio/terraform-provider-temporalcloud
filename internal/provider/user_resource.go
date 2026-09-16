@@ -38,6 +38,7 @@ type (
 		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -52,6 +53,7 @@ var (
 	_ resource.Resource                = (*userResource)(nil)
 	_ resource.ResourceWithConfigure   = (*userResource)(nil)
 	_ resource.ResourceWithImportState = (*userResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*userResource)(nil)
 
 	userNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
@@ -83,6 +85,23 @@ func (r *userResource) Configure(_ context.Context, req resource.ConfigureReques
 
 func (r *userResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_user"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *userResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// A create has no prior roles, and deleting the user revokes its roles by definition.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var state, config userResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
 }
 
 func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -150,12 +169,19 @@ func (r *userResource) Create(ctx context.Context, req resource.CreateRequest, r
 		return
 	}
 
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	svcResp, err := r.client.CloudService().CreateUser(ctx, &cloudservicev1.CreateUserRequest{
 		Spec: &identityv1.UserSpec{
 			Email: plan.Email.ValueString(),
 			Access: &identityv1.Access{
 				AccountAccess:     accountAccess,
 				NamespaceAccesses: namespaceAccesses,
+				ProjectAccesses:   projectAccesses,
 			},
 		},
 		AsyncOperationId: uuid.New().String(),
@@ -244,11 +270,17 @@ func (r *userResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
-	preserveProjectAccesses(access, currentUser.GetUser().GetSpec().GetAccess())
 
 	svcResp, err := r.client.CloudService().UpdateUser(ctx, &cloudservicev1.UpdateUserRequest{
 		UserId: plan.ID.ValueString(),
@@ -411,6 +443,13 @@ func updateUserModelFromSpec(ctx context.Context, state *userResourceModel, user
 		return diags
 	}
 	state.AccountAccessCustomRoles = accountAccessCustomRoles
+
+	projectAccesses, d := getProjectSetFromSpec(ctx, user.GetSpec().GetAccess())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.ProjectAccesses = projectAccesses
 
 	namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: userNamespaceAccessAttrs})
 	if len(user.GetSpec().GetAccess().GetNamespaceAccesses()) > 0 {
