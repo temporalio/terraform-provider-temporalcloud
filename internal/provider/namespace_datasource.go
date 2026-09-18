@@ -63,7 +63,7 @@ func (d *namespaceDataSource) Read(ctx context.Context, req datasource.ReadReque
 		return
 	}
 
-	namespaceResp, err := d.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	namespaceResp, err := d.client.DevelopmentCloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: input.ID.ValueString(),
 	})
 	if err != nil {
