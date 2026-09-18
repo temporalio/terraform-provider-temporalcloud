@@ -263,11 +263,30 @@ func TestAccConnectivityRuleResource_ValidationErrors(t *testing.T) {
 				// Should fail because connection_id is populated automatically for Azure
 				ExpectError: regexp.MustCompile("connection_id must not be specified when region is azure"),
 			},
+			{
+				Config: testAccConnectivityRuleResourceConfig_EmptyProjectId(),
+				// Should fail validation. Omitting project_id is valid and means the default
+				// project, but an explicit "" would be planned as a real value while the server
+				// substitutes the default project, failing the post-apply consistency check.
+				ExpectError: regexp.MustCompile("string length must be at least 1"),
+			},
 		},
 	})
 }
 
 // Test configuration functions.
+func testAccConnectivityRuleResourceConfig_EmptyProjectId() string {
+	return `
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_connectivity_rule" "test_empty_project" {
+  connectivity_type = "public"
+  project_id        = ""
+}
+`
+}
+
 func testAccConnectivityRuleResourceConfig_Public() string {
 	return `
 provider "temporalcloud" {
