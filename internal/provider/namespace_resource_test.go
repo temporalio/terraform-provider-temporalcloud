@@ -149,6 +149,17 @@ PEM
 			{
 				// New namespace with retention of 7
 				Config: config(name, 7, true, description),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Omitting project_id creates the namespace in the account's default project, whose
+					// real ID is reported on read.
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "project_id"),
+				),
+			},
+			// project_id is Optional+Computed, so omitting it must not leave a perpetual diff. This
+			// relies on UseStateForUnknown putting the project read back from the API into the plan.
+			{
+				Config:   config(name, 7, true, description),
+				PlanOnly: true,
 			},
 			{
 				Config: config(name, 14, true, description),
@@ -352,6 +363,56 @@ func TestValidateRegionsWithConfig(t *testing.T) {
 			}
 			if tc.wantWarning && len(diags) == 0 {
 				t.Error("expected warning diagnostic, got none")
+			}
+		})
+	}
+}
+
+func TestValidateProjectIDUnchanged(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		state     types.String
+		plan      types.String
+		wantError bool
+	}{
+		{
+			name:  "same project passes",
+			state: types.StringValue("project-a"),
+			plan:  types.StringValue("project-a"),
+		},
+		{
+			name:      "different project is rejected",
+			state:     types.StringValue("project-a"),
+			plan:      types.StringValue("project-b"),
+			wantError: true,
+		},
+		{
+			// A project created in the same apply has no ID at plan time; Update checks it later.
+			name:  "unknown plan value is skipped",
+			state: types.StringValue("project-a"),
+			plan:  types.StringUnknown(),
+		},
+		{
+			// State written before project_id existed has no value to compare against.
+			name:  "null state value is skipped",
+			state: types.StringNull(),
+			plan:  types.StringValue("project-b"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := validateProjectIDUnchanged(tc.state, tc.plan)
+
+			if tc.wantError && !diags.HasError() {
+				t.Error("expected error diagnostic, got none")
+			}
+			if !tc.wantError && diags.HasError() {
+				t.Errorf("unexpected error diagnostics: %+v", diags)
 			}
 		})
 	}
@@ -837,6 +898,75 @@ PEM
 				ResourceName:      "temporalcloud_namespace.test",
 				ImportState:       true,
 				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
+func TestAccNamespaceWithProject(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-project-namespace", randomString(10))
+	projectName := createRandomName()
+
+	// projectID is an HCL expression rather than a literal so that steps can point the namespace at
+	// the test project or at a different, made-up project. includeNamespace=false leaves only the
+	// project in the config.
+	config := func(projectID string, includeNamespace bool) string {
+		namespace := ""
+		if includeNamespace {
+			namespace = fmt.Sprintf(`
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+  project_id     = %s
+}`, name, projectID)
+		}
+		return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "%s"
+}
+%s
+`, projectName, namespace)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create the namespace in an explicit project. The project is created in the same apply,
+			// so project_id is unknown at plan time and only resolves during apply.
+			{
+				Config: config("temporalcloud_project.test.id", true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.test", "id",
+					),
+				),
+			},
+			{
+				ResourceName:      "temporalcloud_namespace.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			// Moving the namespace to another project is rejected at plan time instead of replacing
+			// the namespace. The guard runs before any API call, so the target project does not have
+			// to exist.
+			{
+				Config:      config(`"00000000000000000000000000000000"`, true),
+				ExpectError: regexp.MustCompile("project_id cannot be changed"),
+			},
+			// Destroy the namespace in its own step, leaving only the project for the post-test
+			// destroy. DeleteProject rejects a project that still holds resources, but a resource's
+			// delete operation reports fulfilled before its row is gone, so deleting both in one pass
+			// makes the project delete fail. Separating them puts a plan and an apply between the two
+			// deletes.
+			{
+				Config: config("", false),
 			},
 		},
 	})

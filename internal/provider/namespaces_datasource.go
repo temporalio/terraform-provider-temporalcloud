@@ -43,6 +43,7 @@ type (
 		ID                     types.String                  `tfsdk:"id"`
 		Name                   types.String                  `tfsdk:"name"`
 		Description            types.String                  `tfsdk:"description"`
+		ProjectID              types.String                  `tfsdk:"project_id"`
 		State                  types.String                  `tfsdk:"state"`
 		ActiveRegion           types.String                  `tfsdk:"active_region"`
 		Regions                types.List                    `tfsdk:"regions"`
@@ -167,6 +168,10 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 		"description": schema.StringAttribute{
 			Computed:    true,
 			Description: "The description of the namespace, if set.",
+		},
+		"project_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "The ID of the Temporal Cloud project the namespace belongs to.",
 		},
 		"certificate_filters": schema.ListNestedAttribute{
 			Computed:    true,
@@ -388,6 +393,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 		ID:               types.StringValue(ns.Namespace),
 		Name:             types.StringValue(ns.GetSpec().GetName()),
 		Description:      types.StringValue(ns.GetSpec().GetDescription()),
+		ProjectID:        types.StringValue(ns.GetProjectId()),
 		State:            types.StringValue(stateStr),
 		ActiveRegion:     types.StringValue(ns.ActiveRegion),
 		AcceptedClientCA: types.StringValue(base64.StdEncoding.EncodeToString(ns.GetSpec().GetMtlsAuth().GetAcceptedClientCa())),

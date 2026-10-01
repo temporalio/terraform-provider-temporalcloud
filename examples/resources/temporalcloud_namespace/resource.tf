@@ -120,3 +120,17 @@ resource "temporalcloud_namespace" "terraform4" {
     "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
   ]
 }
+
+// Create a namespace in a specific project. Namespaces are created in the account's default project
+// unless project_id is set. project_id cannot be changed after the namespace is created.
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_namespace" "terraform5" {
+  name           = "terraform5"
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 14
+  project_id     = temporalcloud_project.payments.id
+}
