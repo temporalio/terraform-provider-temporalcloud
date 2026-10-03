@@ -918,7 +918,7 @@ func newConnection(t *testing.T) cloudservicev1.CloudServiceClient {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	return client.DevelopmentCloudService()
+	return client.CloudService()
 }
 
 func TestAccNamespaceWithConnectivityRuleIds(t *testing.T) {

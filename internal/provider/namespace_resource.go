@@ -715,12 +715,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		spec.MtlsAuth = mtls
 	}
 
-	namespaceService := r.client.CloudService()
-	if !plan.EncryptionValidation.IsZero(ctx) {
-		namespaceService = r.client.DevelopmentCloudService()
-	}
-
-	svcResp, err := namespaceService.CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
+	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec:             spec,
 		AsyncOperationId: uuid.New().String(),
 	})
@@ -734,7 +729,7 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	ns, err := waitForNamespaceAvailable(ctx, namespaceService, svcResp.Namespace)
+	ns, err := waitForNamespaceAvailable(ctx, r.client, svcResp.Namespace)
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get namespace after creation", err.Error())
 		return
@@ -756,7 +751,7 @@ func (r *namespaceResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	model, err := r.client.DevelopmentCloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	model, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: state.ID.ValueString(),
 	})
 	if err != nil {
@@ -859,7 +854,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	currentNs, err := r.client.DevelopmentCloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	currentNs, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -956,12 +951,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	namespaceService := r.client.CloudService()
-	if !plan.EncryptionValidation.IsZero(ctx) {
-		namespaceService = r.client.DevelopmentCloudService()
-	}
-
-	svcResp, err := namespaceService.UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
 		Namespace:        plan.ID.ValueString(),
 		Spec:             spec,
 		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
@@ -977,7 +967,7 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	ns, err := r.client.DevelopmentCloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
 		Namespace: plan.ID.ValueString(),
 	})
 	if err != nil {
@@ -1067,9 +1057,9 @@ func defaultWaitForNamespaceAvailableConfig() waitForNamespaceAvailableConfig {
 	}
 }
 
-func waitForNamespaceAvailable(ctx context.Context, service cloudservicev1.CloudServiceClient, namespaceID string) (*namespacev1.Namespace, error) {
+func waitForNamespaceAvailable(ctx context.Context, client *client.Client, namespaceID string) (*namespacev1.Namespace, error) {
 	getNamespaceFunc := func(ctx context.Context, req *cloudservicev1.GetNamespaceRequest) (*cloudservicev1.GetNamespaceResponse, error) {
-		return service.GetNamespace(ctx, req)
+		return client.CloudService().GetNamespace(ctx, req)
 	}
 	return waitForNamespaceAvailableWithConfig(ctx, getNamespaceFunc, namespaceID, defaultWaitForNamespaceAvailableConfig())
 }

@@ -374,7 +374,7 @@ func (d *namespacesDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	var namespaces []*namespacev1.Namespace
 	pageToken := ""
 	for {
-		r, err := d.client.DevelopmentCloudService().GetNamespaces(ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
+		r, err := d.client.CloudService().GetNamespaces(ctx, &cloudservicev1.GetNamespacesRequest{PageToken: pageToken})
 		if err != nil {
 			resp.Diagnostics.AddError("Unable to fetch namespaces", err.Error())
 			return
