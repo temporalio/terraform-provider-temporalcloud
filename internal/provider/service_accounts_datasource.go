@@ -34,6 +34,7 @@ type (
 		AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 		AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 		NamespaceScopedAccess    types.Object                             `tfsdk:"namespace_scoped_access"`
 		CreatedAt                types.String                             `tfsdk:"created_at"`
 		UpdatedAt                types.String                             `tfsdk:"updated_at"`
@@ -129,6 +130,7 @@ func serviceAccountSchema(idRequired bool) map[string]schema.Attribute {
 				},
 			},
 		},
+		"project_accesses": projectAccessesDataSourceSchema("service account"),
 		"namespace_scoped_access": schema.SingleNestedAttribute{
 			Description: "The namespace-scoped access configuration for this service account.",
 			Computed:    true,
@@ -257,6 +259,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 		serviceAccountModel.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
 		serviceAccountModel.AccountAccessCustomRoles = types.SetNull(types.StringType)
 		serviceAccountModel.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+		serviceAccountModel.ProjectAccesses = types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
 	} else {
 		// Handle account-scoped service account
 		role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
@@ -272,6 +275,13 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 			return nil, diags
 		}
 		serviceAccountModel.AccountAccessCustomRoles = accountAccessCustomRoles
+
+		projectAccesses, d := getProjectSetFromSpec(ctx, sa.GetSpec().GetAccess())
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		serviceAccountModel.ProjectAccesses = projectAccesses
 
 		namespaceAccesses := types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
 
