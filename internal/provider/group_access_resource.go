@@ -57,12 +57,14 @@ type groupAccessResourceModel struct {
 	AccountAccess            internaltypes.CaseInsensitiveStringValue `tfsdk:"account_access"`
 	AccountAccessCustomRoles types.Set                                `tfsdk:"account_access_custom_roles"`
 	NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
+	ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 }
 
 var (
 	_ resource.Resource                = (*groupAccessResource)(nil)
 	_ resource.ResourceWithConfigure   = (*groupAccessResource)(nil)
 	_ resource.ResourceWithImportState = (*groupAccessResource)(nil)
+	_ resource.ResourceWithModifyPlan  = (*groupAccessResource)(nil)
 )
 
 func NewGroupAccessResource() resource.Resource {
@@ -89,6 +91,64 @@ func (r *groupAccessResource) Configure(_ context.Context, req resource.Configur
 
 func (r *groupAccessResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_group_access"
+}
+
+// ModifyPlan warns when an apply would revoke project roles that configuration does not list.
+func (r *groupAccessResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Destroying this resource is a request to remove the group's access, so losing its project
+	// roles is the point rather than a surprise.
+	if req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var config groupAccessResourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Bringing a group under management overwrites the access it already has, and a create has no
+	// prior state to compare against, so read the group's roles to report them before the apply.
+	if req.State.Raw.IsNull() {
+		resp.Diagnostics.Append(r.warnProjectAccessRevocationOnCreate(ctx, config)...)
+		return
+	}
+
+	var state groupAccessResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(projectAccessRevocationWarning(state.ProjectAccesses, config.ProjectAccesses)...)
+}
+
+// warnProjectAccessRevocationOnCreate reads the group's current project roles so that a plan can
+// report the ones configuration omits.
+//
+// The read is best effort: an unconfigured client, an ID that is not known until apply, or a group
+// that cannot be fetched skips the warning, and nothing reports it later. That is not a silent
+// revocation, because Create fetches the same group before overwriting its access, so a read that
+// keeps failing fails the apply instead.
+func (r *groupAccessResource) warnProjectAccessRevocationOnCreate(ctx context.Context, config groupAccessResourceModel) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if r.client == nil || config.ID.IsNull() || config.ID.IsUnknown() {
+		return diags
+	}
+
+	currentGroup, err := r.client.CloudService().GetUserGroup(ctx, &cloudservicev1.GetUserGroupRequest{
+		GroupId: config.ID.ValueString(),
+	})
+	if err != nil {
+		return diags
+	}
+
+	return projectAccessRevocationOnCreateWarning(
+		ctx,
+		currentGroup.GetGroup().GetSpec().GetAccess().GetProjectAccesses(),
+		config.ProjectAccesses,
+	)
 }
 
 func (r *groupAccessResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -136,15 +196,20 @@ func (r *groupAccessResource) Create(ctx context.Context, req resource.CreateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
-	// Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -241,15 +306,20 @@ func (r *groupAccessResource) Update(ctx context.Context, req resource.UpdateReq
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	projectAccesses, d := getProjectAccessesFromSet(ctx, plan.ProjectAccesses)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	access := &identityv1.Access{
 		AccountAccess:     accountAccess,
 		NamespaceAccesses: namespaceAccesses,
+		ProjectAccesses:   projectAccesses,
 	}
 
 	// Use the current group spec to update the access.
 	spec := currentGroup.GetGroup().GetSpec()
-	// Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
 		GroupId:          plan.ID.ValueString(),
@@ -313,13 +383,11 @@ func (r *groupAccessResource) Delete(ctx context.Context, req resource.DeleteReq
 	access := &identityv1.Access{
 		AccountAccess:     nil,
 		NamespaceAccesses: map[string]*identityv1.NamespaceAccess{},
+		ProjectAccesses:   map[string]*identityv1.ProjectAccess{},
 	}
 
 	// Use the current group spec to update the access
 	spec := currentGroup.GetGroup().GetSpec()
-	// This resource only manages account and namespace access, so removing it must not take the
-	// group's project grants with it. Read before spec.Access is overwritten below.
-	preserveProjectAccesses(access, spec.GetAccess())
 	spec.Access = access
 
 	svcResp, err := r.client.CloudService().UpdateUserGroup(ctx, &cloudservicev1.UpdateUserGroupRequest{
@@ -371,6 +439,13 @@ func updateGroupAccessModel(ctx context.Context, state *groupAccessResourceModel
 		return diags
 	}
 	state.AccountAccessCustomRoles = accountAccessCustomRoles
+
+	projectAccesses, d := getProjectSetFromSpec(ctx, group.GetSpec().GetAccess())
+	diags.Append(d...)
+	if diags.HasError() {
+		return diags
+	}
+	state.ProjectAccesses = projectAccesses
 
 	namespaceAccesses, d := getNamespaceSetFromSpec(ctx, group.GetSpec().GetAccess())
 	diags.Append(d...)
