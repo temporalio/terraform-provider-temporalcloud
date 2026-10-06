@@ -149,6 +149,9 @@ PEM
 			{
 				// New namespace with retention of 7
 				Config: config(name, 7, true, description),
+				// Omitting project_id places the namespace in the account's default project, and
+				// the read populates that project's real ID rather than leaving it empty.
+				Check: resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "project_id"),
 			},
 			{
 				Config: config(name, 14, true, description),
@@ -1851,4 +1854,217 @@ func TestGetCodecServerFromModel_CustomErrorMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+func testAccProjectNamespaceConfig(resourceName, name, projectIDAttr string) string {
+	return fmt.Sprintf(`
+resource "temporalcloud_namespace" %[1]q {
+  name           = %[2]q
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 1
+  %[3]s
+
+  timeouts {
+    create = "15m"
+    delete = "15m"
+  }
+}
+`, resourceName, name, projectIDAttr)
+}
+
+func TestAccNamespaceResource_Project(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-project", randomString(10))
+	projectAName := createRandomName()
+	projectBName := createRandomName()
+
+	config := func(projectResource string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_project" "project_a" {
+  display_name = %[1]q
+}
+
+resource "temporalcloud_project" "project_b" {
+  display_name = %[2]q
+}
+%[3]s`, projectAName, projectBName,
+			testAccProjectNamespaceConfig("test", name, "project_id = "+projectResource))
+	}
+
+	var firstNamespaceID string
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("temporalcloud_project.project_a.id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_a", "id",
+					),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
+						if !ok {
+							return errors.New("namespace not found in state")
+						}
+						firstNamespaceID = rs.Primary.ID
+						return nil
+					},
+				),
+			},
+			{
+				ResourceName:      "temporalcloud_namespace.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				// project_id is not part of the namespace spec, so it cannot be updated in place.
+				// Rejected at plan time rather than replaced: replacing would destroy the
+				// namespace and its workflows.
+				Config:      config("temporalcloud_project.project_b.id"),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile("Namespace cannot be moved between projects"),
+			},
+			{
+				// The namespace is untouched by the rejected plan: same project, same id.
+				Config: config("temporalcloud_project.project_a.id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_a", "id",
+					),
+					func(s *terraform.State) error {
+						rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
+						if !ok {
+							return errors.New("namespace not found in state")
+						}
+						if rs.Primary.ID != firstNamespaceID {
+							return fmt.Errorf("namespace id changed from %s to %s; it should not have been recreated", firstNamespaceID, rs.Primary.ID)
+						}
+						return nil
+					},
+				),
+			},
+		},
+	})
+}
+
+// A move whose destination project is created in the same apply leaves project_id unknown at plan
+// time, so the plan-time comparison has nothing to compare. It must still be rejected: Terraform
+// accepts any applied value where the plan was unknown, so without this the first apply would
+// appear to succeed while silently dropping the move, and only later plans would fail.
+func TestAccNamespaceResource_MoveToProjectCreatedInSameApply(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-unk-project", randomString(10))
+	projectName := createRandomName()
+
+	config := func(withProject bool) string {
+		projectBlock, projectAttr := "", ""
+		if withProject {
+			projectBlock = fmt.Sprintf(`
+resource "temporalcloud_project" "later" {
+  display_name = %q
+}
+`, projectName)
+			projectAttr = "project_id = temporalcloud_project.later.id"
+		}
+		return "provider \"temporalcloud\" {}\n" + projectBlock + testAccProjectNamespaceConfig("test", name, projectAttr)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Namespace lands in the default project.
+			{
+				Config: config(false),
+				Check:  resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+			},
+			// Now point it at a project that does not exist yet, so project_id is unknown at plan
+			// time. Rejected during plan, so the project is never created either.
+			{
+				Config:      config(true),
+				ExpectError: regexp.MustCompile("Namespace cannot be moved between projects"),
+			},
+		},
+	})
+}
+
+// Namespaces created by a provider version without project_id must keep working after upgrading:
+// the first read fills in the default project's ID, and that must neither plan a replacement nor
+// produce any diff at all. Steps use the released provider from the registry, then this build.
+func TestAccNamespaceResource_ProjectIDUpgrade(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-project-upgrade", randomString(10))
+	config := "provider \"temporalcloud\" {}\n" + testAccProjectNamespaceConfig("test", name, "")
+
+	var namespaceID string
+	captureID := func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
+		if !ok {
+			return errors.New("namespace not found in state")
+		}
+		if namespaceID == "" {
+			namespaceID = rs.Primary.ID
+		} else if rs.Primary.ID != namespaceID {
+			return fmt.Errorf("namespace id changed from %s to %s; it should not have been recreated", namespaceID, rs.Primary.ID)
+		}
+		return nil
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				// Last release before namespaces gained project_id; its state has no such key.
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"temporalcloud": {
+						Source:            "temporalio/temporalcloud",
+						VersionConstraint: "1.9.0",
+					},
+				},
+				Config: config,
+				Check:  captureID,
+			},
+			{
+				// PlanOnly fails on any non-empty plan, so this asserts no replacement and no
+				// update after the refresh fills in project_id.
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Config:                   config,
+				PlanOnly:                 true,
+			},
+			{
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Config:                   config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+					captureID,
+				),
+			},
+		},
+	})
+}
+
+// An explicitly empty project_id is rejected during config validation. Omitting the attribute is
+// still valid and means the default project; an empty string would otherwise be planned as a real
+// value, while the server substitutes the default project on create, failing the post-apply
+// consistency check.
+// Hermetic: validation fails before any resource is created.
+func TestAccNamespaceResource_EmptyProjectIDRejected(t *testing.T) {
+	config := "provider \"temporalcloud\" {}\n" +
+		testAccProjectNamespaceConfig("test", "tf-ns-empty-project", `project_id = ""`)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`string length must be at least 1`),
+			},
+		},
+	})
 }
