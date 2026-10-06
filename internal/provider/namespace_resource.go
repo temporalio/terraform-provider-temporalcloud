@@ -78,6 +78,7 @@ type (
 		ID                  types.String                           `tfsdk:"id"`
 		Name                types.String                           `tfsdk:"name"`
 		Description         types.String                           `tfsdk:"description"`
+		ProjectID           types.String                           `tfsdk:"project_id"`
 		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
 		AcceptedClientCA    internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
 		RetentionDays       types.Int64                            `tfsdk:"retention_days"`
@@ -226,6 +227,14 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Optional:    true,
 				Computed:    true,
 				Default:     stringdefault.StaticString(""),
+			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Cannot be changed after creation; moving a namespace to another project is not yet supported by this provider.",
+				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"regions": schema.ListAttribute{
 				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
@@ -417,10 +426,15 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		return
 	}
 
-	// On update (state exists), reject removing capacity or fairness once set.
+	// On update (state exists), reject changing project_id and removing capacity or fairness once set.
 	if !req.State.Raw.IsNull() {
 		var state namespaceResourceModel
 		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		// Update repeats this check, since an unknown plan value can only be compared at apply time.
+		resp.Diagnostics.Append(validateProjectIDUnchanged(state.ProjectID, plan.ProjectID)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -521,6 +535,28 @@ func validateRegionsWithConfig(
 				fmt.Sprintf("Region %q is not a valid Temporal Cloud region. Use the temporalcloud_regions data source or see https://docs.temporal.io/cloud/regions for the list of available regions.", region),
 			)
 		}
+	}
+	return diags
+}
+
+// validateProjectIDUnchanged rejects moving an existing namespace to a different project. The
+// provider does not support moving namespaces between projects yet, so the change is reported as an
+// error rather than silently ignored or planned as a destroy-and-recreate, which would lose the
+// namespace's workflow history.
+//
+// It skips validation when either value is null or unknown: a null state value comes from state
+// written before project_id existed, and an unknown plan value (e.g. a project created in the same
+// apply) can only be compared once it is known.
+func validateProjectIDUnchanged(stateProjectID, planProjectID types.String) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if stateProjectID.IsNull() || stateProjectID.IsUnknown() || planProjectID.IsNull() || planProjectID.IsUnknown() {
+		return diags
+	}
+	if stateProjectID.ValueString() != planProjectID.ValueString() {
+		diags.AddError(
+			"project_id cannot be changed",
+			fmt.Sprintf("The namespace belongs to project %q and cannot be moved to project %q: moving a namespace between projects is not yet supported by this provider. To create the namespace in the new project instead, destroy and recreate it (for example with terraform apply -replace); this deletes the namespace and its workflow history.", stateProjectID.ValueString(), planProjectID.ValueString()),
+		)
 	}
 	return diags
 }
@@ -641,8 +677,11 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		spec.MtlsAuth = mtls
 	}
 
+	// project_id is Optional+Computed, so an unconfigured value is Unknown here and sends an empty
+	// string, which the API reads as the account's default project.
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
 		Spec:             spec,
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -739,6 +778,13 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 			"capacity cannot be removed once set",
 			`capacity cannot be removed once set; to revert to on-demand, explicitly set capacity { mode = "on_demand" }`,
 		)
+		return
+	}
+
+	// ModifyPlan can't check a project_id that was unknown at plan time, so repeat the check here
+	// before any API call.
+	resp.Diagnostics.Append(validateProjectIDUnchanged(state.ProjectID, plan.ProjectID)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -1074,6 +1120,7 @@ func updateModelFromSpec(
 	state.ID = types.StringValue(ns.GetNamespace())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
 	state.Description = types.StringValue(ns.GetSpec().GetDescription())
+	state.ProjectID = types.StringValue(ns.GetProjectId())
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
 	diags.Append(listDiags...)
