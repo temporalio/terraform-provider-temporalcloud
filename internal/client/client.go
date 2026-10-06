@@ -33,8 +33,6 @@ import (
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	operationv1 "go.temporal.io/cloud-sdk/api/operation/v1"
 	"go.temporal.io/cloud-sdk/cloudclient"
-	"google.golang.org/grpc/codes"
-	grpcstatus "google.golang.org/grpc/status"
 )
 
 // Client is a cloudclient for the Temporal Cloud API.
@@ -78,14 +76,6 @@ func AwaitAsyncOperation(ctx context.Context, cloudclient *Client, op *operation
 				AsyncOperationId: op.Id,
 			})
 			if err != nil {
-				// The SDK's retry interceptor does not retry DeadlineExceeded, so a single slow
-				// poll would otherwise abort the wait. Keep polling while our own context is live.
-				if grpcstatus.Code(err) == codes.DeadlineExceeded && ctx.Err() == nil {
-					tflog.Warn(ctx, "async operation status query timed out, retrying", map[string]any{
-						"error": err.Error(),
-					})
-					continue
-				}
 				return fmt.Errorf("failed to query async operation status: %w", err)
 			}
 			newOp := status.GetAsyncOperation()
