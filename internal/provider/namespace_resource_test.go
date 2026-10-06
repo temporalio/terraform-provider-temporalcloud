@@ -1856,21 +1856,22 @@ func TestGetCodecServerFromModel_CustomErrorMessage(t *testing.T) {
 	}
 }
 
-func testAccProjectNamespaceConfig(resourceName, name, projectIDAttr string) string {
+// testAccProjectNamespaceConfig declares temporalcloud_namespace.test.
+func testAccProjectNamespaceConfig(name, projectIDAttr string) string {
 	return fmt.Sprintf(`
-resource "temporalcloud_namespace" %[1]q {
-  name           = %[2]q
+resource "temporalcloud_namespace" "test" {
+  name           = %[1]q
   regions        = ["aws-ca-central-1"]
   api_key_auth   = true
   retention_days = 1
-  %[3]s
+  %[2]s
 
   timeouts {
     create = "15m"
     delete = "15m"
   }
 }
-`, resourceName, name, projectIDAttr)
+`, name, projectIDAttr)
 }
 
 func TestAccNamespaceResource_Project(t *testing.T) {
@@ -1890,7 +1891,7 @@ resource "temporalcloud_project" "project_b" {
   display_name = %[2]q
 }
 %[3]s`, projectAName, projectBName,
-			testAccProjectNamespaceConfig("test", name, "project_id = "+projectResource))
+			testAccProjectNamespaceConfig(name, "project_id = "+projectResource))
 	}
 
 	var firstNamespaceID string
@@ -1971,7 +1972,7 @@ resource "temporalcloud_project" "later" {
 `, projectName)
 			projectAttr = "project_id = temporalcloud_project.later.id"
 		}
-		return "provider \"temporalcloud\" {}\n" + projectBlock + testAccProjectNamespaceConfig("test", name, projectAttr)
+		return "provider \"temporalcloud\" {}\n" + projectBlock + testAccProjectNamespaceConfig(name, projectAttr)
 	}
 
 	resource.ParallelTest(t, resource.TestCase{
@@ -1998,7 +1999,7 @@ resource "temporalcloud_project" "later" {
 // produce any diff at all. Steps use the released provider from the registry, then this build.
 func TestAccNamespaceResource_ProjectIDUpgrade(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-ns-project-upgrade", randomString(10))
-	config := "provider \"temporalcloud\" {}\n" + testAccProjectNamespaceConfig("test", name, "")
+	config := "provider \"temporalcloud\" {}\n" + testAccProjectNamespaceConfig(name, "")
 
 	var namespaceID string
 	captureID := func(s *terraform.State) error {
@@ -2054,7 +2055,7 @@ func TestAccNamespaceResource_ProjectIDUpgrade(t *testing.T) {
 // Hermetic: validation fails before any resource is created.
 func TestAccNamespaceResource_EmptyProjectIDRejected(t *testing.T) {
 	config := "provider \"temporalcloud\" {}\n" +
-		testAccProjectNamespaceConfig("test", "tf-ns-empty-project", `project_id = ""`)
+		testAccProjectNamespaceConfig("tf-ns-empty-project", `project_id = ""`)
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
