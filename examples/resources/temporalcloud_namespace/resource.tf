@@ -124,8 +124,7 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }
 
-// A namespace belongs to one project and cannot be moved between projects. Without project_id,
-// it is created in the account's default project.
+// Without project_id, a namespace is created in the account's default project.
 resource "temporalcloud_namespace" "project_scoped" {
   name           = "payments"
   project_id     = temporalcloud_project.payments.id

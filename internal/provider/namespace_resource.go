@@ -223,7 +223,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Cannot be changed after creation.",
+				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project.",
 				Optional:    true,
 				Computed:    true,
 				Validators: []validator.String{

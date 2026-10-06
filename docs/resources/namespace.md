@@ -145,8 +145,7 @@ resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }
 
-// A namespace belongs to one project and cannot be moved between projects. Without project_id,
-// it is created in the account's default project.
+// Without project_id, a namespace is created in the account's default project.
 resource "temporalcloud_namespace" "project_scoped" {
   name           = "payments"
   project_id     = temporalcloud_project.payments.id
@@ -176,7 +175,7 @@ resource "temporalcloud_namespace" "project_scoped" {
 - `description` (String) The description of the namespace. Optional. Must be at most 255 printable ASCII characters plus whitespace. An empty string clears the description.
 - `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
-- `project_id` (String) The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Cannot be changed after creation.
+- `project_id` (String) The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
