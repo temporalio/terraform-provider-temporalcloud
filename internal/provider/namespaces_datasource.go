@@ -41,6 +41,7 @@ type (
 
 	namespaceDataModel struct {
 		ID                     types.String                  `tfsdk:"id"`
+		ProjectID              types.String                  `tfsdk:"project_id"`
 		Name                   types.String                  `tfsdk:"name"`
 		Description            types.String                  `tfsdk:"description"`
 		State                  types.String                  `tfsdk:"state"`
@@ -139,6 +140,10 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 
 	return map[string]schema.Attribute{
 		"id": idAttribute,
+		"project_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "The ID of the Temporal Cloud project the namespace belongs to.",
+		},
 		"name": schema.StringAttribute{
 			Computed:    true,
 			Description: "The name of the namespace.",
@@ -386,6 +391,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 	namespaceModel := &namespaceDataModel{
 		ID:               types.StringValue(ns.Namespace),
+		ProjectID:        types.StringValue(ns.GetProjectId()),
 		Name:             types.StringValue(ns.GetSpec().GetName()),
 		Description:      types.StringValue(ns.GetSpec().GetDescription()),
 		State:            types.StringValue(stateStr),

@@ -120,3 +120,15 @@ resource "temporalcloud_namespace" "terraform4" {
     "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
   ]
 }
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+// Without project_id, a namespace is created in the account's default project.
+resource "temporalcloud_namespace" "project_scoped" {
+  name           = "payments"
+  project_id     = temporalcloud_project.payments.id
+  regions        = ["aws-us-east-1"]
+  api_key_auth   = true
+  retention_days = 14
+}
