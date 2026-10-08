@@ -60,6 +60,7 @@ type (
 		ConnectivityRuleIds    types.Set                     `tfsdk:"connectivity_rule_ids"`
 		NamespaceLifecycle     internaltypes.ZeroObjectValue `tfsdk:"namespace_lifecycle"`
 		Tags                   types.Map                     `tfsdk:"tags"`
+		EncryptionValidation   types.Object                  `tfsdk:"encryption_validation"`
 	}
 
 	endpointsDataModel struct {
@@ -319,6 +320,33 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			Optional:    true,
 			ElementType: types.StringType,
 			Description: "The tags for the namespace.",
+		},
+		"encryption_validation": schema.SingleNestedAttribute{
+			Computed:    true,
+			Description: "The payload encryption validation configuration for the namespace, if configured.",
+			Attributes: map[string]schema.Attribute{
+				"mode": schema.StringAttribute{
+					Computed:    true,
+					Description: "The encryption validation mode: disabled, warn, or deny.",
+				},
+				"metadata_key": schema.StringAttribute{
+					Computed:    true,
+					Description: "The payload metadata key used to identify encrypted payloads.",
+				},
+				"metadata_values": schema.SetAttribute{
+					Computed:    true,
+					Description: "The payload metadata values used to identify encrypted payloads.",
+					ElementType: types.StringType,
+				},
+				"inspect_header": schema.BoolAttribute{
+					Computed:    true,
+					Description: "Whether workflow headers are inspected for encrypted payload metadata.",
+				},
+				"inspect_failure": schema.BoolAttribute{
+					Computed:    true,
+					Description: "Whether failure payloads are inspected for encrypted payload metadata.",
+				},
+			},
 		},
 	}
 }
@@ -588,6 +616,13 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 		tags = tagsMap
 	}
 	namespaceModel.Tags = tags
+
+	encryptionValidation, encryptionValidationDiags := encryptionValidationToModel(ctx, ns.GetSpec().GetEncryptionValidation())
+	diags.Append(encryptionValidationDiags...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.EncryptionValidation = encryptionValidation
 
 	return namespaceModel, nil
 }

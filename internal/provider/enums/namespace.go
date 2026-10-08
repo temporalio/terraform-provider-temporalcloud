@@ -10,7 +10,36 @@ import (
 
 var (
 	ErrInvalidNamespaceSearchAttribute = errors.New("invalid namespace search attribute")
+	ErrInvalidEncryptionValidationMode = errors.New("invalid encryption validation mode")
 )
+
+func ToEncryptionValidationMode(value string) namespace.EncryptionValidationSpec_EncryptionValidationMode {
+	switch strings.ToLower(value) {
+	case "disabled":
+		return namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED
+	case "warn":
+		return namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN
+	case "deny":
+		return namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY
+	default:
+		// An omitted mode is represented by "". Non-empty invalid values
+		// are rejected by the mode attribute validator before this conversion.
+		return namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_UNSPECIFIED
+	}
+}
+
+func FromEncryptionValidationMode(value namespace.EncryptionValidationSpec_EncryptionValidationMode) (string, error) {
+	switch value {
+	case namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED:
+		return "disabled", nil
+	case namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN:
+		return "warn", nil
+	case namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY:
+		return "deny", nil
+	default:
+		return "", fmt.Errorf("%w: %v", ErrInvalidEncryptionValidationMode, value)
+	}
+}
 
 func ToNamespaceSearchAttribute(s string, strict bool) (namespace.NamespaceSpec_SearchAttributeType, error) {
 	switch strings.ToLower(s) {
