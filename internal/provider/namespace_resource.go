@@ -409,7 +409,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"encryption_validation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute.",
+				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute.",
 				CustomType: internaltypes.ZeroObjectType{
 					ObjectType: basetypes.ObjectType{
 						AttrTypes: encryptionValidationAttrs,

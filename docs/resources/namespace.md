@@ -123,13 +123,6 @@ resource "temporalcloud_namespace" "terraform3" {
   regions        = ["aws-us-east-1"]
   api_key_auth   = true
   retention_days = 14
-  encryption_validation = {
-    mode            = "warn"
-    metadata_key    = "encoding"
-    metadata_values = ["binary/encrypted"]
-    inspect_header  = false
-    inspect_failure = false
-  }
   namespace_lifecycle = {
     // Prevents namespace from being deleted accidentally. Must be updated to false before destroying resource.
     enable_delete_protection = true
@@ -168,7 +161,7 @@ resource "temporalcloud_namespace" "terraform4" {
 - `codec_server` (Attributes) A codec server is used by the Temporal Cloud UI to decode payloads for all users interacting with this namespace, even if the workflow history itself is encrypted. (see [below for nested schema](#nestedatt--codec_server))
 - `connectivity_rule_ids` (Set of String) The IDs of the connectivity rules for this namespace.
 - `description` (String) The description of the namespace. Optional. Must be at most 255 printable ASCII characters plus whitespace. An empty string clears the description.
-- `encryption_validation` (Attributes) The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute. (see [below for nested schema](#nestedatt--encryption_validation))
+- `encryption_validation` (Attributes) This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute. (see [below for nested schema](#nestedatt--encryption_validation))
 - `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
