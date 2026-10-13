@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -155,79 +154,10 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 
 // ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not in the endpoint
 // spec, so UpdateNexusEndpoint would ignore the change and succeed, leaving the endpoint where it
-// was. Update guards the same rule for the cases this hook cannot decide, where the endpoint's
-// current project is unknown at plan time.
-//
-// Replacement is deliberately not used -- destroying an endpoint interrupts Nexus callers, which
-// should be a deliberate act rather than a side effect of editing an attribute.
-//
-// If a move API lands, delete both guards and call it from Update. It is expected to be its own
-// RPC, so it bumps resource_version: Update cannot reuse the version it fetched for the spec
-// write, and the timeout then has to cover two async operations.
+// was. Destroying an endpoint interrupts Nexus callers, so the change is rejected rather than
+// planned as a replacement.
 func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip on create and destroy; there is no prior project to move away from.
-	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
-		return
-	}
-
-	var config, state nexusEndpointResourceModel
-	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// A null or unknown prior value means the endpoint's current project is not known here --
-	// typically state written before this attribute existed, planned with -refresh=false so Read
-	// has not filled it in. There is nothing to compare against, and rejecting would block a
-	// config that merely pins the project the endpoint is already in. Update decides these by
-	// comparing against the live endpoint.
-	//
-	// Restore unknown first. UseStateForUnknown guards on the whole resource's state being null
-	// (i.e. "is this a create"), not the attribute's, so it has already copied that null prior
-	// value into the plan. Leaving it there would promise null while the apply writes the real
-	// project ID, which Terraform rejects as an inconsistent result after apply. Unknown is the
-	// honest plan: the project is not known until the endpoint is read.
-	if state.ProjectID.IsNull() || state.ProjectID.IsUnknown() {
-		if config.ProjectID.IsNull() {
-			resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("project_id"), types.StringUnknown())...)
-		}
-		return
-	}
-
-	// An unknown configured value cannot be compared. Rejected here rather than deferred so the
-	// failure lands at plan time: the Update guard would still catch it at apply, but Terraform's
-	// own consistency check would not, since it accepts any applied value where the plan was
-	// unknown. Usually caused by a target project created in this same apply, which an endpoint
-	// that already exists cannot be in.
-	if config.ProjectID.IsUnknown() {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("project_id"),
-			"Nexus Endpoint cannot be moved between projects",
-			projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), "a project created by this configuration"),
-		)
-		return
-	}
-
-	// Config, not Plan: by now Plan has prior state copied into it, so an omitted attribute and one
-	// set to the current project are indistinguishable there.
-	if config.ProjectID.IsNull() || config.ProjectID.Equal(state.ProjectID) {
-		return
-	}
-
-	resp.Diagnostics.AddAttributeError(
-		path.Root("project_id"),
-		"Nexus Endpoint cannot be moved between projects",
-		projectMoveNotSupportedDetail(strconv.Quote(state.ProjectID.ValueString()), strconv.Quote(config.ProjectID.ValueString())),
-	)
-}
-
-// projectMoveNotSupportedDetail keeps the plan-time and apply-time guards in sync.
-func projectMoveNotSupportedDetail(from, to string) string {
-	return fmt.Sprintf(
-		"project_id is %s and cannot be changed to %s. A Nexus Endpoint cannot be moved between projects.",
-		from, to,
-	)
+	modifyPlanCreateOnlyProjectID(ctx, req, resp, "Nexus Endpoint")
 }
 
 func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -353,18 +283,9 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	// Covers what ModifyPlan deliberately skips: a change whose prior project was not known at
-	// plan time. Comparing against the live endpoint rather than against state also catches the
-	// endpoint having moved server-side since the last refresh. Not dead code -- ModifyPlan cannot
-	// decide either case. Checked before any write, since the spec update carries no project_id
-	// and would otherwise succeed while silently dropping the change.
-	if currentProjectID := nexusEndpoint.GetEndpoint().GetProjectId(); !plan.ProjectID.IsNull() &&
-		!plan.ProjectID.IsUnknown() && plan.ProjectID.ValueString() != currentProjectID {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("project_id"),
-			"Nexus Endpoint cannot be moved between projects",
-			projectMoveNotSupportedDetail(strconv.Quote(currentProjectID), strconv.Quote(plan.ProjectID.ValueString())),
-		)
+	// Checked before any write; see checkProjectIDUnchanged.
+	resp.Diagnostics.Append(checkProjectIDUnchanged(plan.ProjectID, nexusEndpoint.GetEndpoint().GetProjectId(), "Nexus Endpoint")...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 

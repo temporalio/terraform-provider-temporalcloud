@@ -76,6 +76,7 @@ type (
 
 	namespaceResourceModel struct {
 		ID                  types.String                           `tfsdk:"id"`
+		ProjectID           types.String                           `tfsdk:"project_id"`
 		Name                types.String                           `tfsdk:"name"`
 		Description         types.String                           `tfsdk:"description"`
 		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
@@ -218,6 +219,21 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Description: "The unique identifier of the namespace across all Temporal Cloud tenants.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project.",
+				Optional:    true,
+				Computed:    true,
+				Validators: []validator.String{
+					// Rejects an explicit "", which the server would swap for the default
+					// project, breaking the post-apply consistency check. Omitting is still valid.
+					stringvalidator.LengthAtLeast(1),
+				},
+				PlanModifiers: []planmodifier.String{
+					// Keeps plans clean for namespaces that do not configure project_id. It copies
+					// a null out of state that predates this attribute, which ModifyPlan undoes.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -399,8 +415,19 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 	}
 }
 
-// ModifyPlan validates configured regions against the Temporal Cloud API.
+// ModifyPlan rejects moving a namespace between projects and validates configured regions against
+// the Temporal Cloud API.
 func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// First, ahead of every early return below: besides rejecting moves, this restores an unknown
+	// plan value for state that predates project_id, which must happen on every update plan.
+	// project_id is not in the namespace spec, so UpdateNamespace would ignore a change and
+	// succeed. Destroying a namespace destroys its workflows, so the change is rejected rather
+	// than planned as a replacement.
+	modifyPlanCreateOnlyProjectID(ctx, req, resp, "Namespace")
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// Skip on destroy.
 	if req.Plan.Raw.IsNull() {
 		return
@@ -642,7 +669,10 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
-		Spec:             spec,
+		Spec: spec,
+		// Empty means the account's default project; an unconfigured Optional+Computed value is
+		// Unknown here, which ValueString reports as "".
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -778,6 +808,12 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get current namespace status", err.Error())
+		return
+	}
+
+	// Checked before any write; see checkProjectIDUnchanged.
+	resp.Diagnostics.Append(checkProjectIDUnchanged(plan.ProjectID, currentNs.GetNamespace().GetProjectId(), "Namespace")...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -1072,6 +1108,7 @@ func updateModelFromSpec(
 	var diags diag.Diagnostics
 
 	state.ID = types.StringValue(ns.GetNamespace())
+	state.ProjectID = types.StringValue(ns.GetProjectId())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
 	state.Description = types.StringValue(ns.GetSpec().GetDescription())
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
