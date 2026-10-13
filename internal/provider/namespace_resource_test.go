@@ -16,6 +16,7 @@ import (
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
 	"google.golang.org/grpc/codes"
@@ -2030,15 +2031,18 @@ func TestAccNamespaceResource_ProjectIDUpgrade(t *testing.T) {
 				Check:  captureID,
 			},
 			{
-				// PlanOnly fails on any non-empty plan, so this asserts no replacement and no
-				// update after the refresh fills in project_id.
+				// The plan users get from `terraform plan`, which refreshes first, must be empty:
+				// no replacement and no update once the read fills in project_id. Not PlanOnly --
+				// that skips this plan and starts with a -refresh=false one, where state from
+				// 1.9.0 still lacks project_id and an in-place update to an unknown value is the
+				// intended result.
 				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 				Config:                   config,
-				PlanOnly:                 true,
-			},
-			{
-				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
 					captureID,
