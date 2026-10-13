@@ -29,6 +29,10 @@ data "temporalcloud_scim_group" "my_scim_group" {
   idp_id = "usually-group-name"
 }
 
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
 resource "temporalcloud_namespace" "test" {
   name         = "my-namespace"
   regions      = ["aws-us-east-1"]
@@ -47,6 +51,12 @@ resource "temporalcloud_group_access" "my_group_access" {
       permission   = "write"
     }
   ]
+  project_accesses = [
+    {
+      project_id = temporalcloud_project.payments.id
+      role       = "read"
+    }
+  ]
 }
 ```
 
@@ -62,6 +72,7 @@ resource "temporalcloud_group_access" "my_group_access" {
 
 - `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `namespace_accesses` (Attributes Set) The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Users with account_access roles of owner or admin cannot be assigned explicit permissions to namespaces. They implicitly receive access to all Namespaces. (see [below for nested schema](#nestedatt--namespace_accesses))
+- `project_accesses` (Attributes Set) The set of project accesses. Empty sets are not allowed, omit the attribute instead. Cannot be set when account_access is owner or admin, which implicitly receive access to all Projects. (see [below for nested schema](#nestedatt--project_accesses))
 
 <a id="nestedatt--namespace_accesses"></a>
 ### Nested Schema for `namespace_accesses`
@@ -70,3 +81,12 @@ Required:
 
 - `namespace_id` (String) The namespace to assign permissions to.
 - `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive)
+
+
+<a id="nestedatt--project_accesses"></a>
+### Nested Schema for `project_accesses`
+
+Required:
+
+- `project_id` (String) The project the role applies to.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).

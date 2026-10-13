@@ -138,7 +138,6 @@ func (r *userResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 		},
 	}
 	addAccessSchemaAttrs(&s, " Users can only be set to `none` when they are managed by SCIM and derive their roles from group memberships.")
-	s.Attributes["project_accesses"] = projectAccessesSchema("")
 	resp.Schema = s
 }
 
