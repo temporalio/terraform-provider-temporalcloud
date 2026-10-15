@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"testing"
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
@@ -76,8 +75,8 @@ resource "temporalcloud_group_members" "terraform" {
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			{
-				Config:      config(emailAddr, emailAddr2, name, "[]"),
-				ExpectError: regexp.MustCompile(""),
+				Config: config(emailAddr, emailAddr2, name, "[]"),
+				Check:  resource.TestCheckResourceAttr("temporalcloud_group_members.terraform", "users.#", "0"),
 			},
 			{
 				Config: config(emailAddr, emailAddr2, name, fmt.Sprintf("[%s]", user1TFID)),
@@ -129,6 +128,14 @@ resource "temporalcloud_group_members" "terraform" {
 				ImportStateIdFunc: func(state *terraform.State) (string, error) {
 					return state.RootModule().Resources["temporalcloud_group_members.terraform"].Primary.Attributes["group_id"], nil
 				},
+			},
+			{
+				Config: config(emailAddr, emailAddr2, name, "[]"),
+				Check:  resource.TestCheckResourceAttr("temporalcloud_group_members.terraform", "users.#", "0"),
+			},
+			{
+				Config:   config(emailAddr, emailAddr2, name, "[]"),
+				PlanOnly: true,
 			},
 			{
 				Config: config(emailAddr, emailAddr2, name, fmt.Sprintf("[%s]", user1TFID)),
