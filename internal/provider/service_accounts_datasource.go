@@ -262,7 +262,7 @@ func serviceAccountToServiceAccountDataModel(ctx context.Context, sa *identityv1
 		serviceAccountModel.ProjectAccesses = types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
 	} else {
 		// Handle account-scoped service account
-		role, err := enums.FromAccountAccessRole(sa.GetSpec().GetAccess().GetAccountAccess().GetRole())
+		role, err := enums.FromAccountAccess(sa.GetSpec().GetAccess().GetAccountAccess())
 		if err != nil {
 			diags.AddError("Failed to convert account access role", err.Error())
 			return nil, diags
