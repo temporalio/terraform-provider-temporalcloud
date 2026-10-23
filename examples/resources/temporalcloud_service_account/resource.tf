@@ -63,3 +63,12 @@ resource "temporalcloud_service_account" "project_worker" {
     }
   ]
 }
+
+// a project-scoped service account only has access to a single project
+resource "temporalcloud_service_account" "project_scoped" {
+  name = "payments-deployer"
+  project_scoped_access = {
+    project_id = temporalcloud_project.payments.id
+    role       = "write"
+  }
+}

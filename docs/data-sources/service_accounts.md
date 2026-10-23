@@ -37,6 +37,7 @@ Read-Only:
 - `name` (String) The name associated with the service account.
 - `namespace_scoped_access` (Attributes) The namespace-scoped access configuration for this service account. (see [below for nested schema](#nestedatt--service_accounts--namespace_scoped_access))
 - `project_accesses` (Attributes Set) The set of project roles for this service account, including each project and its role. (see [below for nested schema](#nestedatt--service_accounts--project_accesses))
+- `project_scoped_access` (Attributes) The project-scoped access configuration for this service account. (see [below for nested schema](#nestedatt--service_accounts--project_scoped_access))
 - `state` (String) The current state of the Service Account.
 - `updated_at` (String) The last update time of the Service Account.
 
@@ -65,3 +66,21 @@ Read-Only:
 
 - `project_id` (String) The project the role applies to.
 - `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
+
+
+<a id="nestedatt--service_accounts--project_scoped_access"></a>
+### Nested Schema for `service_accounts.project_scoped_access`
+
+Read-Only:
+
+- `namespace_accesses` (Attributes Set) The set of namespace permissions within the project for this service account, including each namespace and its role. (see [below for nested schema](#nestedatt--service_accounts--project_scoped_access--namespace_accesses))
+- `project_id` (String) The project this service account is scoped to.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
+
+<a id="nestedatt--service_accounts--project_scoped_access--namespace_accesses"></a>
+### Nested Schema for `service_accounts.project_scoped_access.namespace_accesses`
+
+Read-Only:
+
+- `namespace_id` (String) The namespace to assign permissions to.
+- `permission` (String) The permission to assign. Must be one of admin, write, or read (case-insensitive).

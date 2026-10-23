@@ -48,6 +48,7 @@ type (
 		NamespaceAccesses        types.Set                                `tfsdk:"namespace_accesses"`
 		ProjectAccesses          types.Set                                `tfsdk:"project_accesses"`
 		NamespaceScopedAccess    types.Object                             `tfsdk:"namespace_scoped_access"`
+		ProjectScopedAccess      types.Object                             `tfsdk:"project_scoped_access"`
 
 		Timeouts timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -55,6 +56,12 @@ type (
 	serviceAccountNamespaceAccessModel struct {
 		NamespaceID types.String                             `tfsdk:"namespace_id"`
 		Permission  internaltypes.CaseInsensitiveStringValue `tfsdk:"permission"`
+	}
+
+	serviceAccountProjectScopedAccessModel struct {
+		ProjectID         types.String                             `tfsdk:"project_id"`
+		Role              internaltypes.CaseInsensitiveStringValue `tfsdk:"role"`
+		NamespaceAccesses types.Set                                `tfsdk:"namespace_accesses"`
 	}
 )
 
@@ -67,6 +74,12 @@ var (
 	serviceAccountNamespaceAccessAttrs = map[string]attr.Type{
 		"namespace_id": types.StringType,
 		"permission":   internaltypes.CaseInsensitiveStringType{},
+	}
+
+	serviceAccountProjectScopedAccessAttrs = map[string]attr.Type{
+		"project_id":         types.StringType,
+		"role":               internaltypes.CaseInsensitiveStringType{},
+		"namespace_accesses": types.SetType{ElemType: types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs}},
 	}
 )
 
@@ -146,28 +159,30 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 			},
 			"account_access": schema.StringAttribute{
 				CustomType:  internaltypes.CaseInsensitiveStringType{},
-				Description: "The role on the account. Must be one of `admin`, `developer`, `read`, `financeadmin`, or `metricsread` (case-insensitive). Cannot be set if namespace_scoped_access is provided.",
+				Description: "The role on the account. Must be one of `admin`, `developer`, `read`, `financeadmin`, or `metricsread` (case-insensitive). Cannot be set if namespace_scoped_access or project_scoped_access is provided.",
 				Optional:    true,
 				Validators: []validator.String{
 					stringvalidator.OneOfCaseInsensitive(enums.AllowedAccountAccessRolesForServiceAccounts()...),
 					stringvalidator.ConflictsWith(path.Expressions{
 						path.MatchRoot("namespace_scoped_access"),
+						path.MatchRoot("project_scoped_access"),
 					}...),
 				},
 			},
 			"account_access_custom_roles": schema.SetAttribute{
-				Description: accountAccessCustomRolesDescription + " Cannot be set if namespace_scoped_access is provided.",
+				Description: accountAccessCustomRolesDescription + " Cannot be set if namespace_scoped_access or project_scoped_access is provided.",
 				Optional:    true,
 				ElementType: types.StringType,
 				Validators: []validator.Set{
 					setvalidator.SizeAtLeast(1),
 					setvalidator.ConflictsWith(path.Expressions{
 						path.MatchRoot("namespace_scoped_access"),
+						path.MatchRoot("project_scoped_access"),
 					}...),
 				},
 			},
 			"namespace_accesses": schema.SetNestedAttribute{
-				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces. Cannot be set if namespace_scoped_access is provided.",
+				Description: "The set of namespace accesses. Empty sets are not allowed, omit the attribute instead. Service Accounts with an account_access role of admin cannot be assigned explicit permissions to namespaces. Admins implicitly receive access to all Namespaces. Cannot be set if namespace_scoped_access or project_scoped_access is provided.",
 				Optional:    true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
@@ -191,17 +206,19 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 					validation.SetNestedAttributeMustBeUnique("namespace_id"),
 					setvalidator.ConflictsWith(path.Expressions{
 						path.MatchRoot("namespace_scoped_access"),
+						path.MatchRoot("project_scoped_access"),
 					}...),
 				},
 			},
 			"project_accesses": projectAccessesSchema(
-				" Cannot be set if namespace_scoped_access is provided.",
+				" Cannot be set if namespace_scoped_access or project_scoped_access is provided.",
 				setvalidator.ConflictsWith(path.Expressions{
 					path.MatchRoot("namespace_scoped_access"),
+					path.MatchRoot("project_scoped_access"),
 				}...),
 			),
 			"namespace_scoped_access": schema.SingleNestedAttribute{
-				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, namespace_accesses, or project_accesses are provided.",
+				Description: "Configures this service account as a namespace-scoped service account with access to only a single namespace. The namespace assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, namespace_accesses, project_accesses, or project_scoped_access are provided.",
 				Optional:    true,
 				Attributes: map[string]schema.Attribute{
 					"namespace_id": schema.StringAttribute{
@@ -225,6 +242,65 @@ func (r *serviceAccountResource) Schema(ctx context.Context, _ resource.SchemaRe
 						path.MatchRoot("account_access"),
 						path.MatchRoot("namespace_accesses"),
 						path.MatchRoot("project_accesses"),
+						path.MatchRoot("project_scoped_access"),
+					}...),
+				},
+			},
+			"project_scoped_access": schema.SingleNestedAttribute{
+				Description: "Configures this service account as a project-scoped service account with access to only a single project. The project assignment is immutable after creation. Cannot be set if account_access, account_access_custom_roles, namespace_accesses, project_accesses, or namespace_scoped_access are provided.",
+				Optional:    true,
+				Attributes: map[string]schema.Attribute{
+					"project_id": schema.StringAttribute{
+						Description: "The project to scope this service account to. This field is immutable after creation.",
+						Required:    true,
+						PlanModifiers: []planmodifier.String{
+							stringplanmodifier.RequiresReplace(),
+						},
+					},
+					"role": schema.StringAttribute{
+						CustomType:  internaltypes.CaseInsensitiveStringType{},
+						Description: projectAccessRoleDescription + " This field is mutable.",
+						Required:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOfCaseInsensitive(enums.AllowedProjectAccessRoles()...),
+						},
+					},
+					"namespace_accesses": schema.SetNestedAttribute{
+						Description: "The set of namespace accesses within the project. Each namespace must belong to the project. Empty sets are not allowed, omit the attribute instead. Cannot be set when role is admin, which implicitly receives access to all Namespaces in the project. This field is mutable.",
+						Optional:    true,
+						NestedObject: schema.NestedAttributeObject{
+							Attributes: map[string]schema.Attribute{
+								"namespace_id": schema.StringAttribute{
+									Description: "The namespace to assign permissions to.",
+									Required:    true,
+								},
+								"permission": schema.StringAttribute{
+									CustomType:  internaltypes.CaseInsensitiveStringType{},
+									Description: "The permission to assign. Must be one of admin, write, or read (case-insensitive)",
+									Required:    true,
+									Validators: []validator.String{
+										stringvalidator.OneOfCaseInsensitive(enums.AllowedNamespaceAccessPermissions()...),
+									},
+								},
+							},
+						},
+						Validators: []validator.Set{
+							setvalidator.SizeAtLeast(1),
+							validation.SetNestedAttributeMustBeUnique("namespace_id"),
+							validation.SetMustBeEmptyWhen(
+								path.Root("project_scoped_access").AtName("role"),
+								[]string{"admin"},
+							),
+						},
+					},
+				},
+				Validators: []validator.Object{
+					objectvalidator.ConflictsWith(path.Expressions{
+						path.MatchRoot("account_access"),
+						path.MatchRoot("account_access_custom_roles"),
+						path.MatchRoot("namespace_accesses"),
+						path.MatchRoot("project_accesses"),
+						path.MatchRoot("namespace_scoped_access"),
 					}...),
 				},
 			},
@@ -486,10 +562,18 @@ func buildServiceAccountSpec(ctx context.Context, plan *serviceAccountResourceMo
 			return nil, diags
 		}
 		spec.NamespaceScopedAccess = namespaceScopedAccess
+	} else if !plan.ProjectScopedAccess.IsNull() {
+		// Handle project-scoped access
+		projectScopedAccess, d := getProjectScopedAccessFromModel(ctx, plan)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		spec.ProjectScopedAccess = projectScopedAccess
 	} else {
 		// Handle account-scoped access
 		if plan.AccountAccess.IsNull() {
-			diags.AddError("Missing access configuration", "Either account_access or namespace_scoped_access must be provided")
+			diags.AddError("Missing access configuration", "One of account_access, namespace_scoped_access, or project_scoped_access must be provided")
 			return nil, diags
 		}
 
@@ -543,6 +627,70 @@ func getNamespaceScopedAccessFromModel(ctx context.Context, model *serviceAccoun
 	}, diags
 }
 
+func getProjectScopedAccessFromModel(ctx context.Context, model *serviceAccountResourceModel) (*identityv1.ProjectScopedAccess, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	var projectScopedAccessModel serviceAccountProjectScopedAccessModel
+	diags.Append(model.ProjectScopedAccess.As(ctx, &projectScopedAccessModel, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	role, err := enums.ToProjectAccessRole(projectScopedAccessModel.Role.ValueString())
+	if err != nil {
+		diags.AddError("Failed to convert project access role", err.Error())
+		return nil, diags
+	}
+
+	namespaceAccesses, d := getNamespaceAccessesFromSet(ctx, projectScopedAccessModel.NamespaceAccesses)
+	diags.Append(d...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	return &identityv1.ProjectScopedAccess{
+		ProjectId: projectScopedAccessModel.ProjectID.ValueString(),
+		Access: &identityv1.ProjectAccess{
+			Role: role,
+		},
+		NamespaceAccesses: namespaceAccesses,
+	}, diags
+}
+
+// getProjectScopedAccessObjectFromSpec converts a project-scoped access read from the API into its
+// Terraform object. It is shared by the service account resource and data sources.
+func getProjectScopedAccessObjectFromSpec(ctx context.Context, projectScopedAccess *identityv1.ProjectScopedAccess) (types.Object, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	null := types.ObjectNull(serviceAccountProjectScopedAccessAttrs)
+
+	role, err := enums.FromProjectAccessRole(projectScopedAccess.GetAccess().GetRole())
+	if err != nil {
+		diags.AddError("Failed to convert project access role", err.Error())
+		return null, diags
+	}
+
+	namespaceAccesses, d := getNamespaceSetFromSpec(ctx, &identityv1.Access{
+		NamespaceAccesses: projectScopedAccess.GetNamespaceAccesses(),
+	})
+	diags.Append(d...)
+	if diags.HasError() {
+		return null, diags
+	}
+
+	model := serviceAccountProjectScopedAccessModel{
+		ProjectID:         types.StringValue(projectScopedAccess.GetProjectId()),
+		Role:              internaltypes.CaseInsensitiveString(role),
+		NamespaceAccesses: namespaceAccesses,
+	}
+
+	obj, d := types.ObjectValueFrom(ctx, serviceAccountProjectScopedAccessAttrs, model)
+	diags.Append(d...)
+	if diags.HasError() {
+		return null, diags
+	}
+
+	return obj, diags
+}
+
 func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccountResourceModel, serviceAccount *identityv1.ServiceAccount) diag.Diagnostics {
 	var diags diag.Diagnostics
 	stateStr, err := enums.FromResourceState(serviceAccount.GetState())
@@ -577,6 +725,21 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 		}
 
 		state.NamespaceScopedAccess = obj
+		state.ProjectScopedAccess = types.ObjectNull(serviceAccountProjectScopedAccessAttrs)
+		state.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
+		state.AccountAccessCustomRoles = types.SetNull(types.StringType)
+		state.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
+		state.ProjectAccesses = types.SetNull(types.ObjectType{AttrTypes: projectAccessAttrs})
+	} else if serviceAccount.GetSpec().GetProjectScopedAccess() != nil {
+		// Handle project-scoped service account
+		obj, d := getProjectScopedAccessObjectFromSpec(ctx, serviceAccount.GetSpec().GetProjectScopedAccess())
+		diags.Append(d...)
+		if diags.HasError() {
+			return diags
+		}
+
+		state.ProjectScopedAccess = obj
+		state.NamespaceScopedAccess = types.ObjectNull(serviceAccountNamespaceAccessAttrs)
 		state.AccountAccess = internaltypes.CaseInsensitiveStringValue{StringValue: types.StringNull()}
 		state.AccountAccessCustomRoles = types.SetNull(types.StringType)
 		state.NamespaceAccesses = types.SetNull(types.ObjectType{AttrTypes: serviceAccountNamespaceAccessAttrs})
@@ -636,6 +799,7 @@ func updateServiceAccountModelFromSpec(ctx context.Context, state *serviceAccoun
 		state.NamespaceAccesses = namespaceAccesses
 		state.ProjectAccesses = projectAccesses
 		state.NamespaceScopedAccess = types.ObjectNull(serviceAccountNamespaceAccessAttrs)
+		state.ProjectScopedAccess = types.ObjectNull(serviceAccountProjectScopedAccessAttrs)
 	}
 
 	return nil

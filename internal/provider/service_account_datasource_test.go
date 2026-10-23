@@ -197,3 +197,53 @@ output "service_account" {
 		},
 	})
 }
+
+func TestAccDataSource_ProjectScopedServiceAccount(t *testing.T) {
+	name := createRandomName()
+	projectName := createRandomName()
+
+	config := fmt.Sprintf(`
+provider "temporalcloud" {
+
+}
+
+resource "temporalcloud_project" "test" {
+  display_name = "%s"
+}
+
+resource "temporalcloud_service_account" "terraform" {
+  name = "%s"
+  project_scoped_access = {
+    project_id = temporalcloud_project.test.id
+    role       = "write"
+  }
+}
+
+data "temporalcloud_service_account" "terraform" {
+  id = temporalcloud_service_account.terraform.id
+}
+`, projectName, name)
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.temporalcloud_service_account.terraform", "name", name),
+					resource.TestCheckResourceAttr("data.temporalcloud_service_account.terraform", "state", "active"),
+					resource.TestCheckResourceAttrPair(
+						"data.temporalcloud_service_account.terraform", "project_scoped_access.project_id",
+						"temporalcloud_project.test", "id",
+					),
+					resource.TestCheckResourceAttr("data.temporalcloud_service_account.terraform", "project_scoped_access.role", "write"),
+					resource.TestCheckNoResourceAttr("data.temporalcloud_service_account.terraform", "account_access"),
+					resource.TestCheckNoResourceAttr("data.temporalcloud_service_account.terraform", "namespace_scoped_access.namespace_id"),
+				),
+			},
+		},
+	})
+}
