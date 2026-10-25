@@ -287,7 +287,7 @@ func updateGroupMembersModelFromSpec(ctx context.Context, state *userGroupMember
 	var diags diag.Diagnostics
 	state.ID = types.StringValue(fmt.Sprintf(idFmt, groupId))
 	state.GroupID = types.StringValue(groupId)
-	userSet := types.SetNull(types.ObjectType{AttrTypes: namespaceAccessAttrs})
+	userSet := types.SetValueMust(types.StringType, nil)
 	if len(users) > 0 {
 		us, d := types.SetValueFrom(ctx, types.StringType, users)
 		diags.Append(d...)
