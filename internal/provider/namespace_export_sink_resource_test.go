@@ -460,7 +460,10 @@ func TestNamespaceExportSink_FilterRoundTrip(t *testing.T) {
 			{name: "Enabled", filter: &namespacev1.ExportSinkSpec_SinkFilter{}},
 		} {
 			t.Run(destination.name+"/"+tt.name, func(t *testing.T) {
-				expected := proto.Clone(destination.spec).(*namespacev1.ExportSinkSpec)
+				expected, ok := proto.Clone(destination.spec).(*namespacev1.ExportSinkSpec)
+				if !ok {
+					t.Fatal("expected cloned export sink spec")
+				}
 				expected.Name = "test-sink"
 				expected.Enabled = true
 				expected.Filter = tt.filter
