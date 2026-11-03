@@ -246,7 +246,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Default:     stringdefault.StaticString(""),
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. A second region can be added to an existing single-region namespace, which makes it HA: Temporal Cloud fails the namespace over automatically when the replica is added, and Actions and Storage are billed at 2x (see https://docs.temporal.io/cloud/high-availability). Removing or replacing a region is not supported and the provider will throw an error; remove a region with the Temporal Cloud UI or CLI first. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. A second region can be added to an existing single-region namespace, which makes it HA. Actions and Storage of an HA namespace are billed at 2x (see https://docs.temporal.io/cloud/high-availability). Removing or replacing a region is not supported and the provider will throw an error; remove a region with the Temporal Cloud UI or CLI first. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
@@ -844,7 +844,7 @@ func regionChangeDiagnostics(stateName, planName types.String, stateRegions, con
 	case regionAdded:
 		diags.AddWarning(
 			"Adding a region makes the namespace highly available",
-			fmt.Sprintf("Adding %s replicates the namespace across two regions. Temporal Cloud fails the namespace over automatically when the replica is added, and Actions and Storage of a replicated namespace are billed at 2x. See https://docs.temporal.io/cloud/high-availability.", added),
+			fmt.Sprintf("Adding %s replicates the namespace across two regions. Actions and Storage of a replicated namespace are billed at 2x. See https://docs.temporal.io/cloud/high-availability.", added),
 		)
 	}
 	return diags
