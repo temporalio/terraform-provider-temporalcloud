@@ -705,6 +705,82 @@ func TestReplicasForAdd(t *testing.T) {
 	}
 }
 
+func TestUpdateReplicas(t *testing.T) {
+	t.Parallel()
+
+	replicas := func(regions ...string) []*namespace.ReplicaSpec {
+		out := make([]*namespace.ReplicaSpec, 0, len(regions))
+		for _, region := range regions {
+			out = append(out, &namespace.ReplicaSpec{Region: region})
+		}
+		return out
+	}
+
+	testCases := []struct {
+		name string
+		spec *namespace.NamespaceSpec
+		want []string
+	}{
+		{
+			name: "nil spec",
+		},
+		{
+			name: "nil replicas",
+			spec: &namespace.NamespaceSpec{Regions: []string{"aws-us-east-1"}}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+		},
+		{
+			name: "replicas mirror a single region",
+			spec: &namespace.NamespaceSpec{
+				Regions:  []string{"aws-us-east-1"}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+				Replicas: replicas("aws-us-east-1"),
+			},
+		},
+		{
+			name: "replicas mirror two regions",
+			spec: &namespace.NamespaceSpec{
+				Regions:  []string{"aws-us-east-1", "aws-us-west-2"}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+				Replicas: replicas("aws-us-east-1", "aws-us-west-2"),
+			},
+		},
+		{
+			name: "replicas carry an added region",
+			spec: &namespace.NamespaceSpec{
+				Regions:  []string{"aws-us-east-1"}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+				Replicas: replicas("aws-us-east-1", "aws-us-west-2"),
+			},
+			want: []string{"aws-us-east-1", "aws-us-west-2"},
+		},
+		{
+			name: "same regions in a different order",
+			spec: &namespace.NamespaceSpec{
+				Regions:  []string{"aws-us-east-1", "aws-us-west-2"}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+				Replicas: replicas("aws-us-west-2", "aws-us-east-1"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := updateReplicas(tc.spec)
+			if tc.want == nil {
+				if got != nil {
+					t.Fatalf("replicas = %v, want nil", got)
+				}
+				return
+			}
+			regions := make([]string, 0, len(got))
+			for _, replica := range got {
+				regions = append(regions, replica.GetRegion())
+			}
+			if !slices.Equal(regions, tc.want) {
+				t.Errorf("replicas = %v, want %v", regions, tc.want)
+			}
+		})
+	}
+}
+
 func TestUpdateModelFromSpec_Regions(t *testing.T) {
 	t.Parallel()
 
@@ -813,11 +889,9 @@ resource "temporalcloud_namespace" "test" {
 				Check:  resource.TestCheckResourceAttr("temporalcloud_namespace.test", "regions.#", "2"),
 			},
 			{
-				// An unrelated update on the HA namespace must leave its regions and replicas alone.
 				Config: config(`["aws-us-east-1", "aws-us-west-2"]`, 14),
 			},
 			{
-				// A failover reorders the regions server-side; the order in config must not matter.
 				Config: config(`["aws-us-west-2", "aws-us-east-1"]`, 14),
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
