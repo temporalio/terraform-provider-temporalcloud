@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -54,6 +55,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
@@ -244,11 +246,14 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Default:     stringdefault.StaticString(""),
 			},
 			"regions": schema.ListAttribute{
-				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. Please note that changing, adding, or removing regions for an existing namespace is not currently supported and the provider will throw an error. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
+				Description: "The list of regions where this namespace is available. Must be one or two regions. See https://docs.temporal.io/cloud/regions for a list of available regions and HA options. Note that regions are prefixed with the cloud provider (aws-us-east-1, not us-east-1). If two regions are specified, the namespace will be replicated across them in a high availability (HA) configuration. Same-region, multi-region, and multi-cloud HA namespaces are supported. A second region can be added to an existing single-region namespace, which makes it HA: Temporal Cloud fails the namespace over automatically when the replica is added, and Actions and Storage are billed at 2x (see https://docs.temporal.io/cloud/high-availability). Removing or replacing a region is not supported and the provider will throw an error; remove a region with the Temporal Cloud UI or CLI first. For HA namespaces the provider will ignore order changes on regions, which can happen if the namespace fails over.",
 				ElementType: types.StringType,
 				Required:    true,
 				CustomType: internaltypes.UnorderedStringListType{
 					ListType: basetypes.ListType{ElemType: basetypes.StringType{}},
+				},
+				PlanModifiers: []planmodifier.List{
+					regionsOrderPlanModifier{},
 				},
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(validators.RegionFormat()),
@@ -415,10 +420,15 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 	}
 }
 
-// ModifyPlan rejects moving a namespace between projects and validates configured regions against
-// the Temporal Cloud API.
+// ModifyPlan rejects moving a namespace between projects, rejects unsupported region changes and
+// validates configured regions against the Temporal Cloud API.
 func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// First, ahead of every early return below: besides rejecting moves, this restores an unknown
+	// Before the project_id handling, whose unknown must survive; see noopPlanIfOnlyUnknowns.
+	if !req.State.Raw.IsNull() && !req.Plan.Raw.IsNull() {
+		resp.Plan.Raw = noopPlanIfOnlyUnknowns(req.Plan.Raw, req.State.Raw, req.Config.Raw)
+	}
+
+	// Ahead of every early return below: besides rejecting moves, this restores an unknown
 	// plan value for state that predates project_id, which must happen on every update plan.
 	// project_id is not in the namespace spec, so UpdateNamespace would ignore a change and
 	// succeed. Destroying a namespace destroys its workflows, so the change is rejected rather
@@ -478,8 +488,8 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		}
 	}
 
-	// Skip if regions are unknown (computed values not yet resolved).
-	if plan.Regions.IsUnknown() {
+	// Skip while any region is unknown (computed values not yet resolved).
+	if !regionsKnown(plan.Regions.ListValue) {
 		return
 	}
 
@@ -503,6 +513,11 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 		var d diag.Diagnostics
 		stateRegions, d = getRegionsFromModel(ctx, &state)
 		resp.Diagnostics.Append(d...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+
+		resp.Diagnostics.Append(regionChangeDiagnostics(state.Name, plan.Name, stateRegions, configuredRegions)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -750,6 +765,136 @@ func areRegionsEqual(s1, s2 []string) bool {
 	return slices.Compare(sortedS1, sortedS2) == 0
 }
 
+// regionsOrderPlanModifier applies the unordered semantics of regions at plan time, which the
+// framework only does on read and apply. A config that merely reorders the state's regions must
+// plan no update: the API rejects an unchanged spec, and the first region is the preferred primary.
+type regionsOrderPlanModifier struct{}
+
+func (regionsOrderPlanModifier) Description(context.Context) string {
+	return "Keeps the regions in their state order when the configuration only reorders them."
+}
+
+func (m regionsOrderPlanModifier) MarkdownDescription(ctx context.Context) string {
+	return m.Description(ctx)
+}
+
+func (regionsOrderPlanModifier) PlanModifyList(ctx context.Context, req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
+	if req.StateValue.IsNull() || !regionsKnown(req.PlanValue) {
+		return
+	}
+	state := internaltypes.UnorderedStringListValue{ListValue: req.StateValue}
+	equal, diags := state.ListSemanticEquals(ctx, internaltypes.UnorderedStringListValue{ListValue: req.PlanValue})
+	resp.Diagnostics.Append(diags...)
+	if equal {
+		resp.PlanValue = req.StateValue
+	}
+}
+
+// noopPlanIfOnlyUnknowns returns state when plan differs from it only by computed attributes left
+// unknown, and plan otherwise. The framework marks computed attributes that are null in config
+// unknown as soon as the proposed state differs from the prior one, before attribute plan modifiers
+// run. When a modifier then undoes the only change, as regionsOrderPlanModifier does, Terraform
+// would still call Update with nothing to change, which the API rejects. An attribute whose config
+// is itself unknown is a real change and is left alone.
+func noopPlanIfOnlyUnknowns(plan, state, config tftypes.Value) tftypes.Value {
+	var planAttrs, stateAttrs, configAttrs map[string]tftypes.Value
+	if plan.As(&planAttrs) != nil || state.As(&stateAttrs) != nil || config.As(&configAttrs) != nil {
+		return plan
+	}
+	// As aliases the value's own map, which must stay intact.
+	candidate := maps.Clone(planAttrs)
+	for name, value := range candidate {
+		if !value.IsKnown() && configAttrs[name].IsNull() {
+			candidate[name] = stateAttrs[name]
+		}
+	}
+	if tftypes.NewValue(plan.Type(), candidate).Equal(state) {
+		return state
+	}
+	return plan
+}
+
+// regionChange classifies a planned change to the regions of an existing namespace.
+type regionChange int
+
+const (
+	regionsUnchanged regionChange = iota
+	regionAdded
+	regionChangeUnsupported
+)
+
+const (
+	unsupportedRegionChangeSummary = "Unsupported namespace region change"
+	unsupportedRegionChangeDetail  = "Only adding a second region to a single-region namespace is supported via Terraform. To remove a region, use the Temporal Cloud UI or CLI and then update the configuration to match."
+)
+
+// regionsKnown reports whether every region is known; nothing can be validated or classified
+// before then, and an unknown element would otherwise read as "".
+func regionsKnown(regions basetypes.ListValue) bool {
+	return !regions.IsUnknown() && !slices.ContainsFunc(regions.Elements(), attr.Value.IsUnknown)
+}
+
+// regionChangeDiagnostics returns the plan-time diagnostics for the regions of an existing
+// namespace. A name change, unknown included, replaces the namespace, which is then created with
+// its own regions, so only an in-place update is classified.
+func regionChangeDiagnostics(stateName, planName types.String, stateRegions, configuredRegions []string) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if !planName.Equal(stateName) {
+		return diags
+	}
+	switch change, added := classifyRegionChange(stateRegions, configuredRegions); change {
+	case regionChangeUnsupported:
+		diags.AddError(unsupportedRegionChangeSummary, unsupportedRegionChangeDetail)
+	case regionAdded:
+		diags.AddWarning(
+			"Adding a region makes the namespace highly available",
+			fmt.Sprintf("Adding %s replicates the namespace across two regions. Temporal Cloud fails the namespace over automatically when the replica is added, and Actions and Storage of a replicated namespace are billed at 2x. See https://docs.temporal.io/cloud/high-availability.", added),
+		)
+	}
+	return diags
+}
+
+// classifyRegionChange compares planned to current as sets. The only supported change is adding one
+// region to a single-region namespace, in which case the added region is returned.
+func classifyRegionChange(current, planned []string) (regionChange, string) {
+	if areRegionsEqual(current, planned) {
+		return regionsUnchanged, ""
+	}
+	if len(current) == 1 && len(planned) == 2 {
+		if planned[0] == current[0] {
+			return regionAdded, planned[1]
+		}
+		if planned[1] == current[0] {
+			return regionAdded, planned[0]
+		}
+	}
+	return regionChangeUnsupported, ""
+}
+
+// specRegions returns the regions of a namespace spec in the server's order. Replicas take
+// precedence because the server may not mirror an added replica into the deprecated regions field.
+func specRegions(spec *namespacev1.NamespaceSpec) []string {
+	if len(spec.GetReplicas()) > 0 {
+		regions := make([]string, len(spec.GetReplicas()))
+		for i, replica := range spec.GetReplicas() {
+			regions[i] = replica.GetRegion()
+		}
+		return regions
+	}
+	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas, which older namespaces may not report.
+	return spec.GetRegions()
+}
+
+// replicasForAdd keeps the current regions first, since the first replica in the spec is the
+// preferred primary, and appends the added one.
+func replicasForAdd(current []string, added string) []*namespacev1.ReplicaSpec {
+	replicas := make([]*namespacev1.ReplicaSpec, 0, len(current)+1)
+	for _, region := range current {
+		replicas = append(replicas, &namespacev1.ReplicaSpec{Region: region})
+	}
+	return append(replicas, &namespacev1.ReplicaSpec{Region: added})
+}
+
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan namespaceResourceModel
@@ -817,6 +962,14 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	currentSpec := currentNs.GetNamespace().GetSpec()
+	currentRegions := specRegions(currentSpec)
+	change, addedRegion := classifyRegionChange(currentRegions, regions)
+	if change == regionChangeUnsupported {
+		resp.Diagnostics.AddError(unsupportedRegionChangeSummary, unsupportedRegionChangeDetail)
+		return
+	}
+
 	var codecServer *namespacev1.CodecServerSpec
 	if !plan.CodecServer.IsNull() {
 		var d diag.Diagnostics
@@ -838,14 +991,21 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	spec := &namespacev1.NamespaceSpec{
-		Name:                plan.Name.ValueString(),
-		Regions:             regions,
+		Name: plan.Name.ValueString(),
+		// Both echoed from the server, never built from the plan: the deprecated regions field is
+		// immutable and the first replica is the preferred primary, which the plan's order must
+		// not be able to change.
+		Regions:             currentSpec.GetRegions(), //nolint:staticcheck // SA1019: regions is deprecated in favor of replicas but must still be sent unchanged.
+		Replicas:            currentSpec.GetReplicas(),
 		RetentionDays:       int32(plan.RetentionDays.ValueInt64()),
 		Description:         plan.Description.ValueString(),
 		CodecServer:         codecServer,
-		SearchAttributes:    currentNs.GetNamespace().GetSpec().GetSearchAttributes(),
+		SearchAttributes:    currentSpec.GetSearchAttributes(),
 		Lifecycle:           lifecycle,
 		ConnectivityRuleIds: connectivityRuleIds,
+	}
+	if change == regionAdded {
+		spec.Replicas = replicasForAdd(currentRegions, addedRegion)
 	}
 
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
@@ -891,12 +1051,6 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 			return
 		}
 		spec.Fairness = fairnessSpec
-	}
-
-	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
-	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
-		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
-		return
 	}
 
 	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
@@ -1111,8 +1265,7 @@ func updateModelFromSpec(
 	state.ProjectID = types.StringValue(ns.GetProjectId())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
 	state.Description = types.StringValue(ns.GetSpec().GetDescription())
-	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
-	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, ns.GetSpec().GetRegions())
+	planRegions, listDiags := types.ListValueFrom(ctx, types.StringType, specRegions(ns.GetSpec()))
 	diags.Append(listDiags...)
 	if diags.HasError() {
 		return diags

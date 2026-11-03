@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"text/template"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
@@ -361,6 +365,391 @@ func TestValidateRegionsWithConfig(t *testing.T) {
 	}
 }
 
+func TestRegionsOrderPlanModifier(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	list := func(regions ...string) types.List {
+		return types.ListValueMust(types.StringType, func() []attr.Value {
+			values := make([]attr.Value, len(regions))
+			for i, region := range regions {
+				values[i] = types.StringValue(region)
+			}
+			return values
+		}())
+	}
+	withUnknown := types.ListValueMust(types.StringType, []attr.Value{types.StringValue("aws-us-east-1"), types.StringUnknown()})
+
+	testCases := []struct {
+		name  string
+		state types.List
+		plan  types.List
+		want  types.List
+	}{
+		{
+			name:  "create keeps the plan",
+			state: types.ListNull(types.StringType),
+			plan:  list("aws-us-east-1"),
+			want:  list("aws-us-east-1"),
+		},
+		{
+			name:  "reorder keeps the state order",
+			state: list("aws-us-east-1", "aws-us-west-2"),
+			plan:  list("aws-us-west-2", "aws-us-east-1"),
+			want:  list("aws-us-east-1", "aws-us-west-2"),
+		},
+		{
+			name:  "added region keeps the plan",
+			state: list("aws-us-east-1"),
+			plan:  list("aws-us-east-1", "aws-us-west-2"),
+			want:  list("aws-us-east-1", "aws-us-west-2"),
+		},
+		{
+			name:  "unknown element keeps the plan",
+			state: list("aws-us-east-1", "aws-us-west-2"),
+			plan:  withUnknown,
+			want:  withUnknown,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			resp := &planmodifier.ListResponse{PlanValue: tc.plan}
+			regionsOrderPlanModifier{}.PlanModifyList(ctx, planmodifier.ListRequest{StateValue: tc.state, PlanValue: tc.plan}, resp)
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", resp.Diagnostics)
+			}
+			if !resp.PlanValue.Equal(tc.want) {
+				t.Errorf("plan = %v, want %v", resp.PlanValue, tc.want)
+			}
+		})
+	}
+}
+
+func TestNoopPlanIfOnlyUnknowns(t *testing.T) {
+	t.Parallel()
+
+	objType := tftypes.Object{AttributeTypes: map[string]tftypes.Type{
+		"retention_days": tftypes.Number,
+		"endpoints":      tftypes.String,
+	}}
+	obj := func(retention int64, endpoints tftypes.Value) tftypes.Value {
+		return tftypes.NewValue(objType, map[string]tftypes.Value{
+			"retention_days": tftypes.NewValue(tftypes.Number, retention),
+			"endpoints":      endpoints,
+		})
+	}
+	known := tftypes.NewValue(tftypes.String, "grpc")
+	unknown := tftypes.NewValue(tftypes.String, tftypes.UnknownValue)
+	null := tftypes.NewValue(tftypes.String, nil)
+	state := obj(7, known)
+
+	testCases := []struct {
+		name   string
+		plan   tftypes.Value
+		config tftypes.Value
+		want   tftypes.Value
+	}{
+		{
+			name:   "only computed unknowns differ",
+			plan:   obj(7, unknown),
+			config: obj(7, null),
+			want:   state,
+		},
+		{
+			name:   "a known change keeps the plan",
+			plan:   obj(14, unknown),
+			config: obj(14, null),
+			want:   obj(14, unknown),
+		},
+		{
+			name:   "an unknown configured value keeps the plan",
+			plan:   obj(7, unknown),
+			config: obj(7, unknown),
+			want:   obj(7, unknown),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := noopPlanIfOnlyUnknowns(tc.plan, state, tc.config); !got.Equal(tc.want) {
+				t.Errorf("plan = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRegionsKnown(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		regions types.List
+		want    bool
+	}{
+		{
+			name:    "all known",
+			regions: types.ListValueMust(types.StringType, []attr.Value{types.StringValue("aws-us-east-1"), types.StringValue("aws-us-west-2")}),
+			want:    true,
+		},
+		{
+			name:    "list unknown",
+			regions: types.ListUnknown(types.StringType),
+		},
+		{
+			name:    "element unknown",
+			regions: types.ListValueMust(types.StringType, []attr.Value{types.StringValue("aws-us-east-1"), types.StringUnknown()}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := regionsKnown(tc.regions); got != tc.want {
+				t.Errorf("regionsKnown = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRegionChangeDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		stateName         types.String
+		planName          types.String
+		stateRegions      []string
+		configuredRegions []string
+		wantError         bool
+		wantWarning       bool
+	}{
+		{
+			name:              "in-place add warns",
+			stateName:         types.StringValue("ns"),
+			planName:          types.StringValue("ns"),
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-east-1", "aws-us-west-2"},
+			wantWarning:       true,
+		},
+		{
+			name:              "in-place removal errors",
+			stateName:         types.StringValue("ns"),
+			planName:          types.StringValue("ns"),
+			stateRegions:      []string{"aws-us-east-1", "aws-us-west-2"},
+			configuredRegions: []string{"aws-us-east-1"},
+			wantError:         true,
+		},
+		{
+			name:              "in-place unchanged is silent",
+			stateName:         types.StringValue("ns"),
+			planName:          types.StringValue("ns"),
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-east-1"},
+		},
+		{
+			name:              "replacement is not classified",
+			stateName:         types.StringValue("old"),
+			planName:          types.StringValue("new"),
+			stateRegions:      []string{"aws-us-east-1"},
+			configuredRegions: []string{"aws-us-west-2"},
+		},
+		{
+			name:              "unknown name is a replacement",
+			stateName:         types.StringValue("old"),
+			planName:          types.StringUnknown(),
+			stateRegions:      []string{"aws-us-east-1", "aws-us-west-2"},
+			configuredRegions: []string{"aws-us-east-1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			diags := regionChangeDiagnostics(tc.stateName, tc.planName, tc.stateRegions, tc.configuredRegions)
+			if diags.HasError() != tc.wantError {
+				t.Errorf("error = %t, want %t: %+v", diags.HasError(), tc.wantError, diags)
+			}
+			if gotWarning := diags.WarningsCount() > 0; gotWarning != tc.wantWarning {
+				t.Errorf("warning = %t, want %t: %+v", gotWarning, tc.wantWarning, diags)
+			}
+		})
+	}
+}
+
+func TestClassifyRegionChange(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name       string
+		current    []string
+		planned    []string
+		wantChange regionChange
+		wantAdded  string
+	}{
+		{
+			name:       "unchanged",
+			current:    []string{"aws-us-east-1"},
+			planned:    []string{"aws-us-east-1"},
+			wantChange: regionsUnchanged,
+		},
+		{
+			name:       "reorder only is unchanged",
+			current:    []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:    []string{"aws-us-west-2", "aws-us-east-1"},
+			wantChange: regionsUnchanged,
+		},
+		{
+			name:       "add second region",
+			current:    []string{"aws-us-east-1"},
+			planned:    []string{"aws-us-east-1", "aws-us-west-2"},
+			wantChange: regionAdded,
+			wantAdded:  "aws-us-west-2",
+		},
+		{
+			name:       "add second region listed first",
+			current:    []string{"aws-us-east-1"},
+			planned:    []string{"aws-us-west-2", "aws-us-east-1"},
+			wantChange: regionAdded,
+			wantAdded:  "aws-us-west-2",
+		},
+		{
+			name:       "add same-region replica",
+			current:    []string{"aws-us-east-1"},
+			planned:    []string{"aws-us-east-1", "aws-us-east-1"},
+			wantChange: regionAdded,
+			wantAdded:  "aws-us-east-1",
+		},
+		{
+			name:       "remove region",
+			current:    []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:    []string{"aws-us-east-1"},
+			wantChange: regionChangeUnsupported,
+		},
+		{
+			name:       "replace region",
+			current:    []string{"aws-us-east-1"},
+			planned:    []string{"aws-us-west-2"},
+			wantChange: regionChangeUnsupported,
+		},
+		{
+			name:       "replace one of two regions",
+			current:    []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:    []string{"aws-us-east-1", "aws-eu-west-1"},
+			wantChange: regionChangeUnsupported,
+		},
+		{
+			name:       "add third region",
+			current:    []string{"aws-us-east-1", "aws-us-west-2"},
+			planned:    []string{"aws-us-east-1", "aws-us-west-2", "aws-eu-west-1"},
+			wantChange: regionChangeUnsupported,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			change, added := classifyRegionChange(tc.current, tc.planned)
+			if change != tc.wantChange {
+				t.Errorf("change = %v, want %v", change, tc.wantChange)
+			}
+			if added != tc.wantAdded {
+				t.Errorf("added = %q, want %q", added, tc.wantAdded)
+			}
+		})
+	}
+}
+
+func TestReplicasForAdd(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name    string
+		current []string
+		added   string
+		want    []string
+	}{
+		{
+			name:    "appends to a single region",
+			current: []string{"aws-us-east-1"},
+			added:   "aws-us-west-2",
+			want:    []string{"aws-us-east-1", "aws-us-west-2"},
+		},
+		{
+			name:    "keeps the server order",
+			current: []string{"aws-us-west-2", "aws-us-east-1"},
+			added:   "aws-eu-west-1",
+			want:    []string{"aws-us-west-2", "aws-us-east-1", "aws-eu-west-1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := make([]string, 0, len(tc.want))
+			for _, replica := range replicasForAdd(tc.current, tc.added) {
+				got = append(got, replica.GetRegion())
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("replicas = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateModelFromSpec_Regions(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name string
+		spec *namespace.NamespaceSpec
+		want []string
+	}{
+		{
+			name: "replicas take precedence over regions",
+			spec: &namespace.NamespaceSpec{
+				Regions:  []string{"aws-us-east-1"}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+				Replicas: []*namespace.ReplicaSpec{{Region: "aws-us-west-2"}, {Region: "aws-us-east-1"}},
+			},
+			want: []string{"aws-us-west-2", "aws-us-east-1"},
+		},
+		{
+			name: "regions when there are no replicas",
+			spec: &namespace.NamespaceSpec{Regions: []string{"aws-us-east-1"}}, //nolint:staticcheck // SA1019: the deprecated field is what older namespaces report.
+			want: []string{"aws-us-east-1"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+
+			state := &namespaceResourceModel{}
+			diags := updateModelFromSpec(ctx, state, &namespace.Namespace{Spec: tc.spec, Endpoints: &namespace.Endpoints{}})
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			var got []string
+			diags = state.Regions.ElementsAs(ctx, &got, false)
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("regions = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAccBasicNamespaceWithApiKeyAuth(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-basic-namespace", randomString(10))
 	config := func(name string, retention int) string {
@@ -394,6 +783,53 @@ resource "temporalcloud_namespace" "terraform" {
 				ResourceName:      "temporalcloud_namespace.terraform",
 			},
 			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+func TestAccNamespaceAddRegion(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-add-region", randomString(10))
+	config := func(regions string, retention int) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = %s
+  api_key_auth   = true
+  retention_days = %d
+}`, name, regions, retention)
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(`["aws-us-east-1"]`, 7),
+			},
+			{
+				Config: config(`["aws-us-east-1", "aws-us-west-2"]`, 7),
+				Check:  resource.TestCheckResourceAttr("temporalcloud_namespace.test", "regions.#", "2"),
+			},
+			{
+				// An unrelated update on the HA namespace must leave its regions and replicas alone.
+				Config: config(`["aws-us-east-1", "aws-us-west-2"]`, 14),
+			},
+			{
+				// A failover reorders the regions server-side; the order in config must not matter.
+				Config: config(`["aws-us-west-2", "aws-us-east-1"]`, 14),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+			},
+			{
+				Config:      config(`["aws-us-east-1"]`, 14),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Only adding a second region`),
+			},
 		},
 	})
 }
