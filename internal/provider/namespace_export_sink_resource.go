@@ -32,11 +32,13 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -63,6 +65,7 @@ type (
 		Namespace types.String   `tfsdk:"namespace"`
 		SinkName  types.String   `tfsdk:"sink_name"`
 		Enabled   types.Bool     `tfsdk:"enabled"`
+		Filter    types.Object   `tfsdk:"filter"`
 		S3        types.Object   `tfsdk:"s3"`
 		Gcs       types.Object   `tfsdk:"gcs"`
 		AzureBlob types.Object   `tfsdk:"azure_blob"`
@@ -128,6 +131,24 @@ func (r *namespaceExportSinkResource) Schema(ctx context.Context, req resource.S
 				Computed:    true,
 				Default:     booldefault.StaticBool(true),
 				Optional:    true,
+			},
+			"filter": schema.SingleNestedAttribute{
+				// AIDEV-NOTE: Default the parent too, so omitting or removing filter plans an explicit false.
+				Default: objectdefault.StaticValue(types.ObjectValueMust(
+					internaltypes.ExportSinkFilterModelAttrTypes,
+					map[string]attr.Value{"disable_standalone_activity_export": types.BoolValue(false)},
+				)),
+				Description: "Filters controlling which events are exported. When omitted, standalone activity export is enabled (disable_standalone_activity_export defaults to false).",
+				Optional:    true,
+				Computed:    true,
+				Attributes: map[string]schema.Attribute{
+					"disable_standalone_activity_export": schema.BoolAttribute{
+						Description: "Disable export of standalone activity events. Workflow history export is unaffected. Set to false to re-enable standalone activity export.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+					},
+				},
 			},
 			"s3": schema.SingleNestedAttribute{
 				Description: "The S3 configuration details when destination_type is S3.",
@@ -363,6 +384,18 @@ func updateSinkModelFromSpec(ctx context.Context, state *namespaceExportSinkReso
 		}
 	}
 
+	// AIDEV-NOTE: Normalize an absent API filter to false, including on import and refresh
+	// of old state, so it matches the Terraform default.
+	filterObj, filterDiags := types.ObjectValueFrom(ctx, internaltypes.ExportSinkFilterModelAttrTypes,
+		internaltypes.ExportSinkFilterModel{
+			DisableStandaloneActivityExport: types.BoolValue(
+				sink.GetSpec().GetFilter().GetDisableStandaloneActivityExport()),
+		})
+	diags.Append(filterDiags...)
+	if diags.HasError() {
+		return diags
+	}
+	state.Filter = filterObj
 	state.SinkName = types.StringValue(sink.GetName())
 	state.Enabled = types.BoolValue(sink.GetSpec().GetEnabled())
 	state.S3 = s3Obj
@@ -476,6 +509,20 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 		return nil, diags
 	}
 
+	filter := &namespacev1.ExportSinkSpec_SinkFilter{}
+	if plan.Filter.IsUnknown() {
+		filter = nil
+	} else if !plan.Filter.IsNull() {
+		var model internaltypes.ExportSinkFilterModel
+		diags.Append(plan.Filter.As(ctx, &model, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		filter = &namespacev1.ExportSinkSpec_SinkFilter{
+			DisableStandaloneActivityExport: model.DisableStandaloneActivityExport.ValueBool(),
+		}
+	}
+
 	if !plan.S3.IsNull() {
 		var s3Spec internaltypes.S3SpecModel
 		diags.Append(plan.S3.As(ctx, &s3Spec, basetypes.ObjectAsOptions{})...)
@@ -497,6 +544,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
+			Filter:  filter,
 			Enabled: plan.Enabled.ValueBool(),
 			S3:      s3SinkSpec,
 		}, nil
@@ -524,6 +572,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
+			Filter:  filter,
 			Enabled: plan.Enabled.ValueBool(),
 			Gcs: &sinkv1.GCSSpec{
 				SaId:         saId,
@@ -541,6 +590,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 
 		return &namespacev1.ExportSinkSpec{
 			Name:    plan.SinkName.ValueString(),
+			Filter:  filter,
 			Enabled: plan.Enabled.ValueBool(),
 			AzureBlob: &sinkv1.AzureBlobSpec{
 				TenantId:       azureBlobSpec.TenantId.ValueString(),

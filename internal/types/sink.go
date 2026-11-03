@@ -6,6 +6,10 @@ import (
 )
 
 var (
+	ExportSinkFilterModelAttrTypes = map[string]attr.Type{
+		"disable_standalone_activity_export": types.BoolType,
+	}
+
 	S3SpecModelAttrTypes = map[string]attr.Type{
 		"role_name":      types.StringType,
 		"bucket_name":    types.StringType,
@@ -122,4 +126,8 @@ type PubSubSpecModel struct {
 
 	// The service account email associated with the PubSub topic and service account
 	ServiceAccountEmail types.String `tfsdk:"service_account_email"`
+}
+
+type ExportSinkFilterModel struct {
+	DisableStandaloneActivityExport types.Bool `tfsdk:"disable_standalone_activity_export"`
 }
