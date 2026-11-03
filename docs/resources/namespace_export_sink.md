@@ -24,6 +24,7 @@ Provisions a namespace export sink.
 
 - `azure_blob` (Attributes) The Azure Blob configuration details when destination_type is Azure Blob. (see [below for nested schema](#nestedatt--azure_blob))
 - `enabled` (Boolean) A flag indicating whether the export sink is enabled or not.
+- `filter` (Attributes) Filters controlling which events are exported. When omitted, standalone activity export is enabled (disable_standalone_activity_export defaults to false). (see [below for nested schema](#nestedatt--filter))
 - `gcs` (Attributes) The GCS configuration details when destination_type is GCS. (see [below for nested schema](#nestedatt--gcs))
 - `s3` (Attributes) The S3 configuration details when destination_type is S3. (see [below for nested schema](#nestedatt--s3))
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
@@ -43,6 +44,14 @@ Required:
 - `storage_account` (String) The name of the destination Azure storage account where Temporal will send data.
 - `subscription_id` (String) The Azure subscription ID that contains the storage account.
 - `tenant_id` (String) The customer's Azure tenant ID where the storage account exists and where Temporal's app registration is consented/granted access.
+
+
+<a id="nestedatt--filter"></a>
+### Nested Schema for `filter`
+
+Optional:
+
+- `disable_standalone_activity_export` (Boolean) Disable export of standalone activity events. Workflow history export is unaffected. Set to false to re-enable standalone activity export.
 
 
 <a id="nestedatt--gcs"></a>
