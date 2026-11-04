@@ -3,10 +3,13 @@ package provider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,7 +18,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+
+	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 )
 
 type (
@@ -29,6 +35,26 @@ type (
 		NamespaceDefault types.Object   `tfsdk:"namespace_default"`
 		NamespaceLimit   types.Object   `tfsdk:"namespace_limit"`
 		Timeouts         timeouts.Value `tfsdk:"timeouts"`
+	}
+
+	callerRateLimitNamespaceDefaultModel struct {
+		Rps types.Float64 `tfsdk:"rps"`
+	}
+
+	callerRateLimitNamespaceLimitModel struct {
+		NamespaceID types.String  `tfsdk:"namespace_id"`
+		Rps         types.Float64 `tfsdk:"rps"`
+	}
+)
+
+var (
+	callerRateLimitNamespaceDefaultAttrTypes = map[string]attr.Type{
+		"rps": types.Float64Type,
+	}
+
+	callerRateLimitNamespaceLimitAttrTypes = map[string]attr.Type{
+		"namespace_id": types.StringType,
+		"rps":          types.Float64Type,
 	}
 )
 
@@ -164,4 +190,109 @@ func (r *callerRateLimitResource) Update(ctx context.Context, req resource.Updat
 
 func (r *callerRateLimitResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 	resp.Diagnostics.AddError("Not implemented", "caller rate limit CRUD is not implemented yet")
+}
+
+func getCallerRateLimitSpecFromModel(ctx context.Context, plan *callerRateLimitResourceModel) (*namespacev1.CallerRateLimitSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// The schema validators should prevent these, but guard against building an ambiguous spec.
+	if plan.NamespaceDefault.IsNull() && plan.NamespaceLimit.IsNull() {
+		diags.AddError("Missing caller rate limit rule", "Exactly one of namespace_default or namespace_limit must be configured")
+		return nil, diags
+	}
+	if !plan.NamespaceDefault.IsNull() && !plan.NamespaceLimit.IsNull() {
+		diags.AddError("Multiple caller rate limit rules configured", "Only one of namespace_default or namespace_limit can be configured")
+		return nil, diags
+	}
+
+	if !plan.NamespaceDefault.IsNull() {
+		var namespaceDefault callerRateLimitNamespaceDefaultModel
+		diags.Append(plan.NamespaceDefault.As(ctx, &namespaceDefault, basetypes.ObjectAsOptions{})...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		return &namespacev1.CallerRateLimitSpec{
+			Rule: &namespacev1.CallerRateLimitSpec_NamespaceDefault{
+				NamespaceDefault: &namespacev1.NamespaceDefaultCallerRateLimit{
+					Rps: namespaceDefault.Rps.ValueFloat64(),
+				},
+			},
+		}, diags
+	}
+
+	var namespaceLimit callerRateLimitNamespaceLimitModel
+	diags.Append(plan.NamespaceLimit.As(ctx, &namespaceLimit, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	return &namespacev1.CallerRateLimitSpec{
+		Rule: &namespacev1.CallerRateLimitSpec_NamespaceLimit{
+			NamespaceLimit: &namespacev1.NamespaceCallerRateLimit{
+				NamespaceId: namespaceLimit.NamespaceID.ValueString(),
+				Rps:         namespaceLimit.Rps.ValueFloat64(),
+			},
+		},
+	}, diags
+}
+
+// updateCallerRateLimitModelFromSpec writes rl into state. The caller supplies the target namespace
+// (the plan in Create and Update, state in Read, the parsed id in ImportState) rather than trusting
+// the response. State is only written once everything has converted, so an error leaves it as it was.
+func updateCallerRateLimitModelFromSpec(ctx context.Context, state *callerRateLimitResourceModel, rl *namespacev1.CallerRateLimit, namespaceID string) diag.Diagnostics {
+	var diags diag.Diagnostics
+
+	if rl.GetId() == "" {
+		diags.AddError("Invalid caller rate limit", fmt.Sprintf("Caller rate limit in namespace %q has no id. Please report this issue to the provider developers.", namespaceID))
+		return diags
+	}
+
+	namespaceDefaultObj := types.ObjectNull(callerRateLimitNamespaceDefaultAttrTypes)
+	namespaceLimitObj := types.ObjectNull(callerRateLimitNamespaceLimitAttrTypes)
+
+	spec := rl.GetSpec()
+	switch {
+	case spec.GetNamespaceDefault() != nil:
+		var d diag.Diagnostics
+		namespaceDefaultObj, d = types.ObjectValueFrom(ctx, callerRateLimitNamespaceDefaultAttrTypes, callerRateLimitNamespaceDefaultModel{
+			Rps: types.Float64Value(spec.GetNamespaceDefault().GetRps()),
+		})
+		diags.Append(d...)
+	case spec.GetNamespaceLimit() != nil:
+		var d diag.Diagnostics
+		namespaceLimitObj, d = types.ObjectValueFrom(ctx, callerRateLimitNamespaceLimitAttrTypes, callerRateLimitNamespaceLimitModel{
+			NamespaceID: types.StringValue(spec.GetNamespaceLimit().GetNamespaceId()),
+			Rps:         types.Float64Value(spec.GetNamespaceLimit().GetRps()),
+		})
+		diags.Append(d...)
+	default:
+		diags.AddError(
+			"Unsupported caller rate limit rule",
+			fmt.Sprintf("Caller rate limit %q has no rule this provider version recognizes. Please report this issue to the provider developers.", rl.GetId()),
+		)
+	}
+	if diags.HasError() {
+		return diags
+	}
+
+	state.ID = types.StringValue(callerRateLimitID(namespaceID, rl.GetId()))
+	state.NamespaceID = types.StringValue(namespaceID)
+	state.NamespaceDefault = namespaceDefaultObj
+	state.NamespaceLimit = namespaceLimitObj
+
+	return diags
+}
+
+func callerRateLimitID(namespaceID, callerRateLimitID string) string {
+	return namespaceID + "/" + callerRateLimitID
+}
+
+func parseCallerRateLimitID(id string) (namespaceID, callerRateLimitID string, err error) {
+	parts := strings.Split(id, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("invalid caller rate limit id %q: expected format `<namespace_id>/<caller_rate_limit_id>`, e.g. `my-ns.abc12/<caller_rate_limit_id>`", id)
+	}
+
+	return parts[0], parts[1], nil
 }
