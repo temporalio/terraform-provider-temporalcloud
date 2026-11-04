@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 	"github.com/hashicorp/terraform-plugin-framework-validators/float64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/objectvalidator"
@@ -19,8 +20,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
+	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 )
 
@@ -63,8 +68,9 @@ func NewCallerRateLimitResource() resource.Resource {
 }
 
 var (
-	_ resource.Resource              = (*callerRateLimitResource)(nil)
-	_ resource.ResourceWithConfigure = (*callerRateLimitResource)(nil)
+	_ resource.Resource                = (*callerRateLimitResource)(nil)
+	_ resource.ResourceWithConfigure   = (*callerRateLimitResource)(nil)
+	_ resource.ResourceWithImportState = (*callerRateLimitResource)(nil)
 )
 
 func (r *callerRateLimitResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
@@ -177,19 +183,253 @@ func (r *callerRateLimitResource) Schema(ctx context.Context, req resource.Schem
 }
 
 func (r *callerRateLimitResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	resp.Diagnostics.AddError("Not implemented", "caller rate limit CRUD is not implemented yet")
+	var plan callerRateLimitResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, defaultCreateTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+
+	spec, d := getCallerRateLimitSpecFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	namespaceID := plan.NamespaceID.ValueString()
+	svcResp, err := r.client.CloudService().CreateCallerRateLimit(ctx, &cloudservicev1.CreateCallerRateLimitRequest{
+		Namespace:        namespaceID,
+		Spec:             spec,
+		AsyncOperationId: uuid.New().String(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to create caller rate limit", err.Error())
+		return
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit creation status", callerRateLimitCreateErrorDetail(err, namespaceID, svcResp.GetCallerRateLimitId()))
+		return
+	}
+
+	rl, err := r.client.CloudService().GetCallerRateLimit(ctx, &cloudservicev1.GetCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: svcResp.GetCallerRateLimitId(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit", callerRateLimitCreateErrorDetail(err, namespaceID, svcResp.GetCallerRateLimitId()))
+		return
+	}
+
+	resp.Diagnostics.Append(updateCallerRateLimitModelFromSpec(ctx, &plan, rl.GetCallerRateLimit(), namespaceID)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+// callerRateLimitCreateErrorDetail adds an import hint to errors after the create request was accepted.
+// The server may keep the rule (for example in a failed state) even though it never reached state, and
+// its id is server-generated, so the user needs the id to import it.
+func callerRateLimitCreateErrorDetail(err error, namespaceID, rateLimitID string) string {
+	if rateLimitID == "" {
+		return err.Error()
+	}
+	return fmt.Sprintf("%s. The caller rate limit may still exist; import it with: terraform import <resource address> %s",
+		err.Error(), callerRateLimitID(namespaceID, rateLimitID))
 }
 
 func (r *callerRateLimitResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError("Not implemented", "caller rate limit CRUD is not implemented yet")
+	var state callerRateLimitResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// After import only id is set, so the namespace always comes from the id.
+	namespaceID, callerRateLimitID, err := parseCallerRateLimitID(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid caller rate limit id", err.Error())
+		return
+	}
+
+	rl, err := r.client.CloudService().GetCallerRateLimit(ctx, &cloudservicev1.GetCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+	})
+	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Caller Rate Limit Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+			resp.State.RemoveResource(ctx)
+
+			return
+		}
+
+		resp.Diagnostics.AddError("Failed to get caller rate limit", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(updateCallerRateLimitModelFromSpec(ctx, &state, rl.GetCallerRateLimit(), namespaceID)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
+// Update only changes rps; every other change replaces the resource.
 func (r *callerRateLimitResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Not implemented", "caller rate limit CRUD is not implemented yet")
+	var plan, state callerRateLimitResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	updateTimeout, diags := plan.Timeouts.Update(ctx, defaultCreateTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
+
+	spec, d := getCallerRateLimitSpecFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	namespaceID, callerRateLimitID, err := parseCallerRateLimitID(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid caller rate limit id", err.Error())
+		return
+	}
+
+	currentRateLimit, err := r.client.CloudService().GetCallerRateLimit(ctx, &cloudservicev1.GetCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit", err.Error())
+		return
+	}
+
+	svcResp, err := r.client.CloudService().UpdateCallerRateLimit(ctx, &cloudservicev1.UpdateCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+		Spec:              spec,
+		ResourceVersion:   currentRateLimit.GetCallerRateLimit().GetResourceVersion(),
+		AsyncOperationId:  uuid.New().String(),
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to update caller rate limit", err.Error())
+		return
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit update status", err.Error())
+		return
+	}
+
+	rl, err := r.client.CloudService().GetCallerRateLimit(ctx, &cloudservicev1.GetCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+	})
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(updateCallerRateLimitModelFromSpec(ctx, &plan, rl.GetCallerRateLimit(), namespaceID)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *callerRateLimitResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Not implemented", "caller rate limit CRUD is not implemented yet")
+	var state callerRateLimitResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, defaultDeleteTimeout)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	namespaceID, callerRateLimitID, err := parseCallerRateLimitID(state.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid caller rate limit id", err.Error())
+		return
+	}
+
+	currentRateLimit, err := r.client.CloudService().GetCallerRateLimit(ctx, &cloudservicev1.GetCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+	})
+	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Caller Rate Limit Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
+		resp.Diagnostics.AddError("Failed to get caller rate limit", err.Error())
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
+
+	svcResp, err := r.client.CloudService().DeleteCallerRateLimit(ctx, &cloudservicev1.DeleteCallerRateLimitRequest{
+		Namespace:         namespaceID,
+		CallerRateLimitId: callerRateLimitID,
+		ResourceVersion:   currentRateLimit.GetCallerRateLimit().GetResourceVersion(),
+		AsyncOperationId:  uuid.New().String(),
+	})
+	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound:
+			tflog.Warn(ctx, "Caller Rate Limit Resource not found, removing from state", map[string]interface{}{
+				"id": state.ID.ValueString(),
+			})
+
+			return
+		}
+
+		resp.Diagnostics.AddError("Failed to delete caller rate limit", err.Error())
+		return
+	}
+
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+		resp.Diagnostics.AddError("Failed to get caller rate limit deletion status", err.Error())
+		return
+	}
+}
+
+func (r *callerRateLimitResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
 
 func getCallerRateLimitSpecFromModel(ctx context.Context, plan *callerRateLimitResourceModel) (*namespacev1.CallerRateLimitSpec, diag.Diagnostics) {

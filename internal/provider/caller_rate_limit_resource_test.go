@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"google.golang.org/protobuf/proto"
 
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
@@ -146,6 +149,194 @@ func TestCallerRateLimitRuleTypeChanged(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAccCallerRateLimitResource uses the target namespace as its own caller, which the server
+// allows, so the test only needs one namespace.
+func TestAccCallerRateLimitResource(t *testing.T) {
+	targetName := fmt.Sprintf("tf-test-crl-%s", randomString(8))
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Create and Read testing
+			{
+				Config: testAccCallerRateLimitResourceConfig(targetName, "10", "5", ""),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_caller_rate_limit.default", "id"),
+					resource.TestCheckResourceAttrPair("temporalcloud_caller_rate_limit.default", "namespace_id", "temporalcloud_namespace.target", "id"),
+					resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.default", "namespace_default.rps", "10"),
+					resource.TestCheckNoResourceAttr("temporalcloud_caller_rate_limit.default", "namespace_limit"),
+					resource.TestCheckResourceAttrSet("temporalcloud_caller_rate_limit.limit", "id"),
+					resource.TestCheckResourceAttrPair("temporalcloud_caller_rate_limit.limit", "namespace_id", "temporalcloud_namespace.target", "id"),
+					resource.TestCheckResourceAttrPair("temporalcloud_caller_rate_limit.limit", "namespace_limit.namespace_id", "temporalcloud_namespace.target", "id"),
+					resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.limit", "namespace_limit.rps", "5"),
+					resource.TestCheckNoResourceAttr("temporalcloud_caller_rate_limit.limit", "namespace_default"),
+				),
+			},
+			// Update testing: rps changes in place, including down to 0, which blocks the caller.
+			{
+				Config: testAccCallerRateLimitResourceConfig(targetName, "2.5", "0", ""),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_caller_rate_limit.default", plancheck.ResourceActionUpdate),
+						plancheck.ExpectResourceAction("temporalcloud_caller_rate_limit.limit", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.default", "namespace_default.rps", "2.5"),
+					resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.limit", "namespace_limit.rps", "0"),
+				),
+			},
+			// A second default rule for the same target is rejected by the server.
+			{
+				Config: testAccCallerRateLimitResourceConfig(targetName, "2.5", "0", `
+resource "temporalcloud_caller_rate_limit" "duplicate" {
+  namespace_id = temporalcloud_namespace.target.id
+  namespace_default = {
+    rps = 1
+  }
+}
+`),
+				ExpectError: regexp.MustCompile(`caller rate limit already exists`),
+			},
+			// ImportState testing
+			{
+				Config:                  testAccCallerRateLimitResourceConfig(targetName, "2.5", "0", ""),
+				ResourceName:            "temporalcloud_caller_rate_limit.default",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"timeouts"},
+			},
+			{
+				Config:                  testAccCallerRateLimitResourceConfig(targetName, "2.5", "0", ""),
+				ResourceName:            "temporalcloud_caller_rate_limit.limit",
+				ImportState:             true,
+				ImportStateVerify:       true,
+				ImportStateVerifyIgnore: []string{"timeouts"},
+			},
+			// Delete testing automatically occurs in TestCase
+		},
+	})
+}
+
+func TestAccCallerRateLimitResource_Replace(t *testing.T) {
+	targetName := fmt.Sprintf("tf-test-crl-target-%s", randomString(8))
+	callerName := fmt.Sprintf("tf-test-crl-caller-%s", randomString(8))
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccCallerRateLimitResourceReplaceConfig(targetName, callerName, `
+  namespace_default = {
+    rps = 10
+  }
+`),
+				Check: resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.test", "namespace_default.rps", "10"),
+			},
+			// Switching the rule type replaces the resource.
+			{
+				Config: testAccCallerRateLimitResourceReplaceConfig(targetName, callerName, `
+  namespace_limit = {
+    namespace_id = temporalcloud_namespace.target.id
+    rps          = 10
+  }
+`),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_caller_rate_limit.test", plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("temporalcloud_caller_rate_limit.test", "namespace_default"),
+					resource.TestCheckResourceAttrPair("temporalcloud_caller_rate_limit.test", "namespace_limit.namespace_id", "temporalcloud_namespace.target", "id"),
+				),
+			},
+			// Changing the caller replaces the resource.
+			{
+				Config: testAccCallerRateLimitResourceReplaceConfig(targetName, callerName, `
+  namespace_limit = {
+    namespace_id = temporalcloud_namespace.caller.id
+    rps          = 10
+  }
+`),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_caller_rate_limit.test", plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: resource.TestCheckResourceAttrPair("temporalcloud_caller_rate_limit.test", "namespace_limit.namespace_id", "temporalcloud_namespace.caller", "id"),
+			},
+			// Back to a default rule. If an earlier Delete were a no-op, the leftover default rule would fail this with "already exists".
+			{
+				Config: testAccCallerRateLimitResourceReplaceConfig(targetName, callerName, `
+  namespace_default = {
+    rps = 20
+  }
+`),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_caller_rate_limit.test", plancheck.ResourceActionDestroyBeforeCreate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_caller_rate_limit.test", "namespace_default.rps", "20"),
+					resource.TestCheckNoResourceAttr("temporalcloud_caller_rate_limit.test", "namespace_limit"),
+				),
+			},
+		},
+	})
+}
+
+// testAccCallerRateLimitResourceConfig has a default rule and a rule for the target calling itself.
+// extra is appended as-is.
+func testAccCallerRateLimitResourceConfig(targetName, defaultRps, limitRps, extra string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+%[1]s
+
+resource "temporalcloud_caller_rate_limit" "default" {
+  namespace_id = temporalcloud_namespace.target.id
+  namespace_default = {
+    rps = %[2]s
+  }
+}
+
+resource "temporalcloud_caller_rate_limit" "limit" {
+  namespace_id = temporalcloud_namespace.target.id
+  namespace_limit = {
+    namespace_id = temporalcloud_namespace.target.id
+    rps          = %[3]s
+  }
+}
+%[4]s
+`, testAccNamespaceResourceConfig("target", targetName), defaultRps, limitRps, extra)
+}
+
+// testAccCallerRateLimitResourceReplaceConfig keeps both namespaces in every step and puts rule
+// inside the caller rate limit.
+func testAccCallerRateLimitResourceReplaceConfig(targetName, callerName, rule string) string {
+	return fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+%[1]s
+%[2]s
+
+resource "temporalcloud_caller_rate_limit" "test" {
+  namespace_id = temporalcloud_namespace.target.id
+%[3]s
+}
+`, testAccNamespaceResourceConfig("target", targetName), testAccNamespaceResourceConfig("caller", callerName), rule)
 }
 
 func TestAccCallerRateLimitResource_ValidationErrors(t *testing.T) {
@@ -416,6 +607,40 @@ func TestParseCallerRateLimitID(t *testing.T) {
 			}
 			if namespaceID != tc.wantNamespaceID || callerRateLimitID != tc.wantCallerRateLimitID {
 				t.Errorf("got (%q, %q), want (%q, %q)", namespaceID, callerRateLimitID, tc.wantNamespaceID, tc.wantCallerRateLimitID)
+			}
+		})
+	}
+}
+
+func TestCallerRateLimitCreateErrorDetail(t *testing.T) {
+	t.Parallel()
+
+	err := errors.New("operation failed")
+
+	cases := []struct {
+		name        string
+		rateLimitID string
+		want        string
+	}{
+		{
+			name:        "id present",
+			rateLimitID: "rl-1",
+			want:        "operation failed. The caller rate limit may still exist; import it with: terraform import <resource address> my-ns.abc12/rl-1",
+		},
+		{
+			// Nothing to import without an id, so the hint would only show a broken id.
+			name:        "id empty",
+			rateLimitID: "",
+			want:        "operation failed",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := callerRateLimitCreateErrorDetail(err, "my-ns.abc12", tc.rateLimitID); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
