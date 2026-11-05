@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -607,40 +606,6 @@ func TestParseCallerRateLimitID(t *testing.T) {
 			}
 			if namespaceID != tc.wantNamespaceID || callerRateLimitID != tc.wantCallerRateLimitID {
 				t.Errorf("got (%q, %q), want (%q, %q)", namespaceID, callerRateLimitID, tc.wantNamespaceID, tc.wantCallerRateLimitID)
-			}
-		})
-	}
-}
-
-func TestCallerRateLimitCreateErrorDetail(t *testing.T) {
-	t.Parallel()
-
-	err := errors.New("operation failed")
-
-	cases := []struct {
-		name        string
-		rateLimitID string
-		want        string
-	}{
-		{
-			name:        "id present",
-			rateLimitID: "rl-1",
-			want:        "operation failed. The caller rate limit may still exist; import it with: terraform import <resource address> my-ns.abc12/rl-1",
-		},
-		{
-			// Nothing to import without an id, so the hint would only show a broken id.
-			name:        "id empty",
-			rateLimitID: "",
-			want:        "operation failed",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			if got := callerRateLimitCreateErrorDetail(err, "my-ns.abc12", tc.rateLimitID); got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}

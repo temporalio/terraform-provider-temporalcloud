@@ -216,7 +216,7 @@ func (r *callerRateLimitResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to get caller rate limit creation status", callerRateLimitCreateErrorDetail(err, namespaceID, svcResp.GetCallerRateLimitId()))
+		resp.Diagnostics.AddError("Failed to get caller rate limit creation status", err.Error())
 		return
 	}
 
@@ -225,7 +225,7 @@ func (r *callerRateLimitResource) Create(ctx context.Context, req resource.Creat
 		CallerRateLimitId: svcResp.GetCallerRateLimitId(),
 	})
 	if err != nil {
-		resp.Diagnostics.AddError("Failed to get caller rate limit", callerRateLimitCreateErrorDetail(err, namespaceID, svcResp.GetCallerRateLimitId()))
+		resp.Diagnostics.AddError("Failed to get caller rate limit", err.Error())
 		return
 	}
 
@@ -235,17 +235,6 @@ func (r *callerRateLimitResource) Create(ctx context.Context, req resource.Creat
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
-}
-
-// callerRateLimitCreateErrorDetail adds an import hint to errors after the create request was accepted.
-// The server may keep the rule (for example in a failed state) even though it never reached state, and
-// its id is server-generated, so the user needs the id to import it.
-func callerRateLimitCreateErrorDetail(err error, namespaceID, rateLimitID string) string {
-	if rateLimitID == "" {
-		return err.Error()
-	}
-	return fmt.Sprintf("%s. The caller rate limit may still exist; import it with: terraform import <resource address> %s",
-		err.Error(), callerRateLimitID(namespaceID, rateLimitID))
 }
 
 func (r *callerRateLimitResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
