@@ -2302,7 +2302,7 @@ resource "temporalcloud_namespace" "test" {
     mode         = "warn"
     metadata_key = ""
   }`),
-				ExpectError: regexp.MustCompile(`metadata_key[[:space:]]+string[[:space:]]+length[[:space:]]+must[[:space:]]+be[[:space:]]+at[[:space:]]+least[[:space:]]+1`),
+				ExpectError: regexp.MustCompile(`encryption_validation.metadata_key string length must be at least`),
 			},
 			{
 				Config: config(`
@@ -2310,14 +2310,14 @@ resource "temporalcloud_namespace" "test" {
     mode            = "warn"
     metadata_values = []
   }`),
-				ExpectError: regexp.MustCompile(`metadata_values[[:space:]]+set[[:space:]]+must[[:space:]]+contain[[:space:]]+at[[:space:]]+least[[:space:]]+1[[:space:]]+elements`),
+				ExpectError: regexp.MustCompile(`encryption_validation.metadata_values set must contain at least 1`),
 			},
 			{
 				Config: config(`
   encryption_validation = {
     metadata_key = "encoding"
   }`),
-				ExpectError: regexp.MustCompile(`"encryption_validation\.mode"[[:space:]]+must[[:space:]]+be[[:space:]]+specified`),
+				ExpectError: regexp.MustCompile(`"encryption_validation.mode" must be specified when`),
 			},
 			{
 				Config: config(`
