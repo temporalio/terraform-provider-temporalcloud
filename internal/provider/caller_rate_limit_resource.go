@@ -478,8 +478,8 @@ func getCallerRateLimitSpecFromModel(ctx context.Context, plan *callerRateLimitR
 }
 
 // updateCallerRateLimitModelFromSpec writes rl into state. The caller supplies the target namespace
-// (the plan in Create and Update, state in Read, the parsed id in ImportState) rather than trusting
-// the response. State is only written once everything has converted, so an error leaves it as it was.
+// (the plan in Create, the parsed id in Read and Update) rather than trusting the response. State is
+// only written once everything has converted, so an error leaves it as it was.
 func updateCallerRateLimitModelFromSpec(ctx context.Context, state *callerRateLimitResourceModel, rl *namespacev1.CallerRateLimit, namespaceID string) diag.Diagnostics {
 	var diags diag.Diagnostics
 
