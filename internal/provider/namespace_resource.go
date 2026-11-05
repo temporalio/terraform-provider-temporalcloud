@@ -447,8 +447,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Description: "The payload metadata key used to identify encrypted payloads. Must not be empty if set. When omitted, Temporal Cloud uses encoding.",
 						Optional:    true,
 						Validators: []validator.String{
-							// The API stores "" as unset and returns it that way, which would read back as
-							// null and fail the post-apply consistency check. Omit the attribute instead.
 							stringvalidator.LengthAtLeast(1),
 							stringvalidator.AlsoRequires(encryptionValidationModePath),
 						},
@@ -458,8 +456,6 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Optional:    true,
 						ElementType: types.StringType,
 						Validators: []validator.Set{
-							// No upper bound: the maximum is enforced by the API and is expected to become
-							// configurable. An empty set would read back as null, like an empty metadata_key.
 							setvalidator.SizeAtLeast(1),
 							setvalidator.AlsoRequires(encryptionValidationModePath),
 						},
