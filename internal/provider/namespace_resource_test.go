@@ -2299,10 +2299,25 @@ resource "temporalcloud_namespace" "test" {
 			{
 				Config: config(`
   encryption_validation = {
-    mode            = "warn"
-    metadata_values = ["one", "two", "three", "four"]
+    mode         = "warn"
+    metadata_key = ""
   }`),
-				ExpectError: regexp.MustCompile(`set must contain at least 1[[:space:]]+elements and at most 3 elements`),
+				ExpectError: regexp.MustCompile(`metadata_key[[:space:]]+string[[:space:]]+length[[:space:]]+must[[:space:]]+be[[:space:]]+at[[:space:]]+least[[:space:]]+1`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode            = "warn"
+    metadata_values = []
+  }`),
+				ExpectError: regexp.MustCompile(`metadata_values[[:space:]]+set[[:space:]]+must[[:space:]]+contain[[:space:]]+at[[:space:]]+least[[:space:]]+1[[:space:]]+elements`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    metadata_key = "encoding"
+  }`),
+				ExpectError: regexp.MustCompile(`"encryption_validation\.mode"[[:space:]]+must[[:space:]]+be[[:space:]]+specified`),
 			},
 			{
 				Config: config(`

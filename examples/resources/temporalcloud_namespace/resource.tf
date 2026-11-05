@@ -120,7 +120,6 @@ resource "temporalcloud_namespace" "terraform4" {
     "0f806bg8-fe63-461c-81b3-17e3tcb0574b"
   ]
 }
-
 resource "temporalcloud_project" "payments" {
   display_name = "payments"
 }

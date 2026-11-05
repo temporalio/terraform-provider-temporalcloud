@@ -226,8 +226,8 @@ Optional:
 
 - `inspect_failure` (Boolean) Whether to inspect failure payloads for encrypted payload metadata. Defaults to false.
 - `inspect_header` (Boolean) Whether to inspect workflow headers for encrypted payload metadata. Defaults to false.
-- `metadata_key` (String) The payload metadata key used to identify encrypted payloads. When omitted, Temporal Cloud uses encoding.
-- `metadata_values` (Set of String) The payload metadata values used to identify encrypted payloads. Configure one to three values. When omitted, Temporal Cloud uses binary/encrypted.
+- `metadata_key` (String) The payload metadata key used to identify encrypted payloads. Must not be empty if set. When omitted, Temporal Cloud uses encoding.
+- `metadata_values` (Set of String) The payload metadata values used to identify encrypted payloads. Must contain at least one value if set; Temporal Cloud enforces the maximum number of values. When omitted, Temporal Cloud uses binary/encrypted.
 - `mode` (String) The encryption validation mode. Valid values are disabled, warn, and deny. An empty configuration is treated as unconfigured.
 
 

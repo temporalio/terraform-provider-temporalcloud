@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -185,6 +186,9 @@ var (
 		"inspect_header":  types.BoolType,
 		"inspect_failure": types.BoolType,
 	}
+
+	// The API rejects an encryption validation spec without a mode; catch that at plan time.
+	encryptionValidationModePath = path.MatchRelative().AtParent().AtName("mode")
 )
 
 func NewNamespaceResource() resource.Resource {
@@ -440,15 +444,24 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						},
 					},
 					"metadata_key": schema.StringAttribute{
-						Description: "The payload metadata key used to identify encrypted payloads. When omitted, Temporal Cloud uses encoding.",
+						Description: "The payload metadata key used to identify encrypted payloads. Must not be empty if set. When omitted, Temporal Cloud uses encoding.",
 						Optional:    true,
+						Validators: []validator.String{
+							// The API stores "" as unset and returns it that way, which would read back as
+							// null and fail the post-apply consistency check. Omit the attribute instead.
+							stringvalidator.LengthAtLeast(1),
+							stringvalidator.AlsoRequires(encryptionValidationModePath),
+						},
 					},
 					"metadata_values": schema.SetAttribute{
-						Description: "The payload metadata values used to identify encrypted payloads. Configure one to three values. When omitted, Temporal Cloud uses binary/encrypted.",
+						Description: "The payload metadata values used to identify encrypted payloads. Must contain at least one value if set; Temporal Cloud enforces the maximum number of values. When omitted, Temporal Cloud uses binary/encrypted.",
 						Optional:    true,
 						ElementType: types.StringType,
 						Validators: []validator.Set{
-							setvalidator.SizeBetween(1, 3),
+							// No upper bound: the maximum is enforced by the API and is expected to become
+							// configurable. An empty set would read back as null, like an empty metadata_key.
+							setvalidator.SizeAtLeast(1),
+							setvalidator.AlsoRequires(encryptionValidationModePath),
 						},
 					},
 					"inspect_header": schema.BoolAttribute{
@@ -456,12 +469,18 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
+						Validators: []validator.Bool{
+							boolvalidator.AlsoRequires(encryptionValidationModePath),
+						},
 					},
 					"inspect_failure": schema.BoolAttribute{
 						Description: "Whether to inspect failure payloads for encrypted payload metadata. Defaults to false.",
 						Optional:    true,
 						Computed:    true,
 						Default:     booldefault.StaticBool(false),
+						Validators: []validator.Bool{
+							boolvalidator.AlsoRequires(encryptionValidationModePath),
+						},
 					},
 				},
 			},
