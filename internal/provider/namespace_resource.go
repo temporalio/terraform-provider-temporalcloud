@@ -430,7 +430,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"encryption_validation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, removing this attribute or setting it to an empty object disables encryption validation. Provider v1.11.0 does not support this, so everyone sharing the state must use a later provider version.",
+				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, removing this attribute or setting it to an empty object disables encryption validation.",
 				CustomType: internaltypes.ZeroObjectType{
 					ObjectType: basetypes.ObjectType{
 						AttrTypes: encryptionValidationAttrs,
@@ -981,10 +981,9 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	encryptionValidation, disablingEncryptionValidation := encryptionValidationForUpdate(
-		encryptionValidation,
-		currentNs.GetNamespace().GetSpec().GetEncryptionValidation(),
-	)
+
+	currentEncryptionValidation := currentNs.GetNamespace().GetSpec().GetEncryptionValidation()
+	encryptionValidation = encryptionValidationForUpdate(encryptionValidation, currentEncryptionValidation)
 	spec.EncryptionValidation = encryptionValidation
 
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
@@ -999,9 +998,16 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
 		AsyncOperationId: uuid.New().String(),
 	})
-	// Removing an already-disabled encryption_validation produces a plan diff that the API sees as
-	// a no-op, so fall through and refresh state from the API. Any other no-op is still an error.
-	nothingToChange := disablingEncryptionValidation && isNothingToChangeError(err)
+
+	// Moving between an unset encryption_validation and an explicit default disable produces a plan
+	// diff that the API sees as a no-op, so fall through and refresh state from the API. Any other
+	// no-op is still an error.
+	nothingToChange := isNothingToChangeError(err) && isEncryptionValidationRepresentationChange(
+		state.EncryptionValidation.IsZero(ctx),
+		plan.EncryptionValidation.IsZero(ctx),
+		encryptionValidation,
+		currentEncryptionValidation,
+	)
 	if err != nil && !nothingToChange {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 		return
@@ -1552,27 +1558,42 @@ func encryptionValidationToModel(
 	return value, diags
 }
 
-// encryptionValidationForUpdate returns the encryption validation spec to send on update, and whether
-// it is an explicit disable substituted for a removed (or empty) config. The API ignores an omitted
-// spec once one is configured, so removal is sent as a disable. Disabled behaves the same as
-// unconfigured, and updateModelFromSpec maps it back to the unset config.
+// encryptionValidationForUpdate returns the encryption validation spec to send on update. The API
+// ignores an omitted spec once one is configured, so a removed (or empty) config is sent as a disabled
+// mode. Disabled behaves the same as unconfigured, and updateModelFromSpec maps it back to the unset
+// config.
 func encryptionValidationForUpdate(
 	planSpec *namespacev1.EncryptionValidationSpec,
 	currentSpec *namespacev1.EncryptionValidationSpec,
-) (*namespacev1.EncryptionValidationSpec, bool) {
+) *namespacev1.EncryptionValidationSpec {
 	if planSpec != nil || currentSpec == nil {
-		return planSpec, false
+		return planSpec
 	}
 	return &namespacev1.EncryptionValidationSpec{
 		Mode: namespacev1.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
-	}, true
+	}
+}
+
+// isEncryptionValidationRepresentationChange reports whether a planned encryption_validation change
+// only moves between an unset config (null or {}) and an explicit default disable. The API stores both
+// as the same default disabled spec, so it rejects the update with "nothing to change".
+func isEncryptionValidationRepresentationChange(
+	priorIsZero bool,
+	planIsZero bool,
+	sentSpec *namespacev1.EncryptionValidationSpec,
+	currentSpec *namespacev1.EncryptionValidationSpec,
+) bool {
+	return priorIsZero != planIsZero &&
+		isDefaultDisabledEncryptionValidation(sentSpec) &&
+		isDefaultDisabledEncryptionValidation(currentSpec)
 }
 
 func isNothingToChangeError(err error) bool {
-	return err != nil && status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "nothing to change")
+	s, ok := status.FromError(err)
+	return ok && s.Code() == codes.InvalidArgument && strings.Contains(s.Message(), "nothing to change")
 }
 
-// isDefaultDisabledEncryptionValidation reports whether spec is the disable the provider sends when
+// isDefaultDisabledEncryptionValidation reports whether spec is the disabled mode the provider sends when
 // encryption_validation is removed from config.
 func isDefaultDisabledEncryptionValidation(spec *namespacev1.EncryptionValidationSpec) bool {
 	return proto.Equal(spec, &namespacev1.EncryptionValidationSpec{

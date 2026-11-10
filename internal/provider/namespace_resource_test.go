@@ -2154,50 +2154,124 @@ func TestEncryptionValidationForUpdate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		planSpec      *namespace.EncryptionValidationSpec
-		currentSpec   *namespace.EncryptionValidationSpec
-		want          *namespace.EncryptionValidationSpec
-		wantDisabling bool
+		name        string
+		planSpec    *namespace.EncryptionValidationSpec
+		currentSpec *namespace.EncryptionValidationSpec
+		want        *namespace.EncryptionValidationSpec
 	}{
 		{
-			name:          "never configured stays unconfigured",
-			planSpec:      nil,
-			currentSpec:   nil,
-			want:          nil,
-			wantDisabling: false,
+			name:        "never configured stays unconfigured",
+			planSpec:    nil,
+			currentSpec: nil,
+			want:        nil,
 		},
 		{
-			name:          "configured plan is sent as is",
-			planSpec:      deny,
-			currentSpec:   disabled,
-			want:          deny,
-			wantDisabling: false,
+			name:        "configured plan is sent as is",
+			planSpec:    deny,
+			currentSpec: disabled,
+			want:        deny,
 		},
 		{
-			name:          "removed configuration is sent as disabled",
-			planSpec:      nil,
-			currentSpec:   deny,
-			want:          disabled,
-			wantDisabling: true,
+			name:        "removed configuration is sent as disabled",
+			planSpec:    nil,
+			currentSpec: deny,
+			want:        disabled,
 		},
 		{
-			name:          "removed disabled configuration is sent as disabled",
-			planSpec:      nil,
-			currentSpec:   disabled,
-			want:          disabled,
-			wantDisabling: true,
+			name:        "removed disabled configuration is sent as disabled",
+			planSpec:    nil,
+			currentSpec: disabled,
+			want:        disabled,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, disabling := encryptionValidationForUpdate(tc.planSpec, tc.currentSpec)
+			got := encryptionValidationForUpdate(tc.planSpec, tc.currentSpec)
 			if !proto.Equal(got, tc.want) {
 				t.Errorf("unexpected encryption validation spec: got %+v, want %+v", got, tc.want)
 			}
-			if disabling != tc.wantDisabling {
-				t.Errorf("unexpected disabling: got %t, want %t", disabling, tc.wantDisabling)
+		})
+	}
+}
+
+func TestIsEncryptionValidationRepresentationChange(t *testing.T) {
+	t.Parallel()
+
+	deny := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+	}
+	disabled := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+	}
+	disabledWithMetadataKey := &namespace.EncryptionValidationSpec{
+		Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+		MetadataKey: "payload-encryption",
+	}
+
+	tests := []struct {
+		name        string
+		priorIsZero bool
+		planIsZero  bool
+		sentSpec    *namespace.EncryptionValidationSpec
+		currentSpec *namespace.EncryptionValidationSpec
+		want        bool
+	}{
+		{
+			name:        "removing an already-disabled configuration",
+			priorIsZero: false,
+			planIsZero:  true,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        true,
+		},
+		{
+			name:        "re-adding a disabled configuration after removal",
+			priorIsZero: true,
+			planIsZero:  false,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        true,
+		},
+		{
+			name:        "removing an enforcing configuration changes the API",
+			priorIsZero: false,
+			planIsZero:  true,
+			sentSpec:    disabled,
+			currentSpec: deny,
+			want:        false,
+		},
+		{
+			name:        "re-adding a disabled configuration with metadata changes the API",
+			priorIsZero: true,
+			planIsZero:  false,
+			sentSpec:    disabledWithMetadataKey,
+			currentSpec: disabled,
+			want:        false,
+		},
+		{
+			name:        "unchanged disabled configuration is not a representation change",
+			priorIsZero: false,
+			planIsZero:  false,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        false,
+		},
+		{
+			name:        "unchanged unset configuration is not a representation change",
+			priorIsZero: true,
+			planIsZero:  true,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isEncryptionValidationRepresentationChange(tc.priorIsZero, tc.planIsZero, tc.sentSpec, tc.currentSpec)
+			if got != tc.want {
+				t.Errorf("unexpected result: got %t, want %t", got, tc.want)
 			}
 		})
 	}
@@ -2357,27 +2431,33 @@ func TestUpdateModelFromSpecEncryptionValidationDefaultDisabled(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	emptyConfiguration := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(
-		encryptionValidationAttrs,
-		map[string]attr.Value{
-			"mode":            types.StringNull(),
-			"metadata_key":    types.StringNull(),
-			"metadata_values": types.SetNull(types.StringType),
-			"inspect_header":  types.BoolValue(false),
-			"inspect_failure": types.BoolValue(false),
-		},
-	)}
-	explicitDisabled := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(
-		encryptionValidationAttrs,
-		map[string]attr.Value{
-			"mode":            types.StringValue("disabled"),
-			"metadata_key":    types.StringNull(),
-			"metadata_values": types.SetNull(types.StringType),
-			"inspect_header":  types.BoolValue(false),
-			"inspect_failure": types.BoolValue(false),
-		},
-	)}
-	removed := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(encryptionValidationAttrs)}
+	emptyConfiguration := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectValueMust(
+			encryptionValidationAttrs,
+			map[string]attr.Value{
+				"mode":            types.StringNull(),
+				"metadata_key":    types.StringNull(),
+				"metadata_values": types.SetNull(types.StringType),
+				"inspect_header":  types.BoolValue(false),
+				"inspect_failure": types.BoolValue(false),
+			},
+		),
+	}
+	explicitDisabled := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectValueMust(
+			encryptionValidationAttrs,
+			map[string]attr.Value{
+				"mode":            types.StringValue("disabled"),
+				"metadata_key":    types.StringNull(),
+				"metadata_values": types.SetNull(types.StringType),
+				"inspect_header":  types.BoolValue(false),
+				"inspect_failure": types.BoolValue(false),
+			},
+		),
+	}
+	removed := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectNull(encryptionValidationAttrs),
+	}
 
 	tests := []struct {
 		name  string
@@ -2539,6 +2619,16 @@ resource "temporalcloud_namespace" "test" {
 			{
 				// Removing an already-disabled configuration is a no-op for the API.
 				Config: config(""),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				// Re-adding the same disabled configuration is also a no-op for the API.
+				Config: config(`
+  encryption_validation = {
+    mode = "disabled"
+  }`),
 				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
 					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
 				}),
