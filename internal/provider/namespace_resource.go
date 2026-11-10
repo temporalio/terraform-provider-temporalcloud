@@ -981,14 +981,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	// The API ignores an omitted encryption validation spec once one is configured, so removing
-	// the attribute (or setting it to {}) is sent as an explicit disable. Disabled behaves the same
-	// as unconfigured, and updateModelFromSpec maps it back to the unset config.
-	if encryptionValidation == nil && currentNs.GetNamespace().GetSpec().GetEncryptionValidation() != nil {
-		encryptionValidation = &namespacev1.EncryptionValidationSpec{
-			Mode: namespacev1.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
-		}
-	}
+	encryptionValidation, disablingEncryptionValidation := encryptionValidationForUpdate(
+		encryptionValidation,
+		currentNs.GetNamespace().GetSpec().GetEncryptionValidation(),
+	)
 	spec.EncryptionValidation = encryptionValidation
 
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
@@ -1004,8 +1000,8 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		AsyncOperationId: uuid.New().String(),
 	})
 	// Removing an already-disabled encryption_validation produces a plan diff that the API sees as
-	// a no-op, so fall through and refresh state from the API.
-	nothingToChange := err != nil && status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "nothing to change")
+	// a no-op, so fall through and refresh state from the API. Any other no-op is still an error.
+	nothingToChange := disablingEncryptionValidation && isNothingToChangeError(err)
 	if err != nil && !nothingToChange {
 		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
 		return
@@ -1554,6 +1550,26 @@ func encryptionValidationToModel(
 	})
 	diags.Append(objectDiags...)
 	return value, diags
+}
+
+// encryptionValidationForUpdate returns the encryption validation spec to send on update, and whether
+// it is an explicit disable substituted for a removed (or empty) config. The API ignores an omitted
+// spec once one is configured, so removal is sent as a disable. Disabled behaves the same as
+// unconfigured, and updateModelFromSpec maps it back to the unset config.
+func encryptionValidationForUpdate(
+	planSpec *namespacev1.EncryptionValidationSpec,
+	currentSpec *namespacev1.EncryptionValidationSpec,
+) (*namespacev1.EncryptionValidationSpec, bool) {
+	if planSpec != nil || currentSpec == nil {
+		return planSpec, false
+	}
+	return &namespacev1.EncryptionValidationSpec{
+		Mode: namespacev1.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+	}, true
+}
+
+func isNothingToChangeError(err error) bool {
+	return err != nil && status.Code(err) == codes.InvalidArgument && strings.Contains(err.Error(), "nothing to change")
 }
 
 // isDefaultDisabledEncryptionValidation reports whether spec is the disable the provider sends when

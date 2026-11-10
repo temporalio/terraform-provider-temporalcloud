@@ -2143,6 +2143,110 @@ func TestGetEncryptionValidationFromModel(t *testing.T) {
 	}
 }
 
+func TestEncryptionValidationForUpdate(t *testing.T) {
+	t.Parallel()
+
+	deny := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+	}
+	disabled := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+	}
+
+	tests := []struct {
+		name          string
+		planSpec      *namespace.EncryptionValidationSpec
+		currentSpec   *namespace.EncryptionValidationSpec
+		want          *namespace.EncryptionValidationSpec
+		wantDisabling bool
+	}{
+		{
+			name:          "never configured stays unconfigured",
+			planSpec:      nil,
+			currentSpec:   nil,
+			want:          nil,
+			wantDisabling: false,
+		},
+		{
+			name:          "configured plan is sent as is",
+			planSpec:      deny,
+			currentSpec:   disabled,
+			want:          deny,
+			wantDisabling: false,
+		},
+		{
+			name:          "removed configuration is sent as disabled",
+			planSpec:      nil,
+			currentSpec:   deny,
+			want:          disabled,
+			wantDisabling: true,
+		},
+		{
+			name:          "removed disabled configuration is sent as disabled",
+			planSpec:      nil,
+			currentSpec:   disabled,
+			want:          disabled,
+			wantDisabling: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, disabling := encryptionValidationForUpdate(tc.planSpec, tc.currentSpec)
+			if !proto.Equal(got, tc.want) {
+				t.Errorf("unexpected encryption validation spec: got %+v, want %+v", got, tc.want)
+			}
+			if disabling != tc.wantDisabling {
+				t.Errorf("unexpected disabling: got %t, want %t", disabling, tc.wantDisabling)
+			}
+		})
+	}
+}
+
+func TestIsNothingToChangeError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "nothing to change",
+			err:  status.Error(codes.InvalidArgument, "nothing to change"),
+			want: true,
+		},
+		{
+			name: "other invalid argument",
+			err:  status.Error(codes.InvalidArgument, "invalid encryption validation mode"),
+			want: false,
+		},
+		{
+			name: "nothing to change with another code",
+			err:  status.Error(codes.Internal, "nothing to change"),
+			want: false,
+		},
+		{
+			name: "non-grpc error",
+			err:  errors.New("nothing to change"),
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isNothingToChangeError(tc.err); got != tc.want {
+				t.Errorf("unexpected result: got %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUpdateModelFromSpecEncryptionValidation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
