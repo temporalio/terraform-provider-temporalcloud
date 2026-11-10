@@ -2178,10 +2178,19 @@ func TestEncryptionValidationForUpdate(t *testing.T) {
 			want:        disabled,
 		},
 		{
-			name:        "removed disabled configuration is sent as disabled",
+			name:        "removed configuration is omitted when already disabled",
 			planSpec:    nil,
 			currentSpec: disabled,
-			want:        disabled,
+			want:        nil,
+		},
+		{
+			name:     "removed configuration is sent as disabled when disabled with metadata",
+			planSpec: nil,
+			currentSpec: &namespace.EncryptionValidationSpec{
+				Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				MetadataKey: "payload-encryption",
+			},
+			want: disabled,
 		},
 	}
 
@@ -2221,7 +2230,7 @@ func TestIsEncryptionValidationRepresentationChange(t *testing.T) {
 			name:        "removing an already-disabled configuration",
 			priorIsZero: false,
 			planIsZero:  true,
-			sentSpec:    disabled,
+			sentSpec:    nil,
 			currentSpec: disabled,
 			want:        true,
 		},

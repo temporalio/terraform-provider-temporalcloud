@@ -1560,13 +1560,13 @@ func encryptionValidationToModel(
 
 // encryptionValidationForUpdate returns the encryption validation spec to send on update. The API
 // ignores an omitted spec once one is configured, so a removed (or empty) config is sent as a disabled
-// mode. Disabled behaves the same as unconfigured, and updateModelFromSpec maps it back to the unset
-// config.
+// mode unless the API already has the default disabled spec. Disabled behaves the same as
+// unconfigured, and updateModelFromSpec maps it back to the unset config.
 func encryptionValidationForUpdate(
 	planSpec *namespacev1.EncryptionValidationSpec,
 	currentSpec *namespacev1.EncryptionValidationSpec,
 ) *namespacev1.EncryptionValidationSpec {
-	if planSpec != nil || currentSpec == nil {
+	if planSpec != nil || currentSpec == nil || isDefaultDisabledEncryptionValidation(currentSpec) {
 		return planSpec
 	}
 	return &namespacev1.EncryptionValidationSpec{
@@ -1584,7 +1584,7 @@ func isEncryptionValidationRepresentationChange(
 	currentSpec *namespacev1.EncryptionValidationSpec,
 ) bool {
 	return priorIsZero != planIsZero &&
-		isDefaultDisabledEncryptionValidation(sentSpec) &&
+		(sentSpec == nil || isDefaultDisabledEncryptionValidation(sentSpec)) &&
 		isDefaultDisabledEncryptionValidation(currentSpec)
 }
 
