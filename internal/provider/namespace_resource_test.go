@@ -2249,6 +2249,79 @@ func TestUpdateModelFromSpecEncryptionValidationPreservesEmptyConfiguration(t *t
 	}
 }
 
+func TestUpdateModelFromSpecEncryptionValidationDefaultDisabled(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	emptyConfiguration := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(
+		encryptionValidationAttrs,
+		map[string]attr.Value{
+			"mode":            types.StringNull(),
+			"metadata_key":    types.StringNull(),
+			"metadata_values": types.SetNull(types.StringType),
+			"inspect_header":  types.BoolValue(false),
+			"inspect_failure": types.BoolValue(false),
+		},
+	)}
+	explicitDisabled := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(
+		encryptionValidationAttrs,
+		map[string]attr.Value{
+			"mode":            types.StringValue("disabled"),
+			"metadata_key":    types.StringNull(),
+			"metadata_values": types.SetNull(types.StringType),
+			"inspect_header":  types.BoolValue(false),
+			"inspect_failure": types.BoolValue(false),
+		},
+	)}
+	removed := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(encryptionValidationAttrs)}
+
+	tests := []struct {
+		name  string
+		prior internaltypes.ZeroObjectValue
+		want  internaltypes.ZeroObjectValue
+	}{
+		{
+			name:  "removed configuration stays unset",
+			prior: removed,
+			want:  removed,
+		},
+		{
+			name:  "empty configuration stays empty",
+			prior: emptyConfiguration,
+			want:  emptyConfiguration,
+		},
+		{
+			name:  "explicit disabled configuration is kept",
+			prior: explicitDisabled,
+			want:  explicitDisabled,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &namespaceResourceModel{EncryptionValidation: tc.prior}
+			diags := updateModelFromSpec(ctx, state, &namespace.Namespace{
+				Namespace: "test.e2e",
+				Spec: &namespace.NamespaceSpec{
+					Name:          "test",
+					Regions:       []string{"aws-us-east-1"},
+					RetentionDays: 7,
+					EncryptionValidation: &namespace.EncryptionValidationSpec{
+						Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+					},
+				},
+				Endpoints: &namespace.Endpoints{},
+			})
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if !state.EncryptionValidation.Equal(tc.want) {
+				t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, tc.want)
+			}
+		})
+	}
+}
+
 func TestAccNamespaceWithEncryptionValidation(t *testing.T) {
 	name := fmt.Sprintf("tf-eve-%s", randomString(10))
 	config := func(encryptionValidation string) string {
@@ -2360,9 +2433,44 @@ resource "temporalcloud_namespace" "test" {
 				}),
 			},
 			{
-				Config:      config(""),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
+				// Removing an already-disabled configuration is a no-op for the API.
+				Config: config(""),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "deny"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+				}),
+			},
+			{
+				// Removing an enforcing configuration disables it.
+				Config: config(""),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "warn"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN,
+				}),
+			},
+			{
+				// An empty object disables it too.
+				Config: config(`
+  encryption_validation = {}`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
 			},
 		},
 	})
