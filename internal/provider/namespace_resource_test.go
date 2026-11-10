@@ -2143,6 +2143,222 @@ func TestGetEncryptionValidationFromModel(t *testing.T) {
 	}
 }
 
+func TestEncryptionValidationForUpdate(t *testing.T) {
+	t.Parallel()
+
+	deny := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+	}
+	disabled := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+	}
+	disabledWithMetadataKey := &namespace.EncryptionValidationSpec{
+		Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+		MetadataKey: "payload-encryption",
+	}
+
+	tests := []struct {
+		name        string
+		priorIsZero bool
+		planIsZero  bool
+		planSpec    *namespace.EncryptionValidationSpec
+		currentSpec *namespace.EncryptionValidationSpec
+		want        *namespace.EncryptionValidationSpec
+	}{
+		{
+			name:        "never configured stays unconfigured",
+			priorIsZero: true,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: nil,
+			want:        nil,
+		},
+		{
+			name:        "configured plan is sent as is",
+			priorIsZero: true,
+			planIsZero:  false,
+			planSpec:    deny,
+			currentSpec: disabled,
+			want:        deny,
+		},
+		{
+			name:        "removed configuration is sent as disabled",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: deny,
+			want:        disabled,
+		},
+		{
+			name:        "removed configuration is omitted when already disabled",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: disabled,
+			want:        nil,
+		},
+		{
+			name:        "removed configuration is sent as disabled when disabled with metadata",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: disabledWithMetadataKey,
+			want:        disabled,
+		},
+		{
+			name:        "removed configuration is omitted when the API has none",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: nil,
+			want:        nil,
+		},
+		{
+			name:        "configuration set outside Terraform after the plan is not disabled",
+			priorIsZero: true,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: deny,
+			want:        nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := encryptionValidationForUpdate(tc.priorIsZero, tc.planIsZero, tc.planSpec, tc.currentSpec)
+			if !proto.Equal(got, tc.want) {
+				t.Errorf("unexpected encryption validation spec: got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsEncryptionValidationRepresentationChange(t *testing.T) {
+	t.Parallel()
+
+	deny := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+	}
+	disabled := &namespace.EncryptionValidationSpec{
+		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+	}
+	disabledWithMetadataKey := &namespace.EncryptionValidationSpec{
+		Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+		MetadataKey: "payload-encryption",
+	}
+
+	tests := []struct {
+		name        string
+		priorIsZero bool
+		planIsZero  bool
+		sentSpec    *namespace.EncryptionValidationSpec
+		currentSpec *namespace.EncryptionValidationSpec
+		want        bool
+	}{
+		{
+			name:        "removing an already-disabled configuration",
+			priorIsZero: false,
+			planIsZero:  true,
+			sentSpec:    nil,
+			currentSpec: disabled,
+			want:        true,
+		},
+		{
+			name:        "re-adding a disabled configuration after removal",
+			priorIsZero: true,
+			planIsZero:  false,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        true,
+		},
+		{
+			name:        "removing an enforcing configuration changes the API",
+			priorIsZero: false,
+			planIsZero:  true,
+			sentSpec:    disabled,
+			currentSpec: deny,
+			want:        false,
+		},
+		{
+			name:        "re-adding a disabled configuration with metadata changes the API",
+			priorIsZero: true,
+			planIsZero:  false,
+			sentSpec:    disabledWithMetadataKey,
+			currentSpec: disabled,
+			want:        false,
+		},
+		{
+			name:        "unchanged disabled configuration is not a representation change",
+			priorIsZero: false,
+			planIsZero:  false,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        false,
+		},
+		{
+			name:        "unchanged unset configuration is not a representation change",
+			priorIsZero: true,
+			planIsZero:  true,
+			sentSpec:    disabled,
+			currentSpec: disabled,
+			want:        false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := isEncryptionValidationRepresentationChange(tc.priorIsZero, tc.planIsZero, tc.sentSpec, tc.currentSpec)
+			if got != tc.want {
+				t.Errorf("unexpected result: got %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsNothingToChangeError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "nothing to change",
+			err:  status.Error(codes.InvalidArgument, "nothing to change"),
+			want: true,
+		},
+		{
+			name: "other invalid argument",
+			err:  status.Error(codes.InvalidArgument, "invalid encryption validation mode"),
+			want: false,
+		},
+		{
+			name: "nothing to change with another code",
+			err:  status.Error(codes.Internal, "nothing to change"),
+			want: false,
+		},
+		{
+			name: "non-grpc error",
+			err:  errors.New("nothing to change"),
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isNothingToChangeError(tc.err); got != tc.want {
+				t.Errorf("unexpected result: got %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUpdateModelFromSpecEncryptionValidation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -2246,6 +2462,85 @@ func TestUpdateModelFromSpecEncryptionValidationPreservesEmptyConfiguration(t *t
 
 	if !state.EncryptionValidation.Equal(emptyConfiguration) {
 		t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, emptyConfiguration)
+	}
+}
+
+func TestUpdateModelFromSpecEncryptionValidationDefaultDisabled(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	emptyConfiguration := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectValueMust(
+			encryptionValidationAttrs,
+			map[string]attr.Value{
+				"mode":            types.StringNull(),
+				"metadata_key":    types.StringNull(),
+				"metadata_values": types.SetNull(types.StringType),
+				"inspect_header":  types.BoolValue(false),
+				"inspect_failure": types.BoolValue(false),
+			},
+		),
+	}
+	explicitDisabled := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectValueMust(
+			encryptionValidationAttrs,
+			map[string]attr.Value{
+				"mode":            types.StringValue("disabled"),
+				"metadata_key":    types.StringNull(),
+				"metadata_values": types.SetNull(types.StringType),
+				"inspect_header":  types.BoolValue(false),
+				"inspect_failure": types.BoolValue(false),
+			},
+		),
+	}
+	removed := internaltypes.ZeroObjectValue{
+		ObjectValue: types.ObjectNull(encryptionValidationAttrs),
+	}
+
+	tests := []struct {
+		name  string
+		prior internaltypes.ZeroObjectValue
+		want  internaltypes.ZeroObjectValue
+	}{
+		{
+			name:  "removed configuration stays unset",
+			prior: removed,
+			want:  removed,
+		},
+		{
+			name:  "empty configuration stays empty",
+			prior: emptyConfiguration,
+			want:  emptyConfiguration,
+		},
+		{
+			name:  "explicit disabled configuration is kept",
+			prior: explicitDisabled,
+			want:  explicitDisabled,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			state := &namespaceResourceModel{EncryptionValidation: tc.prior}
+			diags := updateModelFromSpec(ctx, state, &namespace.Namespace{
+				Namespace: "test.e2e",
+				Spec: &namespace.NamespaceSpec{
+					Name:          "test",
+					Regions:       []string{"aws-us-east-1"},
+					RetentionDays: 7,
+					EncryptionValidation: &namespace.EncryptionValidationSpec{
+						Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+					},
+				},
+				Endpoints: &namespace.Endpoints{},
+			})
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if !state.EncryptionValidation.Equal(tc.want) {
+				t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, tc.want)
+			}
+		})
 	}
 }
 
@@ -2360,9 +2655,54 @@ resource "temporalcloud_namespace" "test" {
 				}),
 			},
 			{
-				Config:      config(""),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
+				// Removing an already-disabled configuration is a no-op for the API.
+				Config: config(""),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				// Re-adding the same disabled configuration is also a no-op for the API.
+				Config: config(`
+  encryption_validation = {
+    mode = "disabled"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "deny"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+				}),
+			},
+			{
+				// Removing an enforcing configuration disables it.
+				Config: config(""),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "warn"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN,
+				}),
+			},
+			{
+				// An empty object disables it too.
+				Config: config(`
+  encryption_validation = {}`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
 			},
 		},
 	})
