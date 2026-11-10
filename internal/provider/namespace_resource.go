@@ -429,7 +429,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 			},
 			"encryption_validation": schema.SingleNestedAttribute{
 				Optional:    true,
-				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute.",
+				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute or setting it to an empty object.",
 				CustomType: internaltypes.ZeroObjectType{
 					ObjectType: basetypes.ObjectType{
 						AttrTypes: encryptionValidationAttrs,
@@ -551,10 +551,10 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			)
 			return
 		}
-		if !state.EncryptionValidation.IsNull() && config.EncryptionValidation.IsNull() {
+		if !state.EncryptionValidation.IsZero(ctx) && config.EncryptionValidation.IsZero(ctx) {
 			resp.Diagnostics.AddError(
 				"encryption_validation cannot be removed once set",
-				`encryption_validation cannot be removed once set; to disable, explicitly set encryption_validation { mode = "disabled" }`,
+				`encryption_validation cannot be removed or emptied once set; to disable, explicitly set encryption_validation = { mode = "disabled" }`,
 			)
 			return
 		}
@@ -874,10 +874,10 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		)
 		return
 	}
-	if !state.EncryptionValidation.IsNull() && config.EncryptionValidation.IsNull() {
+	if !state.EncryptionValidation.IsZero(ctx) && config.EncryptionValidation.IsZero(ctx) {
 		resp.Diagnostics.AddError(
 			"encryption_validation cannot be removed once set",
-			`encryption_validation cannot be removed once set; to disable, explicitly set encryption_validation { mode = "disabled" }`,
+			`encryption_validation cannot be removed or emptied once set; to disable, explicitly set encryption_validation = { mode = "disabled" }`,
 		)
 		return
 	}
