@@ -2152,51 +2152,80 @@ func TestEncryptionValidationForUpdate(t *testing.T) {
 	disabled := &namespace.EncryptionValidationSpec{
 		Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
 	}
+	disabledWithMetadataKey := &namespace.EncryptionValidationSpec{
+		Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+		MetadataKey: "payload-encryption",
+	}
 
 	tests := []struct {
 		name        string
+		priorIsZero bool
+		planIsZero  bool
 		planSpec    *namespace.EncryptionValidationSpec
 		currentSpec *namespace.EncryptionValidationSpec
 		want        *namespace.EncryptionValidationSpec
 	}{
 		{
 			name:        "never configured stays unconfigured",
+			priorIsZero: true,
+			planIsZero:  true,
 			planSpec:    nil,
 			currentSpec: nil,
 			want:        nil,
 		},
 		{
 			name:        "configured plan is sent as is",
+			priorIsZero: true,
+			planIsZero:  false,
 			planSpec:    deny,
 			currentSpec: disabled,
 			want:        deny,
 		},
 		{
 			name:        "removed configuration is sent as disabled",
+			priorIsZero: false,
+			planIsZero:  true,
 			planSpec:    nil,
 			currentSpec: deny,
 			want:        disabled,
 		},
 		{
 			name:        "removed configuration is omitted when already disabled",
+			priorIsZero: false,
+			planIsZero:  true,
 			planSpec:    nil,
 			currentSpec: disabled,
 			want:        nil,
 		},
 		{
-			name:     "removed configuration is sent as disabled when disabled with metadata",
-			planSpec: nil,
-			currentSpec: &namespace.EncryptionValidationSpec{
-				Mode:        namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
-				MetadataKey: "payload-encryption",
-			},
-			want: disabled,
+			name:        "removed configuration is sent as disabled when disabled with metadata",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: disabledWithMetadataKey,
+			want:        disabled,
+		},
+		{
+			name:        "removed configuration is omitted when the API has none",
+			priorIsZero: false,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: nil,
+			want:        nil,
+		},
+		{
+			name:        "configuration set outside Terraform after the plan is not disabled",
+			priorIsZero: true,
+			planIsZero:  true,
+			planSpec:    nil,
+			currentSpec: deny,
+			want:        nil,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := encryptionValidationForUpdate(tc.planSpec, tc.currentSpec)
+			got := encryptionValidationForUpdate(tc.priorIsZero, tc.planIsZero, tc.planSpec, tc.currentSpec)
 			if !proto.Equal(got, tc.want) {
 				t.Errorf("unexpected encryption validation spec: got %+v, want %+v", got, tc.want)
 			}

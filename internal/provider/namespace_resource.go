@@ -982,8 +982,15 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	priorEncryptionValidationIsZero := state.EncryptionValidation.IsZero(ctx)
+	planEncryptionValidationIsZero := plan.EncryptionValidation.IsZero(ctx)
 	currentEncryptionValidation := currentNs.GetNamespace().GetSpec().GetEncryptionValidation()
-	encryptionValidation = encryptionValidationForUpdate(encryptionValidation, currentEncryptionValidation)
+	encryptionValidation = encryptionValidationForUpdate(
+		priorEncryptionValidationIsZero,
+		planEncryptionValidationIsZero,
+		encryptionValidation,
+		currentEncryptionValidation,
+	)
 	spec.EncryptionValidation = encryptionValidation
 
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
@@ -1003,8 +1010,8 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	// diff that the API sees as a no-op, so fall through and refresh state from the API. Any other
 	// no-op is still an error.
 	nothingToChange := isNothingToChangeError(err) && isEncryptionValidationRepresentationChange(
-		state.EncryptionValidation.IsZero(ctx),
-		plan.EncryptionValidation.IsZero(ctx),
+		priorEncryptionValidationIsZero,
+		planEncryptionValidationIsZero,
 		encryptionValidation,
 		currentEncryptionValidation,
 	)
@@ -1559,14 +1566,19 @@ func encryptionValidationToModel(
 }
 
 // encryptionValidationForUpdate returns the encryption validation spec to send on update. The API
-// ignores an omitted spec once one is configured, so a removed (or empty) config is sent as a disabled
-// mode unless the API already has the default disabled spec. Disabled behaves the same as
-// unconfigured, and updateModelFromSpec maps it back to the unset config.
+// ignores an omitted spec once one is configured, so when the plan removes encryption_validation (the
+// prior state is set and the plan is null or {}), it is sent as a disabled mode unless the API already
+// has the default disabled spec. Disabled behaves the same as unconfigured, and updateModelFromSpec
+// maps it back to the unset config. The decision follows the plan rather than the API alone, so an
+// apply never disables encryption validation that its plan did not show being removed.
 func encryptionValidationForUpdate(
+	priorIsZero bool,
+	planIsZero bool,
 	planSpec *namespacev1.EncryptionValidationSpec,
 	currentSpec *namespacev1.EncryptionValidationSpec,
 ) *namespacev1.EncryptionValidationSpec {
-	if planSpec != nil || currentSpec == nil || isDefaultDisabledEncryptionValidation(currentSpec) {
+	removing := !priorIsZero && planIsZero
+	if !removing || currentSpec == nil || isDefaultDisabledEncryptionValidation(currentSpec) {
 		return planSpec
 	}
 	return &namespacev1.EncryptionValidationSpec{
