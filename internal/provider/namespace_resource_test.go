@@ -2364,6 +2364,12 @@ resource "temporalcloud_namespace" "test" {
 				PlanOnly:    true,
 				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
 			},
+			{
+				Config: config(`
+  encryption_validation = {}`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
+			},
 		},
 	})
 }
