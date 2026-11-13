@@ -240,7 +240,7 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 				},
 				"grpc_address": schema.StringAttribute{
 					Computed:    true,
-					Description: "The gRPC hostport address that the temporal workers, clients and tctl connect to.",
+					Description: "The gRPC hostport address that the temporal workers, clients and CLI connect to.",
 				},
 			},
 		},
