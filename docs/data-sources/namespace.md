@@ -129,7 +129,7 @@ Read-Only:
 
 Read-Only:
 
-- `grpc_address` (String) The gRPC hostport address that the temporal workers, clients and tctl connect to.
+- `grpc_address` (String) The gRPC hostport address that the temporal workers, clients and CLI connect to.
 - `web_address` (String) The web UI address.
 
 
