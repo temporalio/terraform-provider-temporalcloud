@@ -100,7 +100,7 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Cannot be changed after creation.",
+				Description: "The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Changing it moves the Nexus Endpoint to the new project in place. Moving requires the move feature to be enabled for the account.",
 				Optional:    true,
 				Computed:    true,
 				Validators: []validator.String{
@@ -152,12 +152,9 @@ func (r *nexusEndpointResource) Schema(ctx context.Context, _ resource.SchemaReq
 	}
 }
 
-// ModifyPlan rejects moving a Nexus Endpoint between projects. project_id is not in the endpoint
-// spec, so UpdateNexusEndpoint would ignore the change and succeed, leaving the endpoint where it
-// was. Destroying an endpoint interrupts Nexus callers, so the change is rejected rather than
-// planned as a replacement.
+// ModifyPlan plans a project_id change as an in-place move.
 func (r *nexusEndpointResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	modifyPlanCreateOnlyProjectID(ctx, req, resp, "Nexus Endpoint")
+	modifyPlanProjectID(ctx, req, resp)
 }
 
 func (r *nexusEndpointResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -283,8 +280,8 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	// Checked before any write; see checkProjectIDUnchanged.
-	resp.Diagnostics.Append(checkProjectIDUnchanged(plan.ProjectID, nexusEndpoint.GetEndpoint().GetProjectId(), "Nexus Endpoint")...)
+	var configuredProjectID types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("project_id"), &configuredProjectID)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -310,25 +307,44 @@ func (r *nexusEndpointResource) Update(ctx context.Context, req resource.UpdateR
 		return
 	}
 
-	svcResp, err := r.client.CloudService().UpdateNexusEndpoint(ctx, &cloudservicev1.UpdateNexusEndpointRequest{
-		EndpointId: plan.ID.ValueString(),
-		Spec: &nexusv1.EndpointSpec{
-			Name:        plan.Name.ValueString(),
-			Description: descriptionPayload,
-			TargetSpec:  targetSpec,
-			PolicySpecs: policySpecs,
-		},
-		ResourceVersion:  nexusEndpoint.GetEndpoint().GetResourceVersion(),
-		AsyncOperationId: uuid.New().String(),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to update Nexus endpoint", err.Error())
-		return
+	// Moved first, so a rejected move leaves the spec untouched. The move bumps the resource
+	// version, so the spec update uses the one read back afterwards.
+	specChanged := true
+	if destination, ok := projectMoveDestination(configuredProjectID, nexusEndpoint.GetEndpoint().GetProjectId()); ok {
+		nexusEndpoint, err = r.moveNexusEndpoint(ctx, nexusEndpoint.GetEndpoint(), destination)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to move Nexus endpoint to project "+destination, err.Error())
+			return
+		}
+		onlyMoved, err := planChangesOnly(req.Plan, req.State, "project_id")
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to compare plan with state", err.Error())
+			return
+		}
+		specChanged = !onlyMoved
 	}
 
-	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
-		resp.Diagnostics.AddError("Failed to update Nexus endpoint", err.Error())
-		return
+	if specChanged {
+		svcResp, err := r.client.CloudService().UpdateNexusEndpoint(ctx, &cloudservicev1.UpdateNexusEndpointRequest{
+			EndpointId: plan.ID.ValueString(),
+			Spec: &nexusv1.EndpointSpec{
+				Name:        plan.Name.ValueString(),
+				Description: descriptionPayload,
+				TargetSpec:  targetSpec,
+				PolicySpecs: policySpecs,
+			},
+			ResourceVersion:  nexusEndpoint.GetEndpoint().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update Nexus endpoint", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+			resp.Diagnostics.AddError("Failed to update Nexus endpoint", err.Error())
+			return
+		}
 	}
 
 	nexusEndpoint, err = r.client.CloudService().GetNexusEndpoint(ctx, &cloudservicev1.GetNexusEndpointRequest{
@@ -489,4 +505,28 @@ func getPolicySpecsFromModel(_ context.Context, model *nexusEndpointResourceMode
 	}
 
 	return policySpecs, nil
+}
+
+// moveNexusEndpoint moves the endpoint to the destination project and returns it as it is
+// afterwards.
+func (r *nexusEndpointResource) moveNexusEndpoint(
+	ctx context.Context,
+	endpoint *nexusv1.Endpoint,
+	destination string,
+) (*cloudservicev1.GetNexusEndpointResponse, error) {
+	svcResp, err := r.client.CloudService().MoveNexusEndpointToProject(ctx, &cloudservicev1.MoveNexusEndpointToProjectRequest{
+		EndpointId:              endpoint.GetId(),
+		DestinationProjectId:    destination,
+		ExpectedSourceProjectId: endpoint.GetProjectId(),
+		ResourceVersion:         endpoint.GetResourceVersion(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+		return nil, err
+	}
+	return r.client.CloudService().GetNexusEndpoint(ctx, &cloudservicev1.GetNexusEndpointRequest{
+		EndpointId: endpoint.GetId(),
+	})
 }
