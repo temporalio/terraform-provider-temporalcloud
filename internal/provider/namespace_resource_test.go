@@ -1898,7 +1898,13 @@ resource "temporalcloud_project" "project_b" {
 			testAccProjectNamespaceConfig(name, "project_id = "+projectResource))
 	}
 
-	var firstNamespaceID string
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+	movesInPlace := resource.ConfigPlanChecks{
+		PreApply: []plancheck.PlanCheck{
+			plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+		},
+	}
 
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -1911,14 +1917,7 @@ resource "temporalcloud_project" "project_b" {
 						"temporalcloud_namespace.test", "project_id",
 						"temporalcloud_project.project_a", "id",
 					),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
-						if !ok {
-							return errors.New("namespace not found in state")
-						}
-						firstNamespaceID = rs.Primary.ID
-						return nil
-					},
+					sameNamespace,
 				),
 			},
 			{
@@ -1927,31 +1926,25 @@ resource "temporalcloud_project" "project_b" {
 				ImportStateVerify: true,
 			},
 			{
-				// project_id is not part of the namespace spec, so it cannot be updated in place.
-				// Rejected at plan time rather than replaced: replacing would destroy the
-				// namespace and its workflows.
-				Config:      config("temporalcloud_project.project_b.id"),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("Namespace cannot be moved between projects"),
+				Config:           config("temporalcloud_project.project_b.id"),
+				ConfigPlanChecks: movesInPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_b", "id",
+					),
+					sameNamespace,
+				),
 			},
 			{
-				// The namespace is untouched by the rejected plan: same project, same id.
-				Config: config("temporalcloud_project.project_a.id"),
+				Config:           config("temporalcloud_project.project_a.id"),
+				ConfigPlanChecks: movesInPlace,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrPair(
 						"temporalcloud_namespace.test", "project_id",
 						"temporalcloud_project.project_a", "id",
 					),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
-						if !ok {
-							return errors.New("namespace not found in state")
-						}
-						if rs.Primary.ID != firstNamespaceID {
-							return fmt.Errorf("namespace id changed from %s to %s; it should not have been recreated", firstNamespaceID, rs.Primary.ID)
-						}
-						return nil
-					},
+					sameNamespace,
 				),
 			},
 		},
@@ -1959,9 +1952,8 @@ resource "temporalcloud_project" "project_b" {
 }
 
 // A move whose destination project is created in the same apply leaves project_id unknown at plan
-// time, so the plan-time comparison has nothing to compare. It must still be rejected: Terraform
-// accepts any applied value where the plan was unknown, so without this the first apply would
-// appear to succeed while silently dropping the move, and only later plans would fail.
+// time. Terraform accepts any applied value where the plan was unknown, so this checks the move
+// really happened rather than the apply succeeding while leaving the namespace where it was.
 func TestAccNamespaceResource_MoveToProjectCreatedInSameApply(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-ns-unk-project", randomString(10))
 	projectName := createRandomName()
@@ -1979,6 +1971,9 @@ resource "temporalcloud_project" "later" {
 		return "provider \"temporalcloud\" {}\n" + projectBlock + testAccProjectNamespaceConfig(name, projectAttr)
 	}
 
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+
 	resource.ParallelTest(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -1986,13 +1981,91 @@ resource "temporalcloud_project" "later" {
 			// Namespace lands in the default project.
 			{
 				Config: config(false),
-				Check:  resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+					sameNamespace,
+				),
 			},
-			// Now point it at a project that does not exist yet, so project_id is unknown at plan
-			// time. Rejected during plan, so the project is never created either.
 			{
-				Config:      config(true),
-				ExpectError: regexp.MustCompile("Namespace cannot be moved between projects"),
+				Config: config(true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.later", "id",
+					),
+					sameNamespace,
+				),
+			},
+		},
+	})
+}
+
+// Connectivity rules belong to a project and cannot move with the namespace, so a move swaps the
+// namespace onto a rule in the destination project. Terraform creates the new rule before the
+// namespace update and destroys the old one after it, since the namespace's state still references
+// the old rule until then.
+func TestAccNamespaceResource_MoveToProjectWithConnectivityRule(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-move-cr", randomString(10))
+	projectAName := createRandomName()
+	projectBName := createRandomName()
+
+	config := func(project string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_project" "project_a" {
+  display_name = %[1]q
+}
+
+resource "temporalcloud_project" "project_b" {
+  display_name = %[2]q
+}
+
+resource "temporalcloud_connectivity_rule" "%[3]s" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.%[3]s.id
+}
+%[4]s`, projectAName, projectBName, project, testAccProjectNamespaceConfig(name, fmt.Sprintf(`
+  project_id            = temporalcloud_project.%[1]s.id
+  connectivity_rule_ids = [temporalcloud_connectivity_rule.%[1]s.id]`, project)))
+	}
+
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("project_a"),
+				Check:  sameNamespace,
+			},
+			{
+				Config: config("project_b"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_a", plancheck.ResourceActionDestroy),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_b", plancheck.ResourceActionCreate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_b", "id",
+					),
+					resource.TestCheckTypeSetElemAttrPair(
+						"temporalcloud_namespace.test", "connectivity_rule_ids.*",
+						"temporalcloud_connectivity_rule.project_b", "id",
+					),
+					sameNamespace,
+				),
 			},
 		},
 	})
@@ -2411,4 +2484,58 @@ resource "temporalcloud_namespace" "test" {
 			},
 		},
 	})
+}
+
+func TestNewMoveNamespaceRequest(t *testing.T) {
+	t.Parallel()
+
+	ns := &namespace.Namespace{
+		Namespace:       "orders.acct",
+		ProjectId:       "proj-a",
+		ResourceVersion: "v1",
+	}
+
+	cases := []struct {
+		name    string
+		ruleIDs []string
+		want    *cloudservicev1.MoveNamespaceToProjectRequest
+	}{
+		{
+			name:    "rules carry over as the destination's rules",
+			ruleIDs: []string{"rule-1", "rule-2"},
+			want: &cloudservicev1.MoveNamespaceToProjectRequest{
+				Namespace:               "orders.acct",
+				DestinationProjectId:    "proj-b",
+				ExpectedSourceProjectId: "proj-a",
+				ResourceVersion:         "v1",
+				DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_RuleIds{
+					RuleIds: &cloudservicev1.ConnectivityRuleIDs{ConnectivityRuleIds: []string{"rule-1", "rule-2"}},
+				},
+			},
+		},
+		{
+			// The server requires an explicit choice whenever the namespace has rules today, and
+			// "none" is always a valid one.
+			name: "no rules is stated explicitly",
+			want: &cloudservicev1.MoveNamespaceToProjectRequest{
+				Namespace:               "orders.acct",
+				DestinationProjectId:    "proj-b",
+				ExpectedSourceProjectId: "proj-a",
+				ResourceVersion:         "v1",
+				DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_Unrestricted{
+					Unrestricted: &cloudservicev1.NoConnectivityRules{},
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := newMoveNamespaceRequest(ns, "proj-b", tc.ruleIDs)
+			if !proto.Equal(got, tc.want) {
+				t.Errorf("newMoveNamespaceRequest = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
