@@ -245,7 +245,7 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				},
 			},
 			"project_id": schema.StringAttribute{
-				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project.",
+				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Changing it moves the namespace to the new project in place. Connectivity rules belong to a project, so a namespace with connectivity rules must list rules from the new project in `connectivity_rule_ids` in the same change. Moving requires the move feature to be enabled for the account.",
 				Optional:    true,
 				Computed:    true,
 				Validators: []validator.String{
@@ -490,15 +490,12 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 	}
 }
 
-// ModifyPlan rejects moving a namespace between projects and validates configured regions against
-// the Temporal Cloud API.
+// ModifyPlan plans project moves and validates configured regions against the Temporal Cloud API.
 func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// First, ahead of every early return below: besides rejecting moves, this restores an unknown
-	// plan value for state that predates project_id, which must happen on every update plan.
-	// project_id is not in the namespace spec, so UpdateNamespace would ignore a change and
-	// succeed. Destroying a namespace destroys its workflows, so the change is rejected rather
-	// than planned as a replacement.
-	modifyPlanCreateOnlyProjectID(ctx, req, resp, "Namespace")
+	// First, ahead of every early return below: it restores an unknown plan value for state that
+	// predates project_id, which must happen on every update plan.
+	modifyPlanProjectID(ctx, req, resp)
+	resp.Diagnostics.Append(namespaceMoveAccessWarning(ctx, req)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -907,12 +904,6 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	// Checked before any write; see checkProjectIDUnchanged.
-	resp.Diagnostics.Append(checkProjectIDUnchanged(plan.ProjectID, currentNs.GetNamespace().GetProjectId(), "Namespace")...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
 	var codecServer *namespacev1.CodecServerSpec
 	if !plan.CodecServer.IsNull() {
 		var d diag.Diagnostics
@@ -1002,20 +993,39 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-		Namespace:        plan.ID.ValueString(),
-		Spec:             spec,
-		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
-		AsyncOperationId: uuid.New().String(),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
+	// Moved first, so a rejected move leaves the spec untouched. The move bumps the resource
+	// version, so the spec update uses the one read back afterwards.
+	specChanged := true
+	if destination, ok := projectMoveDestination(config.ProjectID, currentNs.GetNamespace().GetProjectId()); ok {
+		currentNs, err = r.moveNamespace(ctx, currentNs.GetNamespace(), destination, connectivityRuleIds)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to move namespace to project "+destination, err.Error())
+			return
+		}
+		onlyMoved, err := planChangesOnly(req.Plan, req.State, "project_id", "connectivity_rule_ids")
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to compare plan with state", err.Error())
+			return
+		}
+		specChanged = !onlyMoved
 	}
 
-	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
+	if specChanged {
+		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+			Namespace:        plan.ID.ValueString(),
+			Spec:             spec,
+			ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
 	}
 
 	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
@@ -1032,6 +1042,75 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+// moveNamespace moves ns to the destination project with the given connectivity rules, which the
+// move applies, and returns the namespace as it is afterwards.
+func (r *namespaceResource) moveNamespace(
+	ctx context.Context,
+	ns *namespacev1.Namespace,
+	destination string,
+	ruleIDs []string,
+) (*cloudservicev1.GetNamespaceResponse, error) {
+	svcResp, err := r.client.CloudService().MoveNamespaceToProject(ctx, newMoveNamespaceRequest(ns, destination, ruleIDs))
+	if err != nil {
+		return nil, err
+	}
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+		return nil, err
+	}
+	return r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: ns.GetNamespace(),
+	})
+}
+
+// newMoveNamespaceRequest builds the request that moves ns to the destination project, where it
+// will carry exactly ruleIDs. Connectivity rules belong to a project, so the server requires the
+// destination's rules to be stated whenever the namespace has any today; an empty set is sent as
+// an explicit "none" rather than left unset.
+func newMoveNamespaceRequest(ns *namespacev1.Namespace, destination string, ruleIDs []string) *cloudservicev1.MoveNamespaceToProjectRequest {
+	req := &cloudservicev1.MoveNamespaceToProjectRequest{
+		Namespace:               ns.GetNamespace(),
+		DestinationProjectId:    destination,
+		ExpectedSourceProjectId: ns.GetProjectId(),
+		ResourceVersion:         ns.GetResourceVersion(),
+		DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_Unrestricted{
+			Unrestricted: &cloudservicev1.NoConnectivityRules{},
+		},
+	}
+	if len(ruleIDs) > 0 {
+		req.DestinationConnectivityRules = &cloudservicev1.MoveNamespaceToProjectRequest_RuleIds{
+			RuleIds: &cloudservicev1.ConnectivityRuleIDs{ConnectivityRuleIds: ruleIDs},
+		}
+	}
+	return req
+}
+
+// namespaceMoveAccessWarning warns, when a plan moves the namespace, that the move grants project
+// access Terraform may later revoke. Users and groups with access to the namespace who would lose
+// sight of it in the new project are granted that project's Member role, and project_accesses on
+// temporalcloud_user and temporalcloud_group_access revoke roles that configuration does not list.
+func namespaceMoveAccessWarning(ctx context.Context, req resource.ModifyPlanRequest) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return diags
+	}
+
+	var configured, prior types.String
+	diags.Append(req.Config.GetAttribute(ctx, path.Root("project_id"), &configured)...)
+	diags.Append(req.State.GetAttribute(ctx, path.Root("project_id"), &prior)...)
+	if diags.HasError() || !projectMovePlanned(configured, prior) {
+		return diags
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("project_id"),
+		"Moving the namespace grants project access",
+		"Users and groups with access to this namespace that would otherwise lose sight of it in the new project "+
+			"are granted the new project's Member role. If Terraform manages their project_accesses, add that role "+
+			"there, or a later apply revokes it.",
+	)
+	return diags
 }
 
 // Delete deletes the resource and removes the Terraform state on success.

@@ -176,7 +176,7 @@ resource "temporalcloud_namespace" "project_scoped" {
 - `encryption_validation` (Attributes) This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute or setting it to an empty object. (see [below for nested schema](#nestedatt--encryption_validation))
 - `fairness` (Attributes) The fairness configuration for the namespace. (see [below for nested schema](#nestedatt--fairness))
 - `namespace_lifecycle` (Attributes) The lifecycle configuration for the namespace. Note that this is different from the Terraform resource lifecycle. This controls settings like delete protection within Temporal Cloud. (see [below for nested schema](#nestedatt--namespace_lifecycle))
-- `project_id` (String) The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project.
+- `project_id` (String) The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Changing it moves the namespace to the new project in place. Connectivity rules belong to a project, so a namespace with connectivity rules must list rules from the new project in `connectivity_rule_ids` in the same change. Moving requires the move feature to be enabled for the account.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
