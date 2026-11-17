@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,7 +10,7 @@ import (
 
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
-	"github.com/hashicorp/terraform-plugin-testing/terraform"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 )
 
 func TestAccNexusEndpointResource(t *testing.T) {
@@ -195,7 +194,13 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 			projectAName, projectBName, endpointName, projectResource)
 	}
 
-	var firstEndpointID string
+	var endpointID string
+	sameEndpoint := testAccCheckResourceNotRecreated("temporalcloud_nexus_endpoint.test_project", &endpointID)
+	movesInPlace := resource.ConfigPlanChecks{
+		PreApply: []plancheck.PlanCheck{
+			plancheck.ExpectResourceAction("temporalcloud_nexus_endpoint.test_project", plancheck.ResourceActionUpdate),
+		},
+	}
 
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
@@ -208,14 +213,7 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 						"temporalcloud_nexus_endpoint.test_project", "project_id",
 						"temporalcloud_project.project_a", "id",
 					),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["temporalcloud_nexus_endpoint.test_project"]
-						if !ok {
-							return errors.New("nexus endpoint not found in state")
-						}
-						firstEndpointID = rs.Primary.ID
-						return nil
-					},
+					sameEndpoint,
 				),
 			},
 			{
@@ -224,31 +222,25 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 				ImportStateVerify: true,
 			},
 			{
-				// project_id is not part of the endpoint spec, so it cannot be updated in place.
-				// Rejected at plan time rather than replaced: destroying the endpoint interrupts
-				// Nexus callers, so it is not done as a side effect of editing an attribute.
-				Config:      config("temporalcloud_project.project_b.id"),
-				PlanOnly:    true,
-				ExpectError: regexp.MustCompile("cannot be moved between projects"),
+				Config:           config("temporalcloud_project.project_b.id"),
+				ConfigPlanChecks: movesInPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_nexus_endpoint.test_project", "project_id",
+						"temporalcloud_project.project_b", "id",
+					),
+					sameEndpoint,
+				),
 			},
 			{
-				// The endpoint is untouched by the rejected plan: same project, same id.
-				Config: config("temporalcloud_project.project_a.id"),
+				Config:           config("temporalcloud_project.project_a.id"),
+				ConfigPlanChecks: movesInPlace,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttrPair(
 						"temporalcloud_nexus_endpoint.test_project", "project_id",
 						"temporalcloud_project.project_a", "id",
 					),
-					func(s *terraform.State) error {
-						rs, ok := s.RootModule().Resources["temporalcloud_nexus_endpoint.test_project"]
-						if !ok {
-							return errors.New("nexus endpoint not found in state")
-						}
-						if rs.Primary.ID != firstEndpointID {
-							return fmt.Errorf("endpoint id changed from %s to %s; it should not have been recreated", firstEndpointID, rs.Primary.ID)
-						}
-						return nil
-					},
+					sameEndpoint,
 				),
 			},
 		},
@@ -256,9 +248,8 @@ resource "temporalcloud_nexus_endpoint" "test_project" {
 }
 
 // A move whose destination project is created in the same apply leaves project_id unknown at plan
-// time, so the plan-time comparison has nothing to compare. It must still be rejected: Terraform
-// accepts any applied value where the plan was unknown, so without this the first apply would
-// appear to succeed while silently dropping the move, and only later plans would fail.
+// time. Terraform accepts any applied value where the plan was unknown, so this checks the move
+// really happened rather than the apply succeeding while leaving the endpoint where it was.
 func TestAccNexusEndpointResource_MoveToProjectCreatedInSameApply(t *testing.T) {
 	timeSuffix := time.Now().Format("060102150405")
 	endpointName := fmt.Sprintf("tf-nexus-unk-%s-%s", timeSuffix, randomString(3))
@@ -300,6 +291,9 @@ resource "temporalcloud_nexus_endpoint" "test_unknown_project" {
 			projectBlock, endpointName, projectAttr)
 	}
 
+	var endpointID string
+	sameEndpoint := testAccCheckResourceNotRecreated("temporalcloud_nexus_endpoint.test_unknown_project", &endpointID)
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
@@ -307,13 +301,25 @@ resource "temporalcloud_nexus_endpoint" "test_unknown_project" {
 			// Endpoint lands in the default project.
 			{
 				Config: config(false),
-				Check:  resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test_unknown_project", "project_id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_nexus_endpoint.test_unknown_project", "project_id"),
+					sameEndpoint,
+				),
 			},
-			// Now point it at a project that does not exist yet, so project_id is unknown at plan
-			// time. Rejected during plan, so the project is never created either.
 			{
-				Config:      config(true),
-				ExpectError: regexp.MustCompile("cannot be moved between projects"),
+				Config: config(true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_nexus_endpoint.test_unknown_project", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_nexus_endpoint.test_unknown_project", "project_id",
+						"temporalcloud_project.later", "id",
+					),
+					sameEndpoint,
+				),
 			},
 		},
 	})

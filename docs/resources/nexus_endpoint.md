@@ -108,7 +108,7 @@ resource "temporalcloud_nexus_endpoint" "project_scoped" {
 ### Optional
 
 - `description` (String, Sensitive) The description for the Nexus endpoint.
-- `project_id` (String) The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Cannot be changed after creation.
+- `project_id` (String) The ID of the Temporal Cloud project this Nexus Endpoint belongs to. If not provided, the Nexus Endpoint is created in the account's default project. Changing it moves the Nexus Endpoint to the new project in place. Moving requires the move feature to be enabled for the account.
 - `timeouts` (Block, Optional) (see [below for nested schema](#nestedblock--timeouts))
 
 ### Read-Only
