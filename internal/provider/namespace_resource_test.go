@@ -2006,9 +2006,8 @@ resource "temporalcloud_project" "later" {
 }
 
 // Connectivity rules belong to a project and cannot move with the namespace, so a move swaps the
-// namespace onto a rule in the destination project. Terraform creates the new rule before the
-// namespace update and destroys the old one after it, since the namespace's state still references
-// the old rule until then.
+// namespace onto a rule in the destination project. The move detaches the old rule but leaves it in
+// place, so it stays in configuration and is not destroyed.
 func TestAccNamespaceResource_MoveToProjectWithConnectivityRule(t *testing.T) {
 	name := fmt.Sprintf("%s-%s", "tf-ns-move-cr", randomString(10))
 	projectAName := createRandomName()
@@ -2026,11 +2025,16 @@ resource "temporalcloud_project" "project_b" {
   display_name = %[2]q
 }
 
-resource "temporalcloud_connectivity_rule" "%[3]s" {
+resource "temporalcloud_connectivity_rule" "project_a" {
   connectivity_type = "public"
-  project_id        = temporalcloud_project.%[3]s.id
+  project_id        = temporalcloud_project.project_a.id
 }
-%[4]s`, projectAName, projectBName, project, testAccProjectNamespaceConfig(name, fmt.Sprintf(`
+
+resource "temporalcloud_connectivity_rule" "project_b" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.project_b.id
+}
+%[3]s`, projectAName, projectBName, testAccProjectNamespaceConfig(name, fmt.Sprintf(`
   project_id            = temporalcloud_project.%[1]s.id
   connectivity_rule_ids = [temporalcloud_connectivity_rule.%[1]s.id]`, project)))
 	}
@@ -2051,8 +2055,8 @@ resource "temporalcloud_connectivity_rule" "%[3]s" {
 				ConfigPlanChecks: resource.ConfigPlanChecks{
 					PreApply: []plancheck.PlanCheck{
 						plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
-						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_a", plancheck.ResourceActionDestroy),
-						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_b", plancheck.ResourceActionCreate),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_a", plancheck.ResourceActionNoop),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_b", plancheck.ResourceActionNoop),
 					},
 				},
 				Check: resource.ComposeAggregateTestCheckFunc(
