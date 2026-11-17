@@ -510,9 +510,7 @@ func getSinkSpecFromModel(ctx context.Context, plan *namespaceExportSinkResource
 	}
 
 	filter := &namespacev1.ExportSinkSpec_SinkFilter{}
-	if plan.Filter.IsUnknown() {
-		filter = nil
-	} else if !plan.Filter.IsNull() {
+	if !plan.Filter.IsNull() {
 		var model internaltypes.ExportSinkFilterModel
 		diags.Append(plan.Filter.As(ctx, &model, basetypes.ObjectAsOptions{})...)
 		if diags.HasError() {

@@ -450,26 +450,31 @@ func TestNamespaceExportSink_FilterRoundTrip(t *testing.T) {
 		}}},
 	} {
 		for _, tt := range []struct {
-			name   string
-			filter *namespacev1.ExportSinkSpec_SinkFilter
+			name           string
+			filter         *namespacev1.ExportSinkSpec_SinkFilter
+			expectedFilter *namespacev1.ExportSinkSpec_SinkFilter
 		}{
-			{name: "Absent"},
+			{name: "Absent", expectedFilter: &namespacev1.ExportSinkSpec_SinkFilter{}},
 			{name: "Disabled", filter: &namespacev1.ExportSinkSpec_SinkFilter{
 				DisableStandaloneActivityExport: true,
+			}, expectedFilter: &namespacev1.ExportSinkSpec_SinkFilter{
+				DisableStandaloneActivityExport: true,
 			}},
-			{name: "Enabled", filter: &namespacev1.ExportSinkSpec_SinkFilter{}},
+			{name: "Enabled", filter: &namespacev1.ExportSinkSpec_SinkFilter{}, expectedFilter: &namespacev1.ExportSinkSpec_SinkFilter{}},
 		} {
 			t.Run(destination.name+"/"+tt.name, func(t *testing.T) {
-				expected, ok := proto.Clone(destination.spec).(*namespacev1.ExportSinkSpec)
+				input, ok := proto.Clone(destination.spec).(*namespacev1.ExportSinkSpec)
 				if !ok {
 					t.Fatal("expected cloned export sink spec")
 				}
-				expected.Name = "test-sink"
-				expected.Enabled = true
-				expected.Filter = tt.filter
+				input.Name = "test-sink"
+				input.Enabled = true
+				input.Filter = tt.filter
+				expected := proto.Clone(input).(*namespacev1.ExportSinkSpec)
+				expected.Filter = tt.expectedFilter
 				var model namespaceExportSinkResourceModel
 				diags := updateSinkModelFromSpec(ctx, &model, &namespacev1.ExportSink{
-					Name: "test-sink", Spec: expected,
+					Name: "test-sink", Spec: input,
 				}, "test.account")
 				if diags.HasError() {
 					t.Fatalf("read model: %v", diags)
@@ -478,34 +483,61 @@ func TestNamespaceExportSink_FilterRoundTrip(t *testing.T) {
 				if diags.HasError() {
 					t.Fatalf("build spec: %v", diags)
 				}
-				// An absent filter has the same meaning as an explicit false.
-				if expected.Filter == nil {
-					expected.Filter = &namespacev1.ExportSinkSpec_SinkFilter{}
-				}
 				if !proto.Equal(expected, spec) {
 					t.Fatalf("expected %v, got %v", expected, spec)
 				}
-
-				model.Filter = types.ObjectNull(internaltypes.ExportSinkFilterModelAttrTypes)
-				spec, diags = getSinkSpecFromModel(ctx, &model)
-				if diags.HasError() {
-					t.Fatalf("omitted filter: %v", diags)
-				}
-				expected.Filter = &namespacev1.ExportSinkSpec_SinkFilter{}
-				if !proto.Equal(expected, spec) {
-					t.Fatalf("omitted filter should default to false: expected %v, got %v", expected, spec)
-				}
-
-				model.Filter = types.ObjectUnknown(internaltypes.ExportSinkFilterModelAttrTypes)
-				spec, diags = getSinkSpecFromModel(ctx, &model)
-				if diags.HasError() {
-					t.Fatalf("unknown filter: %v", diags)
-				}
-				if spec.Filter != nil {
-					t.Fatalf("unknown filter should be unset, got %v", spec.Filter)
-				}
 			})
 		}
+	}
+}
+
+func TestNamespaceExportSink_FilterModelToSpec(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name           string
+		filter         types.Object
+		expectedFilter *namespacev1.ExportSinkSpec_SinkFilter
+		expectError    bool
+	}{
+		{
+			name:           "NullDefaultsToFalse",
+			filter:         types.ObjectNull(internaltypes.ExportSinkFilterModelAttrTypes),
+			expectedFilter: &namespacev1.ExportSinkSpec_SinkFilter{},
+		},
+		{
+			name:        "UnknownReturnsError",
+			filter:      types.ObjectUnknown(internaltypes.ExportSinkFilterModelAttrTypes),
+			expectError: true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			model := namespaceExportSinkResourceModel{
+				Filter: tt.filter,
+				S3: types.ObjectValueMust(internaltypes.S3SpecModelAttrTypes, map[string]attr.Value{
+					"role_name":      types.StringValue("role"),
+					"bucket_name":    types.StringValue("bucket"),
+					"region":         types.StringValue("us-west-2"),
+					"aws_account_id": types.StringValue("123456789012"),
+					"kms_arn":        types.StringNull(),
+				}),
+				Gcs:       types.ObjectNull(internaltypes.GcsSpecModelAttrTypes),
+				AzureBlob: types.ObjectNull(internaltypes.AzureBlobSpecModelAttrTypes),
+			}
+			spec, diags := getSinkSpecFromModel(ctx, &model)
+			if diags.HasError() != tt.expectError {
+				t.Fatalf("expected error %t, got diagnostics: %v", tt.expectError, diags)
+			}
+			if tt.expectError {
+				if spec != nil {
+					t.Fatalf("expected no spec on error, got %v", spec)
+				}
+				return
+			}
+			if !proto.Equal(tt.expectedFilter, spec.Filter) {
+				t.Fatalf("expected filter %v, got %v", tt.expectedFilter, spec.Filter)
+			}
+		})
 	}
 }
 
