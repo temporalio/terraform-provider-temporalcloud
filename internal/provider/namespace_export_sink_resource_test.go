@@ -470,7 +470,10 @@ func TestNamespaceExportSink_FilterRoundTrip(t *testing.T) {
 				input.Name = "test-sink"
 				input.Enabled = true
 				input.Filter = tt.filter
-				expected := proto.Clone(input).(*namespacev1.ExportSinkSpec)
+				expected, ok := proto.Clone(input).(*namespacev1.ExportSinkSpec)
+				if !ok {
+					t.Fatal("expected cloned export sink spec")
+				}
 				expected.Filter = tt.expectedFilter
 				var model namespaceExportSinkResourceModel
 				diags := updateSinkModelFromSpec(ctx, &model, &namespacev1.ExportSink{
