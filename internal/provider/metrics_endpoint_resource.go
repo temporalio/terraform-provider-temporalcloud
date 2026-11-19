@@ -44,6 +44,11 @@ var (
 	_ resource.ResourceWithImportState = (*metricsEndpointResource)(nil)
 )
 
+const metricsEndpointDeprecationMessage = "The PromQL metrics endpoint was disabled on October 5, 2026, and the " +
+	"temporalcloud_metrics_endpoint resource is deprecated. " +
+	"Remove this resource from your configuration and run `terraform apply` to clear the existing endpoint configuration. " +
+	"Use the OpenMetrics endpoint instead: https://docs.temporal.io/cloud/metrics/openmetrics"
+
 func NewMetricsEndpointResource() resource.Resource {
 	return &metricsEndpointResource{}
 }
@@ -74,10 +79,13 @@ func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaR
 	resp.Schema = schema.Schema{
 		Description: "Configures a Temporal Cloud account's metrics",
 		MarkdownDescription: "Configures a Temporal Cloud account's metrics endpoint for the PromQL query API.\n\n" +
-			"!> **Deprecated.** The PromQL metrics endpoint was deprecated on April 2, 2026 and is no longer accepting new users. " +
-			"It will be disabled on October 5, 2026. Migrate to the [OpenMetrics endpoint](https://docs.temporal.io/cloud/metrics/openmetrics/migration-guide) instead. " +
+			"!> **Deprecated.** The PromQL metrics endpoint was deprecated on April 2, 2026 and disabled on October 5, 2026. " +
+			"This resource can no longer be created or updated. " +
+			"Remove this resource from your configuration and run `terraform apply` to clear the existing endpoint configuration. " +
+			"Use the [OpenMetrics endpoint](https://docs.temporal.io/cloud/metrics/openmetrics) instead. " +
 			"See the [`temporalcloud_service_account`](https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account) " +
 			"resource for an example of setting up OpenMetrics with Terraform.",
+		DeprecationMessage: metricsEndpointDeprecationMessage,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "A unique identifier for the account's metrics configuration. Always `account-ACCOUNT_ID-metrics`.",
@@ -112,69 +120,11 @@ func (r *metricsEndpointResource) Schema(ctx context.Context, _ resource.SchemaR
 	}
 }
 
-func (r *metricsEndpointResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	var plan metricsEndpointResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	createTimeout, diags := plan.Timeouts.Create(ctx, defaultCreateTimeout)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	accResp, err := r.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get account information.", err.Error())
-		return
-	}
-
-	if accResp.GetAccount().GetMetrics().GetUri() != "" {
-		resp.Diagnostics.AddError("Metrics endpoint already configured.", fmt.Sprintf("account metrics endpoint already configured with url %q, remove the existing metrics configuration to manage it with Terraform", accResp.GetAccount().GetMetrics().GetUri()))
-		return
-	}
-
-	certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
-		return
-	}
-
-	// create just enables the metrics endpoint by providing a CA certificate
-	metricsReq := &cloudservicev1.UpdateAccountRequest{
-		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
-		Spec: &accountv1.AccountSpec{
-			Metrics: &accountv1.MetricsSpec{
-				AcceptedClientCa: certs,
-			},
-		},
-		AsyncOperationId: uuid.New().String(),
-	}
-
-	createCtx, cancel := context.WithTimeout(ctx, createTimeout)
-	defer cancel()
-
-	metricsResp, err := r.client.CloudService().UpdateAccount(createCtx, metricsReq)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to create metrics endpoint resource.", err.Error())
-		return
-	}
-
-	if err := client.AwaitAsyncOperation(createCtx, r.client, metricsResp.GetAsyncOperation()); err != nil {
-		resp.Diagnostics.AddError("Failed to create metrics endpoint resource.", err.Error())
-		return
-	}
-
-	accResp, err = r.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get resource state after create.", err.Error())
-		return
-	}
-
-	updateMetricsEndpointModelFromSpec(&plan, accResp.GetAccount())
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+func (r *metricsEndpointResource) Create(_ context.Context, _ resource.CreateRequest, resp *resource.CreateResponse) {
+	resp.Diagnostics.AddError(
+		"The PromQL metrics endpoint is no longer supported.",
+		metricsEndpointDeprecationMessage,
+	)
 }
 
 // Read refreshes the Terraform state with the latest data.
@@ -199,64 +149,11 @@ func (r *metricsEndpointResource) Read(ctx context.Context, req resource.ReadReq
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
 
-// Update updates the resource and sets the updated Terraform state on success.
-func (r *metricsEndpointResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan metricsEndpointResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	updateTimeout, diags := plan.Timeouts.Update(ctx, defaultCreateTimeout)
-	resp.Diagnostics.Append(diags...)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	accResp, err := r.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get account information.", err.Error())
-		return
-	}
-
-	certs, err := base64.StdEncoding.DecodeString(plan.AcceptedClientCA.ValueString())
-	if err != nil {
-		resp.Diagnostics.AddError("Invalid (base64 encoded) accepted_client_ca", err.Error())
-		return
-	}
-
-	metricsReq := &cloudservicev1.UpdateAccountRequest{
-		ResourceVersion: accResp.GetAccount().GetResourceVersion(),
-		Spec: &accountv1.AccountSpec{
-			Metrics: &accountv1.MetricsSpec{
-				AcceptedClientCa: certs,
-			},
-		},
-		AsyncOperationId: uuid.New().String(),
-	}
-
-	updateCtx, cancel := context.WithTimeout(ctx, updateTimeout)
-	defer cancel()
-
-	metricsResp, err := r.client.CloudService().UpdateAccount(updateCtx, metricsReq)
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to update metrics endpoint resource.", err.Error())
-		return
-	}
-
-	if err := client.AwaitAsyncOperation(updateCtx, r.client, metricsResp.GetAsyncOperation()); err != nil {
-		resp.Diagnostics.AddError("Failed to update metrics endpoint resource.", err.Error())
-		return
-	}
-
-	accResp, err = r.client.CloudService().GetAccount(ctx, &cloudservicev1.GetAccountRequest{})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to get resource state after update.", err.Error())
-		return
-	}
-
-	updateMetricsEndpointModelFromSpec(&plan, accResp.GetAccount())
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+func (r *metricsEndpointResource) Update(_ context.Context, _ resource.UpdateRequest, resp *resource.UpdateResponse) {
+	resp.Diagnostics.AddError(
+		"The PromQL metrics endpoint is no longer supported.",
+		metricsEndpointDeprecationMessage,
+	)
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
