@@ -48,3 +48,27 @@ resource "temporalcloud_apikey" "metrics" {
   expiry_time  = "2027-11-01T00:00:00Z"
   disabled     = false
 }
+
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+resource "temporalcloud_service_account" "project_worker" {
+  name           = "payments-worker"
+  account_access = "read"
+  project_accesses = [
+    {
+      project_id = temporalcloud_project.payments.id
+      role       = "contribute"
+    }
+  ]
+}
+
+// a project-scoped service account only has access to a single project
+resource "temporalcloud_service_account" "project_scoped" {
+  name = "payments-deployer"
+  project_scoped_access = {
+    project_id = temporalcloud_project.payments.id
+    role       = "write"
+  }
+}

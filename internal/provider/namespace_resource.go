@@ -37,6 +37,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/boolvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -59,6 +60,7 @@ import (
 	namespacev1 "go.temporal.io/cloud-sdk/api/namespace/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/enums"
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/provider/validators"
 	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
@@ -75,21 +77,23 @@ type (
 	}
 
 	namespaceResourceModel struct {
-		ID                  types.String                           `tfsdk:"id"`
-		Name                types.String                           `tfsdk:"name"`
-		Description         types.String                           `tfsdk:"description"`
-		Regions             internaltypes.UnorderedStringListValue `tfsdk:"regions"`
-		AcceptedClientCA    internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
-		RetentionDays       types.Int64                            `tfsdk:"retention_days"`
-		CertificateFilters  types.List                             `tfsdk:"certificate_filters"`
-		ApiKeyAuth          types.Bool                             `tfsdk:"api_key_auth"`
-		CodecServer         types.Object                           `tfsdk:"codec_server"`
-		Endpoints           types.Object                           `tfsdk:"endpoints"`
-		NamespaceLifecycle  internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
-		ConnectivityRuleIds types.Set                              `tfsdk:"connectivity_rule_ids"`
-		Timeouts            timeouts.Value                         `tfsdk:"timeouts"`
-		Capacity            internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
-		Fairness            internaltypes.ZeroObjectValue          `tfsdk:"fairness"`
+		ID                   types.String                           `tfsdk:"id"`
+		ProjectID            types.String                           `tfsdk:"project_id"`
+		Name                 types.String                           `tfsdk:"name"`
+		Description          types.String                           `tfsdk:"description"`
+		Regions              internaltypes.UnorderedStringListValue `tfsdk:"regions"`
+		AcceptedClientCA     internaltypes.EncodedCAValue           `tfsdk:"accepted_client_ca"`
+		RetentionDays        types.Int64                            `tfsdk:"retention_days"`
+		CertificateFilters   types.List                             `tfsdk:"certificate_filters"`
+		ApiKeyAuth           types.Bool                             `tfsdk:"api_key_auth"`
+		CodecServer          types.Object                           `tfsdk:"codec_server"`
+		Endpoints            types.Object                           `tfsdk:"endpoints"`
+		NamespaceLifecycle   internaltypes.ZeroObjectValue          `tfsdk:"namespace_lifecycle"`
+		ConnectivityRuleIds  types.Set                              `tfsdk:"connectivity_rule_ids"`
+		Timeouts             timeouts.Value                         `tfsdk:"timeouts"`
+		Capacity             internaltypes.ZeroObjectValue          `tfsdk:"capacity"`
+		Fairness             internaltypes.ZeroObjectValue          `tfsdk:"fairness"`
+		EncryptionValidation internaltypes.ZeroObjectValue          `tfsdk:"encryption_validation"`
 	}
 
 	lifecycleModel struct {
@@ -124,6 +128,14 @@ type (
 
 	fairnessModel struct {
 		TaskQueueFairnessEnabled types.Bool `tfsdk:"task_queue_fairness_enabled"`
+	}
+
+	encryptionValidationModel struct {
+		Mode           types.String `tfsdk:"mode"`
+		MetadataKey    types.String `tfsdk:"metadata_key"`
+		MetadataValues types.Set    `tfsdk:"metadata_values"`
+		InspectHeader  types.Bool   `tfsdk:"inspect_header"`
+		InspectFailure types.Bool   `tfsdk:"inspect_failure"`
 	}
 )
 
@@ -166,6 +178,17 @@ var (
 	fairnessAttrs = map[string]attr.Type{
 		"task_queue_fairness_enabled": types.BoolType,
 	}
+
+	encryptionValidationAttrs = map[string]attr.Type{
+		"mode":            types.StringType,
+		"metadata_key":    types.StringType,
+		"metadata_values": types.SetType{ElemType: types.StringType},
+		"inspect_header":  types.BoolType,
+		"inspect_failure": types.BoolType,
+	}
+
+	// The API rejects an encryption validation spec without a mode; catch that at plan time.
+	encryptionValidationModePath = path.MatchRelative().AtParent().AtName("mode")
 )
 
 func NewNamespaceResource() resource.Resource {
@@ -218,6 +241,21 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 				Description: "The unique identifier of the namespace across all Temporal Cloud tenants.",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the Temporal Cloud project this namespace belongs to. If not provided, the namespace is created in the account's default project. Changing it moves the namespace to the new project in place. Connectivity rules belong to a project, so a namespace with connectivity rules must list rules from the new project in `connectivity_rule_ids` in the same change. Moving requires the move feature to be enabled for the account.",
+				Optional:    true,
+				Computed:    true,
+				Validators: []validator.String{
+					// Rejects an explicit "", which the server would swap for the default
+					// project, breaking the post-apply consistency check. Omitting is still valid.
+					stringvalidator.LengthAtLeast(1),
+				},
+				PlanModifiers: []planmodifier.String{
+					// Keeps plans clean for namespaces that do not configure project_id. It copies
+					// a null out of state that predates this attribute, which ModifyPlan undoes.
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
@@ -389,6 +427,59 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
+			"encryption_validation": schema.SingleNestedAttribute{
+				Optional:    true,
+				Description: "This feature is in pre-release and must be enabled for your account before use. The payload encryption validation configuration for this namespace. Omit this attribute, or provide an empty object, to leave encryption validation unconfigured. If any configuration field is set, mode must be disabled, warn, or deny. Once configured, set mode to disabled instead of removing this attribute or setting it to an empty object.",
+				CustomType: internaltypes.ZeroObjectType{
+					ObjectType: basetypes.ObjectType{
+						AttrTypes: encryptionValidationAttrs,
+					},
+				},
+				Attributes: map[string]schema.Attribute{
+					"mode": schema.StringAttribute{
+						Description: "The encryption validation mode. Valid values are disabled, warn, and deny. An empty configuration is treated as unconfigured.",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOf("disabled", "warn", "deny"),
+						},
+					},
+					"metadata_key": schema.StringAttribute{
+						Description: "The payload metadata key used to identify encrypted payloads. Must not be empty if set. When omitted, Temporal Cloud uses encoding.",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.LengthAtLeast(1),
+							stringvalidator.AlsoRequires(encryptionValidationModePath),
+						},
+					},
+					"metadata_values": schema.SetAttribute{
+						Description: "The payload metadata values used to identify encrypted payloads. Must contain at least one value if set; Temporal Cloud enforces the maximum number of values. When omitted, Temporal Cloud uses binary/encrypted.",
+						Optional:    true,
+						ElementType: types.StringType,
+						Validators: []validator.Set{
+							setvalidator.SizeAtLeast(1),
+							setvalidator.AlsoRequires(encryptionValidationModePath),
+						},
+					},
+					"inspect_header": schema.BoolAttribute{
+						Description: "Whether to inspect workflow headers for encrypted payload metadata. Defaults to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Validators: []validator.Bool{
+							boolvalidator.AlsoRequires(encryptionValidationModePath),
+						},
+					},
+					"inspect_failure": schema.BoolAttribute{
+						Description: "Whether to inspect failure payloads for encrypted payload metadata. Defaults to false.",
+						Optional:    true,
+						Computed:    true,
+						Default:     booldefault.StaticBool(false),
+						Validators: []validator.Bool{
+							boolvalidator.AlsoRequires(encryptionValidationModePath),
+						},
+					},
+				},
+			},
 		},
 		Blocks: map[string]schema.Block{
 			"timeouts": timeouts.Block(ctx, timeouts.Opts{
@@ -399,8 +490,16 @@ func (r *namespaceResource) Schema(ctx context.Context, _ resource.SchemaRequest
 	}
 }
 
-// ModifyPlan validates configured regions against the Temporal Cloud API.
+// ModifyPlan plans project moves and validates configured regions against the Temporal Cloud API.
 func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// First, ahead of every early return below: it restores an unknown plan value for state that
+	// predates project_id, which must happen on every update plan.
+	modifyPlanProjectID(ctx, req, resp)
+	resp.Diagnostics.Append(namespaceMoveAccessWarning(ctx, req)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	// Skip on destroy.
 	if req.Plan.Raw.IsNull() {
 		return
@@ -446,6 +545,13 @@ func (r *namespaceResource) ModifyPlan(ctx context.Context, req resource.ModifyP
 			resp.Diagnostics.AddError(
 				"fairness cannot be removed once set",
 				`fairness cannot be removed once set; to disable, explicitly set fairness { task_queue_fairness_enabled = false }`,
+			)
+			return
+		}
+		if !state.EncryptionValidation.IsZero(ctx) && config.EncryptionValidation.IsZero(ctx) {
+			resp.Diagnostics.AddError(
+				"encryption_validation cannot be removed once set",
+				`encryption_validation cannot be removed or emptied once set; to disable, explicitly set encryption_validation = { mode = "disabled" }`,
 			)
 			return
 		}
@@ -616,6 +722,13 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 		spec.Fairness = fairnessSpec
 	}
 
+	encryptionValidation, d := getEncryptionValidationFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	spec.EncryptionValidation = encryptionValidation
+
 	if !plan.ApiKeyAuth.ValueBool() && plan.AcceptedClientCA.IsNull() {
 		resp.Diagnostics.AddError("Namespace not configured with authentication", "accepted_client_ca or api_key_auth must be set")
 		return
@@ -642,7 +755,10 @@ func (r *namespaceResource) Create(ctx context.Context, req resource.CreateReque
 	}
 
 	svcResp, err := r.client.CloudService().CreateNamespace(ctx, &cloudservicev1.CreateNamespaceRequest{
-		Spec:             spec,
+		Spec: spec,
+		// Empty means the account's default project; an unconfigured Optional+Computed value is
+		// Unknown here, which ValueString reports as "".
+		ProjectId:        plan.ProjectID.ValueString(),
 		AsyncOperationId: uuid.New().String(),
 	})
 	if err != nil {
@@ -755,6 +871,13 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		)
 		return
 	}
+	if !state.EncryptionValidation.IsZero(ctx) && config.EncryptionValidation.IsZero(ctx) {
+		resp.Diagnostics.AddError(
+			"encryption_validation cannot be removed once set",
+			`encryption_validation cannot be removed or emptied once set; to disable, explicitly set encryption_validation = { mode = "disabled" }`,
+		)
+		return
+	}
 
 	regions, d := getRegionsFromModel(ctx, &plan)
 	resp.Diagnostics.Append(d...)
@@ -857,26 +980,52 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 		spec.Fairness = fairnessSpec
 	}
 
+	encryptionValidation, d := getEncryptionValidationFromModel(ctx, &plan)
+	resp.Diagnostics.Append(d...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	spec.EncryptionValidation = encryptionValidation
+
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
 	if !areRegionsEqual(currentNs.GetNamespace().GetSpec().GetRegions(), spec.Regions) {
 		resp.Diagnostics.AddError("Namespace regions cannot be changed", "Changing the regions of a namespace is not supported currently via terraform.")
 		return
 	}
 
-	svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
-		Namespace:        plan.ID.ValueString(),
-		Spec:             spec,
-		ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
-		AsyncOperationId: uuid.New().String(),
-	})
-	if err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
+	// Moved first, so a rejected move leaves the spec untouched. The move bumps the resource
+	// version, so the spec update uses the one read back afterwards.
+	specChanged := true
+	if destination, ok := projectMoveDestination(config.ProjectID, currentNs.GetNamespace().GetProjectId()); ok {
+		currentNs, err = r.moveNamespace(ctx, currentNs.GetNamespace(), destination, connectivityRuleIds)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to move namespace to project "+destination, err.Error())
+			return
+		}
+		onlyMoved, err := planChangesOnly(req.Plan, req.State, "project_id", "connectivity_rule_ids")
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to compare plan with state", err.Error())
+			return
+		}
+		specChanged = !onlyMoved
 	}
 
-	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
-		resp.Diagnostics.AddError("Failed to update namespace", err.Error())
-		return
+	if specChanged {
+		svcResp, err := r.client.CloudService().UpdateNamespace(ctx, &cloudservicev1.UpdateNamespaceRequest{
+			Namespace:        plan.ID.ValueString(),
+			Spec:             spec,
+			ResourceVersion:  currentNs.GetNamespace().GetResourceVersion(),
+			AsyncOperationId: uuid.New().String(),
+		})
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
+
+		if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.AsyncOperation); err != nil {
+			resp.Diagnostics.AddError("Failed to update namespace", err.Error())
+			return
+		}
 	}
 
 	ns, err := r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
@@ -893,6 +1042,75 @@ func (r *namespaceResource) Update(ctx context.Context, req resource.UpdateReque
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+}
+
+// moveNamespace moves ns to the destination project with the given connectivity rules, which the
+// move applies, and returns the namespace as it is afterwards.
+func (r *namespaceResource) moveNamespace(
+	ctx context.Context,
+	ns *namespacev1.Namespace,
+	destination string,
+	ruleIDs []string,
+) (*cloudservicev1.GetNamespaceResponse, error) {
+	svcResp, err := r.client.CloudService().MoveNamespaceToProject(ctx, newMoveNamespaceRequest(ns, destination, ruleIDs))
+	if err != nil {
+		return nil, err
+	}
+	if err := client.AwaitAsyncOperation(ctx, r.client, svcResp.GetAsyncOperation()); err != nil {
+		return nil, err
+	}
+	return r.client.CloudService().GetNamespace(ctx, &cloudservicev1.GetNamespaceRequest{
+		Namespace: ns.GetNamespace(),
+	})
+}
+
+// newMoveNamespaceRequest builds the request that moves ns to the destination project, where it
+// will carry exactly ruleIDs. Connectivity rules belong to a project, so the server requires the
+// destination's rules to be stated whenever the namespace has any today; an empty set is sent as
+// an explicit "none" rather than left unset.
+func newMoveNamespaceRequest(ns *namespacev1.Namespace, destination string, ruleIDs []string) *cloudservicev1.MoveNamespaceToProjectRequest {
+	req := &cloudservicev1.MoveNamespaceToProjectRequest{
+		Namespace:               ns.GetNamespace(),
+		DestinationProjectId:    destination,
+		ExpectedSourceProjectId: ns.GetProjectId(),
+		ResourceVersion:         ns.GetResourceVersion(),
+		DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_Unrestricted{
+			Unrestricted: &cloudservicev1.NoConnectivityRules{},
+		},
+	}
+	if len(ruleIDs) > 0 {
+		req.DestinationConnectivityRules = &cloudservicev1.MoveNamespaceToProjectRequest_RuleIds{
+			RuleIds: &cloudservicev1.ConnectivityRuleIDs{ConnectivityRuleIds: ruleIDs},
+		}
+	}
+	return req
+}
+
+// namespaceMoveAccessWarning warns, when a plan moves the namespace, that the move grants project
+// access Terraform may later revoke. Users and groups with access to the namespace who would lose
+// sight of it in the new project are granted that project's Member role, and project_accesses on
+// temporalcloud_user and temporalcloud_group_access revoke roles that configuration does not list.
+func namespaceMoveAccessWarning(ctx context.Context, req resource.ModifyPlanRequest) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return diags
+	}
+
+	var configured, prior types.String
+	diags.Append(req.Config.GetAttribute(ctx, path.Root("project_id"), &configured)...)
+	diags.Append(req.State.GetAttribute(ctx, path.Root("project_id"), &prior)...)
+	if diags.HasError() || !projectMovePlanned(configured, prior) {
+		return diags
+	}
+
+	diags.AddAttributeWarning(
+		path.Root("project_id"),
+		"Moving the namespace grants project access",
+		"Users and groups with access to this namespace that would otherwise lose sight of it in the new project "+
+			"are granted the new project's Member role. If Terraform manages their project_accesses, add that role "+
+			"there, or a later apply revokes it.",
+	)
+	return diags
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
@@ -1072,6 +1290,7 @@ func updateModelFromSpec(
 	var diags diag.Diagnostics
 
 	state.ID = types.StringValue(ns.GetNamespace())
+	state.ProjectID = types.StringValue(ns.GetProjectId())
 	state.Name = types.StringValue(ns.GetSpec().GetName())
 	state.Description = types.StringValue(ns.GetSpec().GetDescription())
 	//nolint:staticcheck // SA1019: regions is deprecated in favor of replicas; migration tracked as follow-up.
@@ -1234,6 +1453,20 @@ func updateModelFromSpec(
 		state.Fairness = internaltypes.ZeroObjectValue{ObjectValue: types.ObjectNull(fairnessAttrs)}
 	}
 
+	if encryptionValidationSpec := ns.GetSpec().GetEncryptionValidation(); encryptionValidationSpec != nil {
+		encryptionValidation, encryptionValidationDiags := encryptionValidationToModel(ctx, encryptionValidationSpec)
+		diags.Append(encryptionValidationDiags...)
+		if diags.HasError() {
+			return diags
+		}
+		state.EncryptionValidation = internaltypes.ZeroObjectValue{ObjectValue: encryptionValidation}
+	} else if !state.EncryptionValidation.IsZero(ctx) {
+		// Preserve a configured zero object because the API represents it as no spec.
+		state.EncryptionValidation = internaltypes.ZeroObjectValue{
+			ObjectValue: types.ObjectNull(encryptionValidationAttrs),
+		}
+	}
+
 	state.ConnectivityRuleIds = connectivityRuleIdsState
 	state.Endpoints = endpointsState
 	state.Regions = planRegionsUnordered
@@ -1359,4 +1592,84 @@ func stringOrNull(s string) types.String {
 		return types.StringNull()
 	}
 	return types.StringValue(s)
+}
+
+func encryptionValidationToModel(
+	ctx context.Context,
+	spec *namespacev1.EncryptionValidationSpec,
+) (basetypes.ObjectValue, diag.Diagnostics) {
+	if spec == nil {
+		return types.ObjectNull(encryptionValidationAttrs), nil
+	}
+
+	mode, err := enums.FromEncryptionValidationMode(spec.GetMode())
+	if err != nil {
+		var diags diag.Diagnostics
+		diags.AddError("Unable to convert encryption validation mode", err.Error())
+		return types.ObjectNull(encryptionValidationAttrs), diags
+	}
+
+	metadataKey := stringOrNull(spec.GetMetadataKey())
+	metadataValues := types.SetNull(types.StringType)
+	var diags diag.Diagnostics
+	if len(spec.GetMetadataValues()) > 0 {
+		metadataValues, diags = types.SetValueFrom(ctx, types.StringType, spec.GetMetadataValues())
+		if diags.HasError() {
+			return types.ObjectNull(encryptionValidationAttrs), diags
+		}
+	}
+
+	value, objectDiags := types.ObjectValueFrom(ctx, encryptionValidationAttrs, encryptionValidationModel{
+		Mode:           types.StringValue(mode),
+		MetadataKey:    metadataKey,
+		MetadataValues: metadataValues,
+		InspectHeader:  types.BoolValue(spec.GetInspectHeader()),
+		InspectFailure: types.BoolValue(spec.GetInspectFailure()),
+	})
+	diags.Append(objectDiags...)
+	return value, diags
+}
+
+func getEncryptionValidationFromModel(
+	ctx context.Context,
+	model *namespaceResourceModel,
+) (*namespacev1.EncryptionValidationSpec, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if model.EncryptionValidation.IsZero(ctx) {
+		return nil, diags
+	}
+
+	var encryptionValidation encryptionValidationModel
+	diags.Append(model.EncryptionValidation.As(ctx, &encryptionValidation, basetypes.ObjectAsOptions{})...)
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	mode := enums.ToEncryptionValidationMode(encryptionValidation.Mode.ValueString())
+
+	metadataKey := ""
+	if !encryptionValidation.MetadataKey.IsNull() {
+		metadataKey = encryptionValidation.MetadataKey.ValueString()
+	}
+
+	var metadataValues []string
+	if !encryptionValidation.MetadataValues.IsNull() {
+		var values []types.String
+		diags.Append(encryptionValidation.MetadataValues.ElementsAs(ctx, &values, false)...)
+		if diags.HasError() {
+			return nil, diags
+		}
+
+		for _, value := range values {
+			metadataValues = append(metadataValues, value.ValueString())
+		}
+	}
+
+	return &namespacev1.EncryptionValidationSpec{
+		Mode:           mode,
+		MetadataKey:    metadataKey,
+		MetadataValues: metadataValues,
+		InspectHeader:  encryptionValidation.InspectHeader.ValueBool(),
+		InspectFailure: encryptionValidation.InspectFailure.ValueBool(),
+	}, diags
 }

@@ -15,6 +15,7 @@ import (
 type (
 	nexusEndpointDataModel struct {
 		ID                      types.String `tfsdk:"id"`
+		ProjectID               types.String `tfsdk:"project_id"`
 		Name                    types.String `tfsdk:"name"`
 		Description             types.String `tfsdk:"description"`
 		WorkerTarget            types.Object `tfsdk:"worker_target"`
@@ -40,6 +41,10 @@ func nexusEndpointSchema(idRequired bool) map[string]schema.Attribute {
 
 	return map[string]schema.Attribute{
 		"id": idAttribute,
+		"project_id": schema.StringAttribute{
+			Description: "The ID of the Temporal Cloud project the Nexus Endpoint belongs to.",
+			Computed:    true,
+		},
 		"name": schema.StringAttribute{
 			Description: "The name of the endpoint. Unique within an account and match `^[a-zA-Z][a-zA-Z0-9\\-]*[a-zA-Z0-9]$`",
 			Computed:    true,
@@ -93,8 +98,9 @@ func nexusEndpointToNexusEndpointDataModel(ctx context.Context, endpoint *nexusv
 	}
 
 	nexusEndpointModel := &nexusEndpointDataModel{
-		ID:   types.StringValue(endpoint.Id),
-		Name: types.StringValue(endpoint.GetSpec().GetName()),
+		ID:        types.StringValue(endpoint.Id),
+		ProjectID: types.StringValue(endpoint.GetProjectId()),
+		Name:      types.StringValue(endpoint.GetSpec().GetName()),
 
 		State:     types.StringValue(stateStr),
 		CreatedAt: types.StringValue(endpoint.GetCreatedTime().AsTime().GoString()),

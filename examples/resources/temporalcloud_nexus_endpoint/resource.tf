@@ -60,3 +60,22 @@ resource "temporalcloud_nexus_endpoint" "nexus_endpoint" {
     temporalcloud_namespace.caller_namespace_2.id,
   ]
 }
+
+resource "temporalcloud_project" "payments" {
+  display_name = "payments"
+}
+
+// A Nexus Endpoint belongs to one project and cannot be moved between projects.
+resource "temporalcloud_nexus_endpoint" "project_scoped" {
+  name       = "payments-endpoint"
+  project_id = temporalcloud_project.payments.id
+
+  worker_target = {
+    namespace_id = temporalcloud_namespace.target_namespace.id
+    task_queue   = "payments-task-queue"
+  }
+
+  allowed_caller_namespaces = [
+    temporalcloud_namespace.caller_namespace.id,
+  ]
+}

@@ -60,11 +60,13 @@ Read-Only:
 - `active_region` (String) The currently active region for the namespace.
 - `created_time` (String) The date and time when the namespace was created.
 - `description` (String) The description of the namespace, if set.
+- `encryption_validation` (Attributes) The payload encryption validation configuration for the namespace, if configured. (see [below for nested schema](#nestedatt--namespaces--encryption_validation))
 - `endpoints` (Attributes) The endpoints for the namespace. (see [below for nested schema](#nestedatt--namespaces--endpoints))
 - `id` (String) The unique identifier of the namespace across all Temporal Cloud tenants.
 - `limits` (Attributes) The limits set on the namespace currently. (see [below for nested schema](#nestedatt--namespaces--limits))
 - `name` (String) The name of the namespace.
 - `namespace_lifecycle` (Attributes) The lifecycle settings for the namespace. (see [below for nested schema](#nestedatt--namespaces--namespace_lifecycle))
+- `project_id` (String) The ID of the Temporal Cloud project the namespace belongs to.
 - `regions` (List of String) The list of regions that this namespace is available in. If more than one region is specified, this namespace is a Multi-region Namespace, which is currently unsupported by the Terraform provider.
 - `retention_days` (Number) The number of days to retain workflow history. Any changes to the retention period will be applied to all new running workflows.
 - `state` (String) The current state of the namespace.
@@ -113,12 +115,24 @@ Read-Only:
 
 
 
+<a id="nestedatt--namespaces--encryption_validation"></a>
+### Nested Schema for `namespaces.encryption_validation`
+
+Read-Only:
+
+- `inspect_failure` (Boolean) Whether failure payloads are inspected for encrypted payload metadata.
+- `inspect_header` (Boolean) Whether workflow headers are inspected for encrypted payload metadata.
+- `metadata_key` (String) The payload metadata key used to identify encrypted payloads.
+- `metadata_values` (Set of String) The payload metadata values used to identify encrypted payloads.
+- `mode` (String) The encryption validation mode: disabled, warn, or deny.
+
+
 <a id="nestedatt--namespaces--endpoints"></a>
 ### Nested Schema for `namespaces.endpoints`
 
 Read-Only:
 
-- `grpc_address` (String) The gRPC hostport address that the temporal workers, clients and tctl connect to.
+- `grpc_address` (String) The gRPC hostport address that the temporal workers, clients and CLI connect to.
 - `web_address` (String) The web UI address.
 
 

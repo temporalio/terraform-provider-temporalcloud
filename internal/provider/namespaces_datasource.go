@@ -41,6 +41,7 @@ type (
 
 	namespaceDataModel struct {
 		ID                     types.String                  `tfsdk:"id"`
+		ProjectID              types.String                  `tfsdk:"project_id"`
 		Name                   types.String                  `tfsdk:"name"`
 		Description            types.String                  `tfsdk:"description"`
 		State                  types.String                  `tfsdk:"state"`
@@ -60,6 +61,7 @@ type (
 		ConnectivityRuleIds    types.Set                     `tfsdk:"connectivity_rule_ids"`
 		NamespaceLifecycle     internaltypes.ZeroObjectValue `tfsdk:"namespace_lifecycle"`
 		Tags                   types.Map                     `tfsdk:"tags"`
+		EncryptionValidation   types.Object                  `tfsdk:"encryption_validation"`
 	}
 
 	endpointsDataModel struct {
@@ -139,6 +141,10 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 
 	return map[string]schema.Attribute{
 		"id": idAttribute,
+		"project_id": schema.StringAttribute{
+			Computed:    true,
+			Description: "The ID of the Temporal Cloud project the namespace belongs to.",
+		},
 		"name": schema.StringAttribute{
 			Computed:    true,
 			Description: "The name of the namespace.",
@@ -234,7 +240,7 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 				},
 				"grpc_address": schema.StringAttribute{
 					Computed:    true,
-					Description: "The gRPC hostport address that the temporal workers, clients and tctl connect to.",
+					Description: "The gRPC hostport address that the temporal workers, clients and CLI connect to.",
 				},
 			},
 		},
@@ -320,6 +326,33 @@ func namespaceDataSourceSchema(idRequired bool) map[string]schema.Attribute {
 			ElementType: types.StringType,
 			Description: "The tags for the namespace.",
 		},
+		"encryption_validation": schema.SingleNestedAttribute{
+			Computed:    true,
+			Description: "The payload encryption validation configuration for the namespace, if configured.",
+			Attributes: map[string]schema.Attribute{
+				"mode": schema.StringAttribute{
+					Computed:    true,
+					Description: "The encryption validation mode: disabled, warn, or deny.",
+				},
+				"metadata_key": schema.StringAttribute{
+					Computed:    true,
+					Description: "The payload metadata key used to identify encrypted payloads.",
+				},
+				"metadata_values": schema.SetAttribute{
+					Computed:    true,
+					Description: "The payload metadata values used to identify encrypted payloads.",
+					ElementType: types.StringType,
+				},
+				"inspect_header": schema.BoolAttribute{
+					Computed:    true,
+					Description: "Whether workflow headers are inspected for encrypted payload metadata.",
+				},
+				"inspect_failure": schema.BoolAttribute{
+					Computed:    true,
+					Description: "Whether failure payloads are inspected for encrypted payload metadata.",
+				},
+			},
+		},
 	}
 }
 
@@ -386,6 +419,7 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 	}
 	namespaceModel := &namespaceDataModel{
 		ID:               types.StringValue(ns.Namespace),
+		ProjectID:        types.StringValue(ns.GetProjectId()),
 		Name:             types.StringValue(ns.GetSpec().GetName()),
 		Description:      types.StringValue(ns.GetSpec().GetDescription()),
 		State:            types.StringValue(stateStr),
@@ -588,6 +622,13 @@ func namespaceToNamespaceDataModel(ctx context.Context, ns *namespacev1.Namespac
 		tags = tagsMap
 	}
 	namespaceModel.Tags = tags
+
+	encryptionValidation, encryptionValidationDiags := encryptionValidationToModel(ctx, ns.GetSpec().GetEncryptionValidation())
+	diags.Append(encryptionValidationDiags...)
+	if diags.HasError() {
+		return nil, diags
+	}
+	namespaceModel.EncryptionValidation = encryptionValidation
 
 	return namespaceModel, nil
 }

@@ -54,6 +54,7 @@ Read-Only:
 - `created_at` (String) The creation time of the Nexus Endpoint.
 - `id` (String) The unique identifier of the Nexus Endpoint.
 - `name` (String) The name of the endpoint. Unique within an account and match `^[a-zA-Z][a-zA-Z0-9\-]*[a-zA-Z0-9]$`
+- `project_id` (String) The ID of the Temporal Cloud project the Nexus Endpoint belongs to.
 - `state` (String) The current state of the Nexus Endpoint.
 - `updated_at` (String) The last update time of the Nexus Endpoint.
 - `worker_target` (Attributes) The target spec for routing nexus requests to a specific cloud namespace worker. (see [below for nested schema](#nestedatt--nexus_endpoints--worker_target))

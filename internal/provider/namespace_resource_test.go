@@ -13,18 +13,22 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	fwresource "github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 	"go.temporal.io/cloud-sdk/api/namespace/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	cloudservicev1 "go.temporal.io/cloud-sdk/api/cloudservice/v1"
 	regionv1 "go.temporal.io/cloud-sdk/api/region/v1"
 
 	"github.com/temporalio/terraform-provider-temporalcloud/internal/client"
+	internaltypes "github.com/temporalio/terraform-provider-temporalcloud/internal/types"
 )
 
 func TestNamespaceSchema(t *testing.T) {
@@ -149,6 +153,9 @@ PEM
 			{
 				// New namespace with retention of 7
 				Config: config(name, 7, true, description),
+				// Omitting project_id places the namespace in the account's default project, and
+				// the read populates that project's real ID rather than leaving it empty.
+				Check: resource.TestCheckResourceAttrSet("temporalcloud_namespace.terraform", "project_id"),
 			},
 			{
 				Config: config(name, 14, true, description),
@@ -1848,6 +1855,690 @@ func TestGetCodecServerFromModel_CustomErrorMessage(t *testing.T) {
 			}
 			if spec.CustomErrorMessage.Default.Link != tc.expectLink {
 				t.Errorf("expected link %q, got %q", tc.expectLink, spec.CustomErrorMessage.Default.Link)
+			}
+		})
+	}
+}
+
+// testAccProjectNamespaceConfig declares temporalcloud_namespace.test.
+func testAccProjectNamespaceConfig(name, projectIDAttr string) string {
+	return fmt.Sprintf(`
+resource "temporalcloud_namespace" "test" {
+  name           = %[1]q
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 1
+  %[2]s
+
+  timeouts {
+    create = "15m"
+    delete = "15m"
+  }
+}
+`, name, projectIDAttr)
+}
+
+func TestAccNamespaceResource_Project(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-project", randomString(10))
+	projectAName := createRandomName()
+	projectBName := createRandomName()
+
+	config := func(projectResource string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_project" "project_a" {
+  display_name = %[1]q
+}
+
+resource "temporalcloud_project" "project_b" {
+  display_name = %[2]q
+}
+%[3]s`, projectAName, projectBName,
+			testAccProjectNamespaceConfig(name, "project_id = "+projectResource))
+	}
+
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+	movesInPlace := resource.ConfigPlanChecks{
+		PreApply: []plancheck.PlanCheck{
+			plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+		},
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("temporalcloud_project.project_a.id"),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_a", "id",
+					),
+					sameNamespace,
+				),
+			},
+			{
+				ResourceName:      "temporalcloud_namespace.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config:           config("temporalcloud_project.project_b.id"),
+				ConfigPlanChecks: movesInPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_b", "id",
+					),
+					sameNamespace,
+				),
+			},
+			{
+				Config:           config("temporalcloud_project.project_a.id"),
+				ConfigPlanChecks: movesInPlace,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_a", "id",
+					),
+					sameNamespace,
+				),
+			},
+		},
+	})
+}
+
+// A move whose destination project is created in the same apply leaves project_id unknown at plan
+// time. Terraform accepts any applied value where the plan was unknown, so this checks the move
+// really happened rather than the apply succeeding while leaving the namespace where it was.
+func TestAccNamespaceResource_MoveToProjectCreatedInSameApply(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-unk-project", randomString(10))
+	projectName := createRandomName()
+
+	config := func(withProject bool) string {
+		projectBlock, projectAttr := "", ""
+		if withProject {
+			projectBlock = fmt.Sprintf(`
+resource "temporalcloud_project" "later" {
+  display_name = %q
+}
+`, projectName)
+			projectAttr = "project_id = temporalcloud_project.later.id"
+		}
+		return "provider \"temporalcloud\" {}\n" + projectBlock + testAccProjectNamespaceConfig(name, projectAttr)
+	}
+
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			// Namespace lands in the default project.
+			{
+				Config: config(false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+					sameNamespace,
+				),
+			},
+			{
+				Config: config(true),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.later", "id",
+					),
+					sameNamespace,
+				),
+			},
+		},
+	})
+}
+
+// Connectivity rules belong to a project and cannot move with the namespace, so a move swaps the
+// namespace onto a rule in the destination project. The move detaches the old rule but leaves it in
+// place, so it stays in configuration and is not destroyed.
+func TestAccNamespaceResource_MoveToProjectWithConnectivityRule(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-move-cr", randomString(10))
+	projectAName := createRandomName()
+	projectBName := createRandomName()
+
+	config := func(project string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_project" "project_a" {
+  display_name = %[1]q
+}
+
+resource "temporalcloud_project" "project_b" {
+  display_name = %[2]q
+}
+
+resource "temporalcloud_connectivity_rule" "project_a" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.project_a.id
+}
+
+resource "temporalcloud_connectivity_rule" "project_b" {
+  connectivity_type = "public"
+  project_id        = temporalcloud_project.project_b.id
+}
+%[3]s`, projectAName, projectBName, testAccProjectNamespaceConfig(name, fmt.Sprintf(`
+  project_id            = temporalcloud_project.%[1]s.id
+  connectivity_rule_ids = [temporalcloud_connectivity_rule.%[1]s.id]`, project)))
+	}
+
+	var namespaceID string
+	sameNamespace := testAccCheckResourceNotRecreated("temporalcloud_namespace.test", &namespaceID)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config("project_a"),
+				Check:  sameNamespace,
+			},
+			{
+				Config: config("project_b"),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectResourceAction("temporalcloud_namespace.test", plancheck.ResourceActionUpdate),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_a", plancheck.ResourceActionNoop),
+						plancheck.ExpectResourceAction("temporalcloud_connectivity_rule.project_b", plancheck.ResourceActionNoop),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrPair(
+						"temporalcloud_namespace.test", "project_id",
+						"temporalcloud_project.project_b", "id",
+					),
+					resource.TestCheckTypeSetElemAttrPair(
+						"temporalcloud_namespace.test", "connectivity_rule_ids.*",
+						"temporalcloud_connectivity_rule.project_b", "id",
+					),
+					sameNamespace,
+				),
+			},
+		},
+	})
+}
+
+// Namespaces created by a provider version without project_id must keep working after upgrading:
+// the first read fills in the default project's ID, and that must neither plan a replacement nor
+// produce any diff at all. Steps use the released provider from the registry, then this build.
+func TestAccNamespaceResource_ProjectIDUpgrade(t *testing.T) {
+	name := fmt.Sprintf("%s-%s", "tf-ns-project-upgrade", randomString(10))
+	config := "provider \"temporalcloud\" {}\n" + testAccProjectNamespaceConfig(name, "")
+
+	var namespaceID string
+	captureID := func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources["temporalcloud_namespace.test"]
+		if !ok {
+			return errors.New("namespace not found in state")
+		}
+		if namespaceID == "" {
+			namespaceID = rs.Primary.ID
+		} else if rs.Primary.ID != namespaceID {
+			return fmt.Errorf("namespace id changed from %s to %s; it should not have been recreated", namespaceID, rs.Primary.ID)
+		}
+		return nil
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck: func() { testAccPreCheck(t) },
+		Steps: []resource.TestStep{
+			{
+				// Last release before namespaces gained project_id; its state has no such key.
+				ExternalProviders: map[string]resource.ExternalProvider{
+					"temporalcloud": {
+						Source:            "temporalio/temporalcloud",
+						VersionConstraint: "1.9.0",
+					},
+				},
+				Config: config,
+				Check:  captureID,
+			},
+			{
+				// The plan users get from `terraform plan`, which refreshes first, must be empty:
+				// no replacement and no update once the read fills in project_id. Not PlanOnly --
+				// that skips this plan and starts with a -refresh=false one, where state from
+				// 1.9.0 still lacks project_id and an in-place update to an unknown value is the
+				// intended result.
+				ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+				Config:                   config,
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{
+						plancheck.ExpectEmptyPlan(),
+					},
+				},
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("temporalcloud_namespace.test", "project_id"),
+					captureID,
+				),
+			},
+		},
+	})
+}
+
+// An explicitly empty project_id is rejected during config validation. Omitting the attribute is
+// still valid and means the default project; an empty string would otherwise be planned as a real
+// value, while the server substitutes the default project on create, failing the post-apply
+// consistency check.
+// Hermetic: validation fails before any resource is created.
+func TestAccNamespaceResource_EmptyProjectIDRejected(t *testing.T) {
+	config := "provider \"temporalcloud\" {}\n" +
+		testAccProjectNamespaceConfig("tf-ns-empty-project", `project_id = ""`)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config:      config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`string length must be at least 1`),
+			},
+		},
+	})
+}
+
+func TestGetEncryptionValidationFromModel(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	tests := []struct {
+		name  string
+		input types.Object
+		want  *namespace.EncryptionValidationSpec
+	}{
+		{
+			name:  "absent configuration",
+			input: types.ObjectNull(encryptionValidationAttrs),
+			want:  nil,
+		},
+		{
+			name: "disabled configuration",
+			input: types.ObjectValueMust(encryptionValidationAttrs, map[string]attr.Value{
+				"mode":            types.StringValue("disabled"),
+				"metadata_key":    types.StringValue("encoding"),
+				"metadata_values": types.SetValueMust(types.StringType, []attr.Value{types.StringValue("binary/encrypted")}),
+				"inspect_header":  types.BoolValue(false),
+				"inspect_failure": types.BoolValue(false),
+			}),
+			want: &namespace.EncryptionValidationSpec{
+				Mode:           namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				MetadataKey:    "encoding",
+				MetadataValues: []string{"binary/encrypted"},
+			},
+		},
+		{
+			name: "configured deny with multiple metadata values",
+			input: types.ObjectValueMust(encryptionValidationAttrs, map[string]attr.Value{
+				"mode":         types.StringValue("deny"),
+				"metadata_key": types.StringValue("payload-encryption"),
+				"metadata_values": types.SetValueMust(types.StringType, []attr.Value{
+					types.StringValue("binary/encrypted"),
+					types.StringValue("binary/aes256"),
+				}),
+				"inspect_header":  types.BoolValue(true),
+				"inspect_failure": types.BoolValue(true),
+			}),
+			want: &namespace.EncryptionValidationSpec{
+				Mode:           namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+				MetadataKey:    "payload-encryption",
+				MetadataValues: []string{"binary/encrypted", "binary/aes256"},
+				InspectHeader:  true,
+				InspectFailure: true,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, diags := getEncryptionValidationFromModel(ctx, &namespaceResourceModel{
+				EncryptionValidation: internaltypes.ZeroObjectValue{ObjectValue: tc.input},
+			})
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if !proto.Equal(got, tc.want) {
+				t.Errorf("unexpected encryption validation spec: got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdateModelFromSpecEncryptionValidation(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	state := &namespaceResourceModel{}
+	diags := updateModelFromSpec(ctx, state, &namespace.Namespace{
+		Namespace: "test.e2e",
+		Spec: &namespace.NamespaceSpec{
+			Name:          "test",
+			Regions:       []string{"aws-us-east-1"},
+			RetentionDays: 7,
+			EncryptionValidation: &namespace.EncryptionValidationSpec{
+				Mode:           namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN,
+				MetadataKey:    "payload-encryption",
+				MetadataValues: []string{"binary/encrypted", "binary/aes256"},
+				InspectHeader:  true,
+				InspectFailure: true,
+			},
+		},
+		Endpoints: &namespace.Endpoints{},
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+
+	want := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(encryptionValidationAttrs, map[string]attr.Value{
+		"mode":         types.StringValue("warn"),
+		"metadata_key": types.StringValue("payload-encryption"),
+		"metadata_values": types.SetValueMust(types.StringType, []attr.Value{
+			types.StringValue("binary/encrypted"),
+			types.StringValue("binary/aes256"),
+		}),
+		"inspect_header":  types.BoolValue(true),
+		"inspect_failure": types.BoolValue(true),
+	})}
+	if !state.EncryptionValidation.Equal(want) {
+		t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, want)
+	}
+}
+
+func TestUpdateModelFromSpecEncryptionValidationPreservesUnsetMetadata(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	state := &namespaceResourceModel{}
+	diags := updateModelFromSpec(ctx, state, &namespace.Namespace{
+		Namespace: "test.e2e",
+		Spec: &namespace.NamespaceSpec{
+			Name:          "test",
+			Regions:       []string{"aws-us-east-1"},
+			RetentionDays: 7,
+			EncryptionValidation: &namespace.EncryptionValidationSpec{
+				Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN,
+			},
+		},
+		Endpoints: &namespace.Endpoints{},
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+
+	want := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(encryptionValidationAttrs, map[string]attr.Value{
+		"mode":            types.StringValue("warn"),
+		"metadata_key":    types.StringNull(),
+		"metadata_values": types.SetNull(types.StringType),
+		"inspect_header":  types.BoolValue(false),
+		"inspect_failure": types.BoolValue(false),
+	})}
+	if !state.EncryptionValidation.Equal(want) {
+		t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, want)
+	}
+}
+
+func TestUpdateModelFromSpecEncryptionValidationPreservesEmptyConfiguration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	emptyConfiguration := internaltypes.ZeroObjectValue{ObjectValue: types.ObjectValueMust(
+		encryptionValidationAttrs,
+		map[string]attr.Value{
+			"mode":            types.StringNull(),
+			"metadata_key":    types.StringNull(),
+			"metadata_values": types.SetNull(types.StringType),
+			"inspect_header":  types.BoolValue(false),
+			"inspect_failure": types.BoolValue(false),
+		},
+	)}
+	state := &namespaceResourceModel{EncryptionValidation: emptyConfiguration}
+	diags := updateModelFromSpec(ctx, state, &namespace.Namespace{
+		Namespace: "test.e2e",
+		Spec: &namespace.NamespaceSpec{
+			Name:          "test",
+			Regions:       []string{"aws-us-east-1"},
+			RetentionDays: 7,
+		},
+		Endpoints: &namespace.Endpoints{},
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+
+	if !state.EncryptionValidation.Equal(emptyConfiguration) {
+		t.Errorf("unexpected encryption validation state: got %s, want %s", state.EncryptionValidation, emptyConfiguration)
+	}
+}
+
+func TestAccNamespaceWithEncryptionValidation(t *testing.T) {
+	name := fmt.Sprintf("tf-eve-%s", randomString(10))
+	config := func(encryptionValidation string) string {
+		return fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+%s
+}
+`, name, encryptionValidation)
+	}
+
+	checkEncryptionValidation := func(want *namespace.EncryptionValidationSpec) func(*terraform.State) error {
+		return func(state *terraform.State) error {
+			id := state.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+			ns, err := newConnection(t).GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+				Namespace: id,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get namespace: %v", err)
+			}
+			if !proto.Equal(ns.GetNamespace().GetSpec().GetEncryptionValidation(), want) {
+				return fmt.Errorf(
+					"unexpected encryption validation spec: got %+v, want %+v",
+					ns.GetNamespace().GetSpec().GetEncryptionValidation(),
+					want,
+				)
+			}
+			return nil
+		}
+	}
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "invalid"
+  }`),
+				ExpectError: regexp.MustCompile(`value must be one of`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode         = "warn"
+    metadata_key = ""
+  }`),
+				ExpectError: regexp.MustCompile(`encryption_validation.metadata_key string length must be at least`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode            = "warn"
+    metadata_values = []
+  }`),
+				ExpectError: regexp.MustCompile(`encryption_validation.metadata_values set must contain at least 1`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    metadata_key = "encoding"
+  }`),
+				ExpectError: regexp.MustCompile(`"encryption_validation.mode" must be specified when`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "warn"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_WARN,
+				}),
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode            = "deny"
+    metadata_key    = "test-metadata-key"
+    metadata_values = ["matching-value", "second-matching-value"]
+    inspect_header  = true
+    inspect_failure = true
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode:           namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DENY,
+					MetadataKey:    "test-metadata-key",
+					MetadataValues: []string{"matching-value", "second-matching-value"},
+					InspectHeader:  true,
+					InspectFailure: true,
+				}),
+			},
+			{
+				ResourceName:      "temporalcloud_namespace.test",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+			{
+				Config: config(`
+  encryption_validation = {
+    mode = "disabled"
+  }`),
+				Check: checkEncryptionValidation(&namespace.EncryptionValidationSpec{
+					Mode: namespace.EncryptionValidationSpec_ENCRYPTION_VALIDATION_MODE_DISABLED,
+				}),
+			},
+			{
+				Config:      config(""),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
+			},
+			{
+				Config: config(`
+  encryption_validation = {}`),
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`encryption_validation cannot be removed once set`),
+			},
+		},
+	})
+}
+
+func TestAccNamespaceWithEmptyEncryptionValidation(t *testing.T) {
+	name := fmt.Sprintf("tf-eve-empty-%s", randomString(10))
+	config := fmt.Sprintf(`
+provider "temporalcloud" {}
+
+resource "temporalcloud_namespace" "test" {
+  name           = "%s"
+  regions        = ["aws-ca-central-1"]
+  api_key_auth   = true
+  retention_days = 7
+
+  encryption_validation = {}
+}
+`, name)
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: func(state *terraform.State) error {
+					id := state.RootModule().Resources["temporalcloud_namespace.test"].Primary.Attributes["id"]
+					ns, err := newConnection(t).GetNamespace(context.Background(), &cloudservicev1.GetNamespaceRequest{
+						Namespace: id,
+					})
+					if err != nil {
+						return fmt.Errorf("failed to get namespace: %v", err)
+					}
+					if ns.GetNamespace().GetSpec().GetEncryptionValidation() != nil {
+						return fmt.Errorf("expected encryption validation to be unconfigured, got %+v", ns.GetNamespace().GetSpec().GetEncryptionValidation())
+					}
+					return nil
+				},
+			},
+		},
+	})
+}
+
+func TestNewMoveNamespaceRequest(t *testing.T) {
+	t.Parallel()
+
+	ns := &namespace.Namespace{
+		Namespace:       "orders.acct",
+		ProjectId:       "proj-a",
+		ResourceVersion: "v1",
+	}
+
+	cases := []struct {
+		name    string
+		ruleIDs []string
+		want    *cloudservicev1.MoveNamespaceToProjectRequest
+	}{
+		{
+			name:    "rules carry over as the destination's rules",
+			ruleIDs: []string{"rule-1", "rule-2"},
+			want: &cloudservicev1.MoveNamespaceToProjectRequest{
+				Namespace:               "orders.acct",
+				DestinationProjectId:    "proj-b",
+				ExpectedSourceProjectId: "proj-a",
+				ResourceVersion:         "v1",
+				DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_RuleIds{
+					RuleIds: &cloudservicev1.ConnectivityRuleIDs{ConnectivityRuleIds: []string{"rule-1", "rule-2"}},
+				},
+			},
+		},
+		{
+			// The server requires an explicit choice whenever the namespace has rules today, and
+			// "none" is always a valid one.
+			name: "no rules is stated explicitly",
+			want: &cloudservicev1.MoveNamespaceToProjectRequest{
+				Namespace:               "orders.acct",
+				DestinationProjectId:    "proj-b",
+				ExpectedSourceProjectId: "proj-a",
+				ResourceVersion:         "v1",
+				DestinationConnectivityRules: &cloudservicev1.MoveNamespaceToProjectRequest_Unrestricted{
+					Unrestricted: &cloudservicev1.NoConnectivityRules{},
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := newMoveNamespaceRequest(ns, "proj-b", tc.ruleIDs)
+			if !proto.Equal(got, tc.want) {
+				t.Errorf("newMoveNamespaceRequest = %v, want %v", got, tc.want)
 			}
 		})
 	}
