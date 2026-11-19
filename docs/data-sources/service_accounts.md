@@ -36,7 +36,7 @@ Read-Only:
 - `id` (String) The unique identifier of the Service Account.
 - `name` (String) The name associated with the service account.
 - `namespace_scoped_access` (Attributes) The namespace-scoped access configuration for this service account. (see [below for nested schema](#nestedatt--service_accounts--namespace_scoped_access))
-- `project_accesses` (Attributes Set) The set of project roles for this service account, including each project and its role. (see [below for nested schema](#nestedatt--service_accounts--project_accesses))
+- `project_accesses` (Attributes Set) The set of project roles for this service account, including each project, its role and its custom roles. (see [below for nested schema](#nestedatt--service_accounts--project_accesses))
 - `project_scoped_access` (Attributes) The project-scoped access configuration for this service account. (see [below for nested schema](#nestedatt--service_accounts--project_scoped_access))
 - `state` (String) The current state of the Service Account.
 - `updated_at` (String) The last update time of the Service Account.
@@ -64,8 +64,9 @@ Read-Only:
 
 Read-Only:
 
+- `custom_roles` (Set of String) The set of custom role IDs assigned within this project.
 - `project_id` (String) The project the role applies to.
-- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive). Null when the project is only accessed through custom_roles.
 
 
 <a id="nestedatt--service_accounts--project_scoped_access"></a>
