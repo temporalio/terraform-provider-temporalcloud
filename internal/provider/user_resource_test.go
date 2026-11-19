@@ -496,3 +496,91 @@ resource "temporalcloud_user" "terraform" {
 		},
 	})
 }
+
+func TestAccUserWithProjectCustomRoles(t *testing.T) {
+	emailAddr := createRandomEmail()
+	projectName := createRandomName()
+	roleName := createRandomName()
+
+	config := func(projectAccesses string) string {
+		return `
+provider "temporalcloud" {
+}
+` + projectCustomRoleConfig(projectName, roleName, "cloud.namespace.get") + fmt.Sprintf(`
+resource "temporalcloud_user" "terraform" {
+  email          = %q
+  account_access = "read"
+  %s
+}
+`, emailAddr, projectAccesses)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: config(projectAccessesWithCustomRole("read")),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_user.terraform", "project_accesses.#", "1"),
+					resource.TestCheckResourceAttr("temporalcloud_user.terraform", "project_accesses.0.role", "read"),
+					resource.TestCheckTypeSetElemAttrPair(
+						"temporalcloud_user.terraform", "project_accesses.0.custom_roles.*",
+						"temporalcloud_custom_role.test", "id",
+					),
+				),
+			},
+			{
+				// Access through the custom role only: no project role.
+				Config: config(projectAccessesWithCustomRole("")),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_user.terraform", "project_accesses.#", "1"),
+					resource.TestCheckNoResourceAttr("temporalcloud_user.terraform", "project_accesses.0.role"),
+					resource.TestCheckResourceAttr("temporalcloud_user.terraform", "project_accesses.0.custom_roles.#", "1"),
+				),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_user.terraform",
+			},
+			{
+				// Configuration is authoritative: dropping the attribute revokes the custom role too.
+				Config: config(""),
+				Check: resource.TestCheckNoResourceAttr(
+					"temporalcloud_user.terraform", "project_accesses.#"),
+			},
+		},
+	})
+}
+
+// An entry needs a project role, custom roles, or both.
+func TestAccUserProjectAccessRequiresRoleOrCustomRoles(t *testing.T) {
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: fmt.Sprintf(`
+provider "temporalcloud" {
+}
+
+resource "temporalcloud_user" "terraform" {
+  email          = %q
+  account_access = "read"
+  project_accesses = [
+    {
+      project_id = "some-project"
+    }
+  ]
+}
+`, createRandomEmail()),
+				ExpectError: regexp.MustCompile("At least one of these attributes must be set: role, custom_roles"),
+			},
+		},
+	})
+}

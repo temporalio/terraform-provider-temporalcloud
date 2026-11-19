@@ -302,3 +302,44 @@ resource "temporalcloud_group_access" "terraform" {
 		},
 	})
 }
+
+func TestAccGroupAccess_WithProjectCustomRoles(t *testing.T) {
+	projectName := createRandomName()
+	roleName := createRandomName()
+
+	config := `
+provider "temporalcloud" {
+}
+
+data "temporalcloud_scim_group" "terraform" {
+  idp_id = "tf-basic-scim-group"
+}
+` + projectCustomRoleConfig(projectName, roleName, "cloud.namespace.get") + fmt.Sprintf(`
+resource "temporalcloud_group_access" "terraform" {
+  id             = data.temporalcloud_scim_group.terraform.id
+  account_access = "read"
+  %s
+}
+`, projectAccessesWithCustomRole(""))
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Access through the custom role only: no project role.
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_group_access.terraform", "project_accesses.#", "1"),
+					resource.TestCheckNoResourceAttr("temporalcloud_group_access.terraform", "project_accesses.0.role"),
+					resource.TestCheckTypeSetElemAttrPair(
+						"temporalcloud_group_access.terraform", "project_accesses.0.custom_roles.*",
+						"temporalcloud_custom_role.test", "id",
+					),
+				),
+			},
+		},
+	})
+}

@@ -21,6 +21,13 @@ func CaseInsensitiveString(val string) CaseInsensitiveStringValue {
 	}
 }
 
+// CaseInsensitiveStringNull returns a null CaseInsensitiveStringValue.
+func CaseInsensitiveStringNull() CaseInsensitiveStringValue {
+	return CaseInsensitiveStringValue{
+		StringValue: types.StringNull(),
+	}
+}
+
 type CaseInsensitiveStringType struct {
 	basetypes.StringType
 }

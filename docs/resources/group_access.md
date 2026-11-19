@@ -41,6 +41,22 @@ resource "temporalcloud_namespace" "test" {
   retention_days = 7
 }
 
+// A project custom role grants specific actions in its project.
+resource "temporalcloud_custom_role" "payments_namespace_reader" {
+  name       = "payments-namespace-reader"
+  project_id = temporalcloud_project.payments.id
+
+  permissions = [
+    {
+      actions = ["cloud.namespace.get"]
+      resources = {
+        resource_type = "namespaces"
+        resource_ids  = []
+        allow_all     = true
+      }
+    }
+  ]
+}
 
 resource "temporalcloud_group_access" "my_group_access" {
   id             = temporalcloud_scim_group.my_scim_group.id
@@ -53,8 +69,9 @@ resource "temporalcloud_group_access" "my_group_access" {
   ]
   project_accesses = [
     {
-      project_id = temporalcloud_project.payments.id
-      role       = "read"
+      project_id   = temporalcloud_project.payments.id
+      role         = "read"
+      custom_roles = [temporalcloud_custom_role.payments_namespace_reader.id]
     }
   ]
 }
@@ -89,4 +106,8 @@ Required:
 Required:
 
 - `project_id` (String) The project the role applies to.
-- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
+
+Optional:
+
+- `custom_roles` (Set of String) The set of custom role IDs assigned within this project, in addition to role. Each must be a custom role scoped to this project. Empty sets are not allowed, omit the attribute instead.
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive). Optional when custom_roles is set.
