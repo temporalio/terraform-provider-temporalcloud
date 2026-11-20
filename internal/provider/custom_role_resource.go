@@ -148,7 +148,7 @@ func (r *customRoleResource) Schema(ctx context.Context, _ resource.SchemaReques
 							Required:    true,
 							Attributes: map[string]schema.Attribute{
 								"resource_type": schema.StringAttribute{
-									Description: "The resource type this permission applies to. Must be one of: accounts, projects, namespaces, nexus-endpoints, connectivity-rules, custom-roles.",
+									Description: "The resource type this permission applies to. Must be one of: accounts, projects, namespaces, service-accounts, nexus-endpoints, connectivity-rules, custom-roles.",
 									Required:    true,
 									Validators: []validator.String{
 										stringvalidator.OneOf(enums.CustomRoleResourceTypes...),

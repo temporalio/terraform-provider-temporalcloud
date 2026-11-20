@@ -9,6 +9,7 @@ func TestCustomRoleResourceTypes(t *testing.T) {
 		"accounts",
 		"projects",
 		"namespaces",
+		"service-accounts",
 		"nexus-endpoints",
 		"connectivity-rules",
 		"custom-roles",
