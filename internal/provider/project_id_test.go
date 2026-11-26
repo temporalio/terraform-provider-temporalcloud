@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -342,6 +343,144 @@ func TestPlanChangesOnly(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("planChangesOnly = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestModifyPlanImmutableOptionalProjectID(t *testing.T) {
+	t.Parallel()
+
+	nullObject := tftypes.NewValue(projectIDTestType, nil)
+
+	cases := []struct {
+		name                string
+		config, state, plan tftypes.Value
+		wantErr             bool
+		wantDetail          string
+	}{
+		{
+			name:   "create is skipped",
+			config: projectIDTestValue("proj-a"),
+			state:  nullObject,
+			plan:   projectIDTestValue("proj-a"),
+		},
+		{
+			name:   "destroy is skipped",
+			config: nullObject,
+			state:  projectIDTestValue("proj-a"),
+			plan:   nullObject,
+		},
+		{
+			name:   "account-scoped stays account-scoped",
+			config: projectIDTestValue(projectIDNull),
+			state:  projectIDTestValue(projectIDNull),
+			plan:   projectIDTestValue(projectIDNull),
+		},
+		{
+			name:   "same project",
+			config: projectIDTestValue("proj-a"),
+			state:  projectIDTestValue("proj-a"),
+			plan:   projectIDTestValue("proj-a"),
+		},
+		{
+			name:       "moving into a project is rejected",
+			config:     projectIDTestValue("proj-a"),
+			state:      projectIDTestValue(projectIDNull),
+			plan:       projectIDTestValue("proj-a"),
+			wantErr:    true,
+			wantDetail: `project_id is unset (account-scoped) and cannot be changed to "proj-a"`,
+		},
+		{
+			// Null is a real value here, so removing
+			// project_id from config is a move out of the project.
+			name:       "moving out of a project is rejected",
+			config:     projectIDTestValue(projectIDNull),
+			state:      projectIDTestValue("proj-a"),
+			plan:       projectIDTestValue(projectIDNull),
+			wantErr:    true,
+			wantDetail: `project_id is "proj-a" and cannot be changed to unset (account-scoped)`,
+		},
+		{
+			name:       "moving between projects is rejected",
+			config:     projectIDTestValue("proj-b"),
+			state:      projectIDTestValue("proj-a"),
+			plan:       projectIDTestValue("proj-b"),
+			wantErr:    true,
+			wantDetail: `project_id is "proj-a" and cannot be changed to "proj-b"`,
+		},
+		{
+			name:       "moving to an unknown project is rejected",
+			config:     projectIDTestValue(projectIDUnknown),
+			state:      projectIDTestValue(projectIDNull),
+			plan:       projectIDTestValue(projectIDUnknown),
+			wantErr:    true,
+			wantDetail: "project_id is unset (account-scoped) and cannot be changed to a project created by this configuration",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+
+			req := resource.ModifyPlanRequest{
+				Config: tfsdk.Config{Schema: projectIDTestSchema, Raw: tc.config},
+				State:  tfsdk.State{Schema: projectIDTestSchema, Raw: tc.state},
+				Plan:   tfsdk.Plan{Schema: projectIDTestSchema, Raw: tc.plan},
+			}
+			resp := &resource.ModifyPlanResponse{
+				Plan: tfsdk.Plan{Schema: projectIDTestSchema, Raw: tc.plan.Copy()},
+			}
+
+			modifyPlanImmutableOptionalProjectID(ctx, req, resp, "Widget")
+
+			if got := resp.Diagnostics.HasError(); got != tc.wantErr {
+				t.Fatalf("HasError = %v, want %v; diagnostics: %v", got, tc.wantErr, resp.Diagnostics)
+			}
+			if tc.wantErr {
+				d := resp.Diagnostics.Errors()[0]
+				if d.Summary() != "Widget cannot be moved between projects" {
+					t.Errorf("unexpected error summary %q", d.Summary())
+				}
+				if !strings.Contains(d.Detail(), tc.wantDetail) {
+					t.Errorf("detail %q does not contain %q", d.Detail(), tc.wantDetail)
+				}
+			}
+			// The plan is never rewritten.
+			if !resp.Plan.Raw.Equal(tc.plan) {
+				t.Errorf("plan changed: got %v, want %v", resp.Plan.Raw, tc.plan)
+			}
+		})
+	}
+}
+
+func TestCheckOptionalProjectIDUnchanged(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		planned types.String
+		current string
+		wantErr bool
+	}{
+		{name: "account-scoped", planned: types.StringNull(), current: ""},
+		{name: "same project", planned: types.StringValue("proj-a"), current: "proj-a"},
+		{name: "unknown", planned: types.StringUnknown(), current: "proj-a"},
+		{
+			// Stale state from a plan made with -refresh=false: the live role is in a project.
+			name: "live role is in a project", planned: types.StringNull(), current: "proj-a", wantErr: true,
+		},
+		{name: "live role is account-scoped", planned: types.StringValue("proj-a"), current: "", wantErr: true},
+		{name: "different project", planned: types.StringValue("proj-b"), current: "proj-a", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			diags := checkOptionalProjectIDUnchanged(tc.planned, tc.current, "Widget")
+			if diags.HasError() != tc.wantErr {
+				t.Fatalf("HasError = %v, want %v; diagnostics: %v", diags.HasError(), tc.wantErr, diags)
 			}
 		})
 	}

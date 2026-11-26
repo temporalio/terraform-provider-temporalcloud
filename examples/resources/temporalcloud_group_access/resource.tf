@@ -26,6 +26,22 @@ resource "temporalcloud_namespace" "test" {
   retention_days = 7
 }
 
+// A project custom role grants specific actions in its project.
+resource "temporalcloud_custom_role" "payments_namespace_reader" {
+  name       = "payments-namespace-reader"
+  project_id = temporalcloud_project.payments.id
+
+  permissions = [
+    {
+      actions = ["cloud.namespace.get"]
+      resources = {
+        resource_type = "namespaces"
+        resource_ids  = []
+        allow_all     = true
+      }
+    }
+  ]
+}
 
 resource "temporalcloud_group_access" "my_group_access" {
   id             = temporalcloud_scim_group.my_scim_group.id
@@ -38,8 +54,9 @@ resource "temporalcloud_group_access" "my_group_access" {
   ]
   project_accesses = [
     {
-      project_id = temporalcloud_project.payments.id
-      role       = "read"
+      project_id   = temporalcloud_project.payments.id
+      role         = "read"
+      custom_roles = [temporalcloud_custom_role.payments_namespace_reader.id]
     }
   ]
 }

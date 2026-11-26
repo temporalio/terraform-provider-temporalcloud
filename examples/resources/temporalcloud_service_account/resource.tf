@@ -64,6 +64,37 @@ resource "temporalcloud_service_account" "project_worker" {
   ]
 }
 
+// A project custom role grants specific actions in its project.
+resource "temporalcloud_custom_role" "payments_namespace_reader" {
+  name       = "payments-namespace-reader"
+  project_id = temporalcloud_project.payments.id
+
+  permissions = [
+    {
+      actions = ["cloud.namespace.get"]
+      resources = {
+        resource_type = "namespaces"
+        resource_ids  = []
+        allow_all     = true
+      }
+    }
+  ]
+}
+
+// project_accesses can combine a project role with project custom roles, or
+// use custom roles alone (omit role).
+resource "temporalcloud_service_account" "project_custom_role_worker" {
+  name           = "payments-reader"
+  account_access = "read"
+  project_accesses = [
+    {
+      project_id   = temporalcloud_project.payments.id
+      role         = "read"
+      custom_roles = [temporalcloud_custom_role.payments_namespace_reader.id]
+    }
+  ]
+}
+
 // a project-scoped service account only has access to a single project
 resource "temporalcloud_service_account" "project_scoped" {
   name = "payments-deployer"

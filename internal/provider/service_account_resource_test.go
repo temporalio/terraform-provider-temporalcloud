@@ -880,8 +880,9 @@ func TestProjectScopedServiceAccountValidation(t *testing.T) {
 				"project_scoped_access": projectScopedAccess("write", noNamespaceAccesses),
 				"project_accesses": types.SetValueMust(types.ObjectType{AttrTypes: projectAccessAttrs}, []attr.Value{
 					types.ObjectValueMust(projectAccessAttrs, map[string]attr.Value{
-						"project_id": types.StringValue("p1"),
-						"role":       internaltypes.CaseInsensitiveString("read"),
+						"project_id":   types.StringValue("p1"),
+						"role":         internaltypes.CaseInsensitiveString("read"),
+						"custom_roles": types.SetNull(types.StringType),
 					}),
 				}),
 			},
@@ -1190,6 +1191,51 @@ resource "temporalcloud_service_account" "terraform" {
 				Config: config(configArgs{Name: name, ProjectName: projectName, ProjectAccesses: ""}),
 				Check: resource.TestCheckNoResourceAttr(
 					"temporalcloud_service_account.terraform", "project_accesses.#"),
+			},
+		},
+	})
+}
+
+func TestAccServiceAccountWithProjectCustomRoles(t *testing.T) {
+	name := createRandomName()
+	projectName := createRandomName()
+	roleName := createRandomName()
+
+	config := func(projectAccesses string) string {
+		return `
+provider "temporalcloud" {
+}
+` + projectCustomRoleConfig(projectName, roleName, "cloud.namespace.get") + fmt.Sprintf(`
+resource "temporalcloud_service_account" "terraform" {
+  name           = %q
+  account_access = "read"
+  %s
+}
+`, name, projectAccesses)
+	}
+
+	resource.Test(t, resource.TestCase{
+		PreCheck: func() {
+			testAccPreCheck(t)
+		},
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				// Access through the custom role only: no project role.
+				Config: config(projectAccessesWithCustomRole("")),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("temporalcloud_service_account.terraform", "project_accesses.#", "1"),
+					resource.TestCheckNoResourceAttr("temporalcloud_service_account.terraform", "project_accesses.0.role"),
+					resource.TestCheckTypeSetElemAttrPair(
+						"temporalcloud_service_account.terraform", "project_accesses.0.custom_roles.*",
+						"temporalcloud_custom_role.test", "id",
+					),
+				),
+			},
+			{
+				ImportState:       true,
+				ImportStateVerify: true,
+				ResourceName:      "temporalcloud_service_account.terraform",
 			},
 		},
 	})

@@ -29,8 +29,9 @@ type namespaceAccessModel struct {
 }
 
 type projectAccessModel struct {
-	ProjectID types.String                             `tfsdk:"project_id"`
-	Role      internaltypes.CaseInsensitiveStringValue `tfsdk:"role"`
+	ProjectID   types.String                             `tfsdk:"project_id"`
+	Role        internaltypes.CaseInsensitiveStringValue `tfsdk:"role"`
+	CustomRoles types.Set                                `tfsdk:"custom_roles"`
 }
 
 const accountAccessCustomRolesDescription = "The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead."
@@ -41,14 +42,19 @@ const projectAccessProjectIDDescription = "The project the role applies to."
 
 const projectAccessRoleDescription = "The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive)."
 
+const projectAccessOptionalRoleDescription = projectAccessRoleDescription + " Optional when custom_roles is set."
+
+const projectAccessCustomRolesDescription = "The set of custom role IDs assigned within this project, in addition to role. Each must be a custom role scoped to this project. Empty sets are not allowed, omit the attribute instead."
+
 var namespaceAccessAttrs = map[string]attr.Type{
 	"namespace_id": types.StringType,
 	"permission":   internaltypes.CaseInsensitiveStringType{},
 }
 
 var projectAccessAttrs = map[string]attr.Type{
-	"project_id": types.StringType,
-	"role":       internaltypes.CaseInsensitiveStringType{},
+	"project_id":   types.StringType,
+	"role":         internaltypes.CaseInsensitiveStringType{},
+	"custom_roles": types.SetType{ElemType: types.StringType},
 }
 
 func projectAccessesSchema(descriptionSuffix string, extraValidators ...validator.Set) schema.SetNestedAttribute {
@@ -63,12 +69,23 @@ func projectAccessesSchema(descriptionSuffix string, extraValidators ...validato
 				},
 				"role": schema.StringAttribute{
 					CustomType:  internaltypes.CaseInsensitiveStringType{},
-					Description: projectAccessRoleDescription,
-					Required:    true,
+					Description: projectAccessOptionalRoleDescription,
+					Optional:    true,
 					Validators: []validator.String{
 						stringvalidator.OneOfCaseInsensitive(enums.AllowedProjectAccessRoles()...),
 					},
 				},
+				"custom_roles": schema.SetAttribute{
+					Description: projectAccessCustomRolesDescription,
+					Optional:    true,
+					ElementType: types.StringType,
+					Validators: []validator.Set{
+						setvalidator.SizeAtLeast(1),
+					},
+				},
+			},
+			Validators: []validator.Object{
+				validation.ObjectAtLeastOneAttribute("role", "custom_roles"),
 			},
 		},
 		Validators: append([]validator.Set{
@@ -86,7 +103,7 @@ func projectAccessesSchema(descriptionSuffix string, extraValidators ...validato
 // names the identity in the description, as namespace_accesses does ("user", "service account").
 func projectAccessesDataSourceSchema(identityType string) dsschema.SetNestedAttribute {
 	return dsschema.SetNestedAttribute{
-		Description: fmt.Sprintf("The set of project roles for this %s, including each project and its role.", identityType),
+		Description: fmt.Sprintf("The set of project roles for this %s, including each project, its role and its custom roles.", identityType),
 		Computed:    true,
 		NestedObject: dsschema.NestedAttributeObject{
 			Attributes: map[string]dsschema.Attribute{
@@ -96,8 +113,13 @@ func projectAccessesDataSourceSchema(identityType string) dsschema.SetNestedAttr
 				},
 				"role": dsschema.StringAttribute{
 					CustomType:  internaltypes.CaseInsensitiveStringType{},
-					Description: projectAccessRoleDescription,
+					Description: projectAccessRoleDescription + " Null when the project is only accessed through custom_roles.",
 					Computed:    true,
+				},
+				"custom_roles": dsschema.SetAttribute{
+					Description: "The set of custom role IDs assigned within this project.",
+					Computed:    true,
+					ElementType: types.StringType,
 				},
 			},
 		},
@@ -187,7 +209,7 @@ func projectAccessRevocationWarning(stateAccesses types.Set, configAccesses type
 	diags.AddAttributeWarning(
 		path.Root("project_accesses"),
 		"Project roles will be revoked",
-		fmt.Sprintf("%d project role(s) recorded in state are not in the configuration and will be revoked by this apply. "+
+		fmt.Sprintf("%d project access(es) recorded in state, with their project roles and custom roles, are not in the configuration and will be revoked by this apply. "+
 			"Roles granted outside Terraform appear in state once the resource is refreshed; add them to project_accesses to keep them.",
 			len(stateAccesses.Elements())),
 	)
@@ -243,7 +265,7 @@ func projectAccessRevocationOnCreateWarning(ctx context.Context, currentAccesses
 	diags.AddAttributeWarning(
 		path.Root("project_accesses"),
 		"Project roles will be revoked",
-		fmt.Sprintf("This group holds %d project role(s) that are not in the configuration and will be revoked by this apply: %s. "+
+		fmt.Sprintf("This group has access to %d project(s) that are not in the configuration, and their project roles and custom roles will be revoked by this apply: %s. "+
 			"Bringing a group under management has no prior state, so these do not appear in the plan. "+
 			"Add them to project_accesses to keep them.",
 			len(revoked), strings.Join(revoked, ", ")),
@@ -306,13 +328,24 @@ func getProjectAccessesFromSet(ctx context.Context, set types.Set) (map[string]*
 		if diags.HasError() {
 			return nil, diags
 		}
-		role, err := enums.ToProjectAccessRole(model.Role.ValueString())
-		if err != nil {
-			diags.AddError("Failed to convert project access role", err.Error())
+		// A null role is access through custom roles only.
+		role := identityv1.ProjectAccess_PROJECT_ROLE_UNSPECIFIED
+		if !model.Role.IsNull() {
+			var err error
+			role, err = enums.ToProjectAccessRole(model.Role.ValueString())
+			if err != nil {
+				diags.AddError("Failed to convert project access role", err.Error())
+				return nil, diags
+			}
+		}
+		customRoles, d := getCustomRolesFromSet(ctx, model.CustomRoles)
+		diags.Append(d...)
+		if diags.HasError() {
 			return nil, diags
 		}
 		projectAccesses[model.ProjectID.ValueString()] = &identityv1.ProjectAccess{
-			Role: role,
+			Role:        role,
+			CustomRoles: customRoles,
 		}
 	}
 
@@ -326,14 +359,26 @@ func getProjectSetFromSpec(ctx context.Context, spec *identityv1.Access) (types.
 	if len(spec.GetProjectAccesses()) > 0 {
 		projectAccessObjects := make([]types.Object, 0)
 		for projectID, projectAccess := range spec.GetProjectAccesses() {
-			role, err := enums.FromProjectAccessRole(projectAccess.GetRole())
-			if err != nil {
-				diags.AddError("Failed to convert project access role", err.Error())
+			// UNSPECIFIED is access through custom roles only, so the role is null. It's checked
+			// here rather than in FromProjectAccessRole, so an unknown role still fails loudly.
+			role := internaltypes.CaseInsensitiveStringNull()
+			if projectAccess.GetRole() != identityv1.ProjectAccess_PROJECT_ROLE_UNSPECIFIED {
+				roleStr, err := enums.FromProjectAccessRole(projectAccess.GetRole())
+				if err != nil {
+					diags.AddError("Failed to convert project access role", err.Error())
+					return projectAccesses, diags
+				}
+				role = internaltypes.CaseInsensitiveString(roleStr)
+			}
+			customRoles, d := getCustomRolesSet(ctx, projectAccess.GetCustomRoles())
+			diags.Append(d...)
+			if diags.HasError() {
 				return projectAccesses, diags
 			}
 			model := projectAccessModel{
-				ProjectID: types.StringValue(projectID),
-				Role:      internaltypes.CaseInsensitiveString(role),
+				ProjectID:   types.StringValue(projectID),
+				Role:        role,
+				CustomRoles: customRoles,
 			}
 			obj, d := types.ObjectValueFrom(ctx, projectAccessAttrs, model)
 			diags.Append(d...)

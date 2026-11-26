@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"strconv"
 
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -98,4 +101,90 @@ func valueAt(v tftypes.Value, p *tftypes.AttributePath) (tftypes.Value, bool) {
 	}
 	value, ok := found.(tftypes.Value)
 	return value, ok
+}
+
+// modifyPlanImmutableOptionalProjectID rejects any change to project_id on an existing resource
+// that has no move API. The project_id is Optional but not Computed, so null is a real value
+// meaning "not in a project" rather than "not known yet". Null to a project and a project to null
+// are rejected too. kind names the resource in diagnostics, e.g. "Custom role".
+//
+// The resource's Update must also call checkOptionalProjectIDUnchanged, which compares against the
+// live resource and catches state that is stale because the plan was made with -refresh=false.
+func modifyPlanImmutableOptionalProjectID(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse, kind string) {
+	// Skip on create and destroy; there is no prior project to move away from.
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var configured, prior types.String
+	resp.Diagnostics.Append(req.Config.GetAttribute(ctx, path.Root("project_id"), &configured)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("project_id"), &prior)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// An unknown configured value cannot be compared, so it's rejected here to fail at plan time.
+	// Usually caused by a target project created in this same apply, which a resource that already
+	// exists cannot be in.
+	if configured.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("project_id"),
+			projectMoveNotSupportedSummary(kind),
+			projectMoveNotSupportedDetail(kind, describeOptionalProjectID(prior), "a project created by this configuration"),
+		)
+		return
+	}
+
+	// Config, not Plan: with no Computed flag the two are the same here, but Config is what the
+	// user asked for.
+	if configured.Equal(prior) {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		path.Root("project_id"),
+		projectMoveNotSupportedSummary(kind),
+		projectMoveNotSupportedDetail(kind, describeOptionalProjectID(prior), describeOptionalProjectID(configured)),
+	)
+}
+
+// checkOptionalProjectIDUnchanged is the apply-time half of modifyPlanImmutableOptionalProjectID,
+// comparing the planned project_id against the one just fetched from the API, which catches state
+// made stale by -refresh=false. A null plan is compared too: it means the resource is not in a
+// project.
+func checkOptionalProjectIDUnchanged(planned types.String, current string, kind string) diag.Diagnostics {
+	var diags diag.Diagnostics
+	if planned.IsUnknown() || planned.ValueString() == current {
+		return diags
+	}
+	currentValue := types.StringNull()
+	if current != "" {
+		currentValue = types.StringValue(current)
+	}
+	diags.AddAttributeError(
+		path.Root("project_id"),
+		projectMoveNotSupportedSummary(kind),
+		projectMoveNotSupportedDetail(kind, describeOptionalProjectID(currentValue), describeOptionalProjectID(planned)),
+	)
+	return diags
+}
+
+// describeOptionalProjectID renders an Optional project_id for diagnostics, where null means the
+// resource is not in a project.
+func describeOptionalProjectID(v types.String) string {
+	if v.IsNull() || v.ValueString() == "" {
+		return "unset (account-scoped)"
+	}
+	return strconv.Quote(v.ValueString())
+}
+
+func projectMoveNotSupportedSummary(kind string) string {
+	return fmt.Sprintf("%s cannot be moved between projects", kind)
+}
+
+func projectMoveNotSupportedDetail(kind, from, to string) string {
+	return fmt.Sprintf(
+		"project_id is %s and cannot be changed to %s. A %s cannot be moved between projects.",
+		from, to, kind,
+	)
 }

@@ -29,7 +29,7 @@ Fetches details about a User.
 - `account_access_custom_roles` (Set of String) The set of custom role IDs assigned within account_access in addition to the built-in account_access role. Empty sets are not allowed, omit the attribute instead.
 - `created_at` (String) The creation time of the User.
 - `email` (String) The email of the User.
-- `project_accesses` (Attributes Set) The set of project roles for this user, including each project and its role. (see [below for nested schema](#nestedatt--project_accesses))
+- `project_accesses` (Attributes Set) The set of project roles for this user, including each project, its role and its custom roles. (see [below for nested schema](#nestedatt--project_accesses))
 - `state` (String) The current state of the User.
 - `updated_at` (String) The last update time of the User.
 
@@ -47,5 +47,6 @@ Read-Only:
 
 Read-Only:
 
+- `custom_roles` (Set of String) The set of custom role IDs assigned within this project.
 - `project_id` (String) The project the role applies to.
-- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive).
+- `role` (String) The role to assign. Must be one of `admin`, `write`, `read`, `list`, `contribute`, or `member` (case-insensitive). Null when the project is only accessed through custom_roles.

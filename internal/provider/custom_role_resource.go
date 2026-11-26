@@ -42,6 +42,7 @@ type (
 		State       types.String   `tfsdk:"state"`
 		Name        types.String   `tfsdk:"name"`
 		Description types.String   `tfsdk:"description"`
+		ProjectID   types.String   `tfsdk:"project_id"`
 		Permissions types.List     `tfsdk:"permissions"`
 		Timeouts    timeouts.Value `tfsdk:"timeouts"`
 	}
@@ -62,6 +63,7 @@ var (
 	_ resource.Resource                   = (*customRoleResource)(nil)
 	_ resource.ResourceWithConfigure      = (*customRoleResource)(nil)
 	_ resource.ResourceWithImportState    = (*customRoleResource)(nil)
+	_ resource.ResourceWithModifyPlan     = (*customRoleResource)(nil)
 	_ resource.ResourceWithValidateConfig = (*customRoleResource)(nil)
 
 	customRoleResourcesAttrs = map[string]attr.Type{
@@ -130,6 +132,16 @@ func (r *customRoleResource) Schema(ctx context.Context, _ resource.SchemaReques
 				Computed:    true,
 				Default:     stringdefault.StaticString(""),
 			},
+			"project_id": schema.StringAttribute{
+				Description: "The ID of the project this custom role is scoped to. If omitted, the custom role is " +
+					"scoped to the account. A project-scoped custom role can only grant access to resources in its " +
+					"project. Assigning it to a principal gives that principal access to the project, even if they " +
+					"have no project role. Cannot be changed after creation.",
+				Optional: true,
+				Validators: []validator.String{
+					stringvalidator.LengthAtLeast(1),
+				},
+			},
 			"permissions": schema.ListNestedAttribute{
 				Description: "The permissions assigned to the custom role.",
 				Required:    true,
@@ -192,6 +204,12 @@ func (r *customRoleResource) ValidateConfig(ctx context.Context, req resource.Va
 	}
 
 	resp.Diagnostics.Append(validateCustomRolePermissions(ctx, config.Permissions)...)
+}
+
+// ModifyPlan rejects moving a custom role between projects, or into or out of one. The API rejects
+// it too, but only at apply, after any other changes in the plan have been made.
+func (r *customRoleResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	modifyPlanImmutableOptionalProjectID(ctx, req, resp, "Custom role")
 }
 
 func (r *customRoleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -298,6 +316,11 @@ func (r *customRoleResource) Update(ctx context.Context, req resource.UpdateRequ
 	})
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to get current custom role status", err.Error())
+		return
+	}
+
+	resp.Diagnostics.Append(checkOptionalProjectIDUnchanged(plan.ProjectID, currentCustomRole.GetCustomRole().GetSpec().GetProjectId(), "Custom role")...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -452,6 +475,9 @@ func getCustomRoleSpecFromModel(ctx context.Context, model *customRoleResourceMo
 	return &identityv1.CustomRoleSpec{
 		Name:        model.Name.ValueString(),
 		Description: description,
+		// "" when null: an account-scoped role. Update must send the role's current project, since the
+		// API rejects any change to it, including clearing it.
+		ProjectId:   model.ProjectID.ValueString(),
 		Permissions: specPermissions,
 	}, diags
 }
@@ -526,6 +552,10 @@ func updateCustomRoleModelFromSpec(ctx context.Context, state *customRoleResourc
 	state.ID = types.StringValue(customRole.GetId())
 	state.Name = types.StringValue(customRole.GetSpec().GetName())
 	state.Description = types.StringValue(customRole.GetSpec().GetDescription())
+	state.ProjectID = types.StringNull()
+	if projectID := customRole.GetSpec().GetProjectId(); projectID != "" {
+		state.ProjectID = types.StringValue(projectID)
+	}
 
 	stateStr, err := enums.FromResourceState(customRole.GetState())
 	if err != nil {
