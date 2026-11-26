@@ -74,7 +74,7 @@ Required:
 Required:
 
 - `resource_ids` (Set of String) The resource IDs this permission applies to. If empty, allow_all must be true.
-- `resource_type` (String) The resource type this permission applies to. Must be one of: accounts, projects, namespaces, nexus-endpoints, connectivity-rules, custom-roles.
+- `resource_type` (String) The resource type this permission applies to. Must be one of: accounts, projects, namespaces, service-accounts, nexus-endpoints, connectivity-rules, custom-roles.
 
 Optional:
 
